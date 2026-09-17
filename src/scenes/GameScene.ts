@@ -27,7 +27,6 @@ export class GameScene extends Phaser.Scene {
     const deployment = new DeploymentController(this, board, state, deploymentView, result => {
       const messages = {
         invalid: '无法放置，已返回原位',
-        deploy: '部署完成',
         move: '移动完成',
         swap: '位置已交换',
         merge: '合成成功，等级提升',

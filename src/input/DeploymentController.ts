@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { applyDrop, getDragItem } from '../systems/board';
-import type { BoardState, DragSource, DropAction } from '../systems/board';
+import type { BoardState, UnitPosition, DropAction } from '../systems/board';
 import type { RecruitmentState } from '../systems/recruitment';
 import type { DeploymentView } from '../ui/deployment';
 
 // 鼠标与触摸共享 Phaser Pointer；松手前不改数据，取消即恢复原位。
 export class DeploymentController {
-  private active: { pointerId: number; source: DragSource } | null = null;
+  private active: { pointerId: number; source: UnitPosition } | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -31,7 +31,7 @@ export class DeploymentController {
 
   private start = (pointer: Phaser.Input.Pointer): void => {
     if (this.active || !pointer.primaryDown) return;
-    const source = this.view.sourceAt(pointer.x, pointer.y);
+    const source = this.view.positionAt(pointer.x, pointer.y);
     if (!source) return;
     const item = getDragItem(this.board, this.recruitment, source);
     if (!item) return;
@@ -44,14 +44,14 @@ export class DeploymentController {
   private move = (pointer: Phaser.Input.Pointer): void => {
     if (!this.active || pointer.id !== this.active.pointerId) return;
     this.view.ghost.root.setPosition(pointer.x, pointer.y);
-    this.view.highlight(this.board, this.recruitment, this.active.source, this.view.tileAt(pointer.x, pointer.y));
+    this.view.highlight(this.board, this.recruitment, this.active.source, this.view.positionAt(pointer.x, pointer.y));
   };
 
   private finish = (pointer: Phaser.Input.Pointer): void => {
     if (!this.active || pointer.id !== this.active.pointerId) return;
     const cancelled = pointer.event?.type === 'touchcancel';
     const result = cancelled ? 'invalid' : applyDrop(
-      this.board, this.recruitment, this.active.source, this.view.tileAt(pointer.x, pointer.y),
+      this.board, this.recruitment, this.active.source, this.view.positionAt(pointer.x, pointer.y),
     );
     this.cancel();
     this.onDrop(result);

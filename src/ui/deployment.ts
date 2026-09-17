@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
-import type { BoardState, DragSource } from '../systems/board';
+import type { BoardState, UnitPosition } from '../systems/board';
 import { getDragItem, getDropAction } from '../systems/board';
 import type { RecruitmentState } from '../systems/recruitment';
 import { label } from './text';
@@ -13,7 +13,7 @@ export class DeploymentView {
   private readonly highlights: Phaser.GameObjects.Graphics;
   readonly ghost: UnitView;
 
-  constructor(scene: Phaser.Scene, private readonly map: BoardMap, slotCount: number) {
+  constructor(scene: Phaser.Scene, map: BoardMap, slotCount: number) {
     this.tiles = map.cells.map(cell => ({
       box: scene.add.rectangle(cell.x, cell.y, map.cellSize, map.cellSize),
       text: label(scene, cell.x, cell.y, '', 24),
@@ -33,7 +33,7 @@ export class DeploymentView {
     this.ghost.root.setDepth(100).setAlpha(0.9);
   }
 
-  refresh(board: BoardState, recruitment: RecruitmentState, source?: DragSource): void {
+  refresh(board: BoardState, recruitment: RecruitmentState, source?: UnitPosition): void {
     this.tiles.forEach((view, index) => {
       const tile = board.tiles[index]!;
       view.box.setFillStyle(tile.unlocked ? 0xfffcf4 : 0xdcd7ca)
@@ -57,21 +57,24 @@ export class DeploymentView {
     return this.tiles.findIndex(view => view.box.getBounds().contains(x, y));
   }
 
-  sourceAt(x: number, y: number): DragSource | null {
+  positionAt(x: number, y: number): UnitPosition | null {
     const slot = this.slots.findIndex(view => view.box.getBounds().contains(x, y));
     if (slot >= 0) return { kind: 'slot', index: slot };
     const tile = this.tileAt(x, y);
     return tile >= 0 ? { kind: 'tile', index: tile } : null;
   }
 
-  highlight(board: BoardState, recruitment: RecruitmentState, source: DragSource, hovered: number): void {
+  highlight(board: BoardState, recruitment: RecruitmentState, source: UnitPosition, hovered: UnitPosition | null): void {
     this.highlights.clear();
-    this.map.cells.forEach((cell, index) => {
-      if (getDropAction(board, recruitment, source, index) === 'invalid') return;
-      const size = this.map.cellSize + 6;
-      this.highlights.lineStyle(index === hovered ? 5 : 2, index === hovered ? 0x45865a : 0x99b17d);
-      this.highlights.strokeRect(cell.x - size / 2, cell.y - size / 2, size, size);
-    });
+    const draw = (box: Phaser.GameObjects.Rectangle, target: UnitPosition): void => {
+      if (getDropAction(board, recruitment, source, target) === 'invalid') return;
+      const active = target.kind === hovered?.kind && target.index === hovered.index;
+      this.highlights.lineStyle(active ? 5 : 2, active ? 0x45865a : 0x99b17d);
+      const bounds = box.getBounds();
+      this.highlights.strokeRect(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6);
+    };
+    this.tiles.forEach((view, index) => draw(view.box, { kind: 'tile', index }));
+    this.slots.forEach((view, index) => draw(view.box, { kind: 'slot', index }));
   }
 
   clearDrag(): void {

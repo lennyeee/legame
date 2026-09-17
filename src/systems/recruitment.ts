@@ -1,10 +1,10 @@
 import { gameConfig } from '../config/game';
-import type { Recruit } from '../config/game';
+import type { ReserveItem } from './items';
 import { drawRandom } from '../utils/random';
 
 export interface RecruitmentState {
   money: number;
-  slots: (Recruit | null)[];
+  slots: (ReserveItem | null)[];
 }
 
 export function createRecruitmentState(): RecruitmentState {
@@ -18,6 +18,6 @@ export function recruit(state: RecruitmentState, random?: () => number): boolean
   if (state.money < gameConfig.recruitmentCost) return false;
   const results = drawRandom(gameConfig.recruitmentPool, gameConfig.slotCount, random);
   state.money -= gameConfig.recruitmentCost;
-  state.slots = results;
+  state.slots = results.map(type => type === '铲' ? type : { type, level: 1 });
   return true;
 }
