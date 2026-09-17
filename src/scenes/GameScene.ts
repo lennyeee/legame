@@ -4,6 +4,9 @@ import { testMap } from '../config/maps';
 import { createRecruitmentState, recruit } from '../systems/recruitment';
 import { drawBoard } from '../ui/board';
 import { label } from '../ui/text';
+import { createBoardState } from '../systems/board';
+import { DeploymentView } from '../ui/deployment';
+import { DeploymentController } from '../input/DeploymentController';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -12,22 +15,26 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     const state = createRecruitmentState();
+    const board = createBoardState(testMap);
     label(this, 375, 49, '乐 GAME', 30, '#57674f');
     this.add.rectangle(375, 117, 686, 80, 0xeee9dc);
     const moneyText = label(this, 155, 109, '', 32);
     label(this, 155, 138, `每秒 +$${gameConfig.incomePerSecond}`, 16, '#8b8272');
     label(this, 580, 117, `第 ${gameConfig.initialWave} 波`, 28);
-    label(this, 375, 180, `${testMap.name} / 测试地图`, 19, '#8b8272');
     drawBoard(this, testMap);
-
-    label(this, 375, 1022, '待放置', 24);
-    const slots = Array.from({ length: gameConfig.slotCount }, (_, index) => {
-      const x = 375 + (index - (gameConfig.slotCount - 1) / 2) * 128;
-      const box = this.add.rectangle(x, 1092, 108, 100, 0xfffcf4).setStrokeStyle(2, 0xd3caba);
-      const text = label(this, x, 1092, '—', 38, '#b6ae9f');
-      return { box, text };
+    const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
+    const feedback = label(this, 375, 1170, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
+    const deployment = new DeploymentController(this, board, state, deploymentView, result => {
+      const messages = {
+        invalid: '无法放置，已返回原位',
+        deploy: '部署完成',
+        move: '移动完成',
+        swap: '位置已交换',
+        merge: '合成成功，等级提升',
+        unlock: '部署格已解锁',
+      };
+      feedback.setText(messages[result]).setColor(result === 'invalid' ? '#a45e45' : '#697e67');
     });
-    const feedback = label(this, 375, 1170, '征兵后生成 5 个结果，再次征兵会全部替换', 20, '#8b8272');
     const button = this.add.rectangle(375, 1240, 430, 84, 0x697e67)
       .setInteractive({ useHandCursor: true });
     const buttonText = label(this, 375, 1240, '', 30, '#fffaf0');
@@ -39,19 +46,17 @@ export class GameScene extends Phaser.Scene {
       buttonText.setText(affordable
         ? `征兵  $${gameConfig.recruitmentCost}`
         : `美金不足  $${gameConfig.recruitmentCost}`);
-      slots.forEach((slot, index) => {
-        slot.text.setText(state.slots[index] ?? '—');
-        slot.text.setColor(state.slots[index] ? '#514a40' : '#b6ae9f');
-        slot.box.setStrokeStyle(2, state.slots[index] ? 0x9aa58c : 0xd3caba);
-      });
     };
 
     button.on('pointerdown', () => {
+      // 防止另一根手指在拖动中征兵，替换正在拖动的槽位。
+      if (deployment.isDragging) return;
       if (!recruit(state)) {
         feedback.setText('美金不足，请等待资源增长').setColor('#a45e45');
         return;
       }
-      feedback.setText('征兵完成 · 原槽位内容已替换').setColor('#697e67');
+      feedback.setText('征兵完成 · 待放置栏已更新').setColor('#697e67');
+      deployment.refresh();
       refresh();
     });
     const incomeTimer = this.time.addEvent({
@@ -67,6 +72,7 @@ export class GameScene extends Phaser.Scene {
       },
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => incomeTimer.remove());
+    deployment.refresh();
     refresh();
   }
 }

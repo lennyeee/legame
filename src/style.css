@@ -18,4 +18,5 @@ body {
 
 #game canvas {
   display: block;
+  touch-action: none;
 }

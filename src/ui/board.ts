@@ -27,7 +27,7 @@ export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
       ).setRotation(angle).setAlpha(alpha);
     });
 
-    map.cells.forEach((cell) => {
+    if (mirrored) map.cells.forEach((cell) => {
       scene.add.rectangle(cell.x, yOf(cell.y), map.cellSize, map.cellSize,
         cell.unlocked ? 0xfffcf4 : 0xdcd7ca,
       ).setStrokeStyle(2, cell.unlocked ? 0x87937d : 0xc2bcae).setAlpha(alpha);
@@ -46,8 +46,4 @@ export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
   drawHalf(true);
   drawHalf(false);
   scene.add.rectangle(375, map.mirrorY, 622, 2, 0xc8beaa);
-  scene.add.rectangle(375, map.mirrorY, 180, 38, 0xeee9dc);
-  label(scene, 375, map.mirrorY, '玩家区域', 20, '#6a795f');
-  label(scene, 375, 231, '镜像战场 · 仅展示', 20, '#969080');
-  label(scene, 375, 963, '+ 已解锁     锁 未解锁     → 固定行进路径', 18, '#8b8272');
 }
