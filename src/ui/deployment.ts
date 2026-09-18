@@ -1,3 +1,4 @@
+import { controlsLayout } from '../config/layout';
 import Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
 import type { BoardState, UnitPosition } from '../systems/board';
@@ -28,13 +29,13 @@ export class DeploymentView {
       unit: new UnitView(scene, cell.x, cell.y, map.cellSize - 4),
       sleep: label(scene, cell.x, cell.y - 19, '', 12, heroVisuals.sleepColor),
     }));
-    label(scene, 375, 1022, '待放置', 24);
+    label(scene, 375, controlsLayout.reserveTitleY, '待放置', 24);
     this.slots = Array.from({ length: slotCount }, (_, index) => {
       const x = 375 + (index - (slotCount - 1) / 2) * 128;
       return {
-        box: scene.add.rectangle(x, 1092, 108, 100, 0xfffcf4).setStrokeStyle(2, 0xd3caba),
-        text: label(scene, x, 1092, '—', 38, '#b6ae9f'),
-        unit: new UnitView(scene, x, 1092, 84),
+        box: scene.add.rectangle(x, controlsLayout.reserveY, 108, 100, 0xfffcf4).setStrokeStyle(2, 0xd3caba),
+        text: label(scene, x, controlsLayout.reserveY, '—', 38, '#b6ae9f'),
+        unit: new UnitView(scene, x, controlsLayout.reserveY, 84),
       };
     });
     this.highlights = scene.add.graphics().setDepth(20);

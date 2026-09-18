@@ -1,16 +1,22 @@
 import Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
 import { label } from './text';
-import { getBattlefieldLayout } from './boardLayout';
+import { getBattlefieldLayout, transformBattlefieldPoint } from './boardLayout';
+import { battleLayout, HALF_HEIGHT } from '../config/layout';
 
 export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
-  scene.add.rectangle(375, 593, 686, 786, 0xeee9dc).setStrokeStyle(2, 0xd9d1c0);
+  scene.add.rectangle(375, map.mirrorY, battleLayout.width, HALF_HEIGHT * 2, 0xeee9dc).setStrokeStyle(2, 0xd9d1c0);
 
   const drawHalf = (mirrored: boolean): void => {
     const { path: nodes, cells } = getBattlefieldLayout(map, scene.scale.width, mirrored);
     const alpha = mirrored ? 0.4 : 1;
+    for (const space of map.spaces ?? []) {
+      const { x, y } = transformBattlefieldPoint(map, scene.scale.width, mirrored, space);
+      scene.add.rectangle(x, y, map.cellSize, map.cellSize, space.kind === 'path' ? 0xd1b98f : 0xe7e2d6)
+        .setStrokeStyle(1, 0xd0c7b5).setAlpha(alpha);
+    }
     const path = scene.add.graphics().setAlpha(alpha);
-    path.lineStyle(38, 0xd1b98f, 1);
+    path.lineStyle(map.cellSize * 0.45, 0xd1b98f, 1);
     path.beginPath();
     nodes.forEach((point, index) => {
       if (index === 0) path.moveTo(point.x, point.y);
@@ -46,5 +52,5 @@ export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
 
   drawHalf(true);
   drawHalf(false);
-  scene.add.rectangle(375, map.mirrorY, 622, 2, 0xc8beaa);
+  scene.add.rectangle(375, map.mirrorY, battleLayout.width, 2, 0xc8beaa);
 }

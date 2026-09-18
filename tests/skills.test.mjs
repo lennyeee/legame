@@ -11,7 +11,7 @@ const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
 const {WaveProgress}=await import('../src/combat/WaveProgress.ts');
 const {waveConfig}=await import('../src/config/waves.ts');
-const {testMap}=await import('../src/config/maps.ts');
+const {testMap}=await import('./fixtures/combatMap.ts');
 const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 const pos=(kind,index)=>({kind,index});
 const id='xiaomei_barrage';

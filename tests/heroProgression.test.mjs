@@ -9,7 +9,7 @@ const {heroRecipes,heroCombat,heroGrowth,heroExpRequired,getHeroStats}=await imp
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
 const {WaveProgress}=await import('../src/combat/WaveProgress.ts');
 const {waveConfig}=await import('../src/config/waves.ts');
-const {testMap}=await import('../src/config/maps.ts');
+const {testMap}=await import('./fixtures/combatMap.ts');
 const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 const p=(kind,index)=>({kind,index});
 function setup(levels=[1,1],map=testMap){

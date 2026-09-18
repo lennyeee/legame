@@ -11,7 +11,7 @@ const { createBoardState, applyDrop, getDragItem } = await import('../src/system
 const { getHeroLinks } = await import('../src/systems/heroActivation.ts');
 const { createRecruitmentState, recruit } = await import('../src/systems/recruitment.ts');
 const { CombatSimulation } = await import('../src/combat/CombatSimulation.ts');
-const { testMap } = await import('../src/config/maps.ts');
+const { testMap } = await import('./fixtures/combatMap.ts');
 const letter = (type, level = 1) => ({ kind: 'heroLetter', type, level });
 const pos = (kind, index) => ({ kind, index });
 function setup(map = testMap) { return { board: createBoardState(map), reserve: createRecruitmentState() }; }
@@ -126,7 +126,7 @@ test('普通兵和铲子不会与武将字合成，休眠字替换弓后取消�
   reserve.slots[1]='铲';assert.equal(applyDrop(board,reserve,pos('tile',0),pos('slot',1)),'invalid');
 });
 
-test('16个52像素部署格不覆盖道路、入口、乐、分界或UI，具有足够横向相邻位',()=>{
+test('固定战斗夹具的16个52像素格保持原几何，确保旧规则回归条件不变',()=>{
   assert.equal(testMap.cells.length,16);assert.equal(testMap.cellSize,52);
   assert.deepEqual(testMap.path,[{x:105,y:635},{x:105,y:735},{x:375,y:735},{x:375,y:905},{x:645,y:905}]);
   const half=testMap.cellSize/2;let pairs=0;

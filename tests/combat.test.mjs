@@ -11,7 +11,7 @@ const { buildPath, pointOnPath } = await import('../src/combat/path.ts');
 const { advanceEnemy, createEnemy, damageEnemy } = await import('../src/combat/enemies.ts');
 const { selectTarget, piercingTargets } = await import('../src/combat/targeting.ts');
 const { combatConfig, getCombatStats } = await import('../src/config/combat.ts');
-const { testMap } = await import('../src/config/maps.ts');
+const { testMap } = await import('./fixtures/combatMap.ts');
 const { createBoardState, applyDrop } = await import('../src/systems/board.ts');
 const { createRecruitmentState, recruit } = await import('../src/systems/recruitment.ts');
 const unit = (type, level = 1) => ({ type, level });

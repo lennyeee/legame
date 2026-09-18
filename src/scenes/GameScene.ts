@@ -1,3 +1,4 @@
+import { controlsLayout } from '../config/layout';
 import Phaser from 'phaser';
 import { GAME_VERSION, gameConfig } from '../config/game';
 import { testMap } from '../config/maps';
@@ -29,12 +30,12 @@ export class GameScene extends Phaser.Scene {
     const waveText = label(this, 580, 117, '', 28);
     drawBoard(this, testMap);
     const goal = testMap.path[testMap.path.length - 1]!;
-    const healthText = label(this, goal.x, goal.y + 40, '', 24, '#a85c4d');
+    const healthText = label(this, goal.x, goal.y + 24, '', 24, '#a85c4d');
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
     drawLoadout(this, loadout);
     let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
-    const feedback = label(this, 375, 1170, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
+    const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
     const deployment = new DeploymentController(this, board, state, deploymentView, result => {
       const messages = {
         invalid: '无法放置，已返回原位',
@@ -45,9 +46,9 @@ export class GameScene extends Phaser.Scene {
       };
       feedback.setText(messages[result]).setColor(result === 'invalid' ? '#a45e45' : '#697e67');
     });
-    const button = this.add.rectangle(375, 1240, 430, 84, 0x697e67)
+    const button = this.add.rectangle(375, controlsLayout.recruitY, 430, 84, 0x697e67)
       .setInteractive({ useHandCursor: true });
-    const buttonText = label(this, 375, 1240, '', 30, '#fffaf0');
+    const buttonText = label(this, 375, controlsLayout.recruitY, '', 30, '#fffaf0');
 
     const refresh = (): void => {
       moneyText.setText(`$ ${state.money}`);

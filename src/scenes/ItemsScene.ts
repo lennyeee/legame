@@ -50,7 +50,8 @@ export class ItemsScene extends Phaser.Scene {
         panel.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => event.stopPropagation());
         const title = label(this, 375, 510, definition.name, 36).setDepth(22);
         const category = label(this, 375, 565, definition.category === 'passive' ? '被动道具' : '主动道具', 24).setDepth(22);
-        const description = label(this, 375, 655, definition.description, 24).setWordWrapWidth(500).setDepth(22);
+        const description = label(this, 375, 655, definition.description, 24)
+          .setWordWrapWidth(490, true).setFixedSize(500, 110).setAlign('left').setDepth(22);
         const note = label(this, 375, 735, '本版本仅验证装备，效果尚未启用', 19, '#8b8272').setDepth(22);
         const action = this.add.rectangle(375, 815, 250, 64, 0x697e67).setDepth(22).setInteractive({ useHandCursor: true });
         const actionText = label(this, 375, 815, item.equipped ? '卸下' : '装备', 26, '#fffaf0').setDepth(23);

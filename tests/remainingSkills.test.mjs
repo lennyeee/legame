@@ -12,7 +12,7 @@ const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
 const {executeEnemy}=await import('../src/combat/enemies.ts');
 const {WaveProgress}=await import('../src/combat/WaveProgress.ts');
 const {waveConfig}=await import('../src/config/waves.ts');
-const {testMap}=await import('../src/config/maps.ts');
+const {testMap}=await import('./fixtures/combatMap.ts');
 const letter=type=>({kind:'heroLetter',type,level:1});
 const pos=(kind,index)=>({kind,index});
 function setup(hero='xiaoliu',near=false){
