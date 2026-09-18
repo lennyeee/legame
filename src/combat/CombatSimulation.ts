@@ -9,6 +9,9 @@ import { advanceEnemy, createEnemy, damageEnemy } from './enemies';
 import type { Enemy } from './enemies';
 import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
+import { getHeroLinks } from '../systems/heroActivation';
+import type { HeroLink } from '../systems/heroActivation';
+import { heroCombat } from '../config/heroes';
 
 interface Attacker {
   unit: Unit;
@@ -39,6 +42,7 @@ export interface Projectile extends MapPoint {
 }
 
 export type CombatEvent = AttackEffect
+  | { kind: 'heroAttack'; link: HeroLink; end: MapPoint }
   | { kind: 'hit'; enemyId: number }
   | { kind: 'kill'; enemyId: number; position: MapPoint; reward: number }
   | { kind: 'escape'; enemyId: number };
@@ -53,6 +57,7 @@ export class CombatSimulation {
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
   private readonly attackers = new Map<number, Attacker>();
+  private readonly heroAttackers = new Map<string, { link: HeroLink; cooldown: number }>();
   private elapsed = 0;
   readonly progress: WaveProgress | null;
   private nextEnemyId = 1;
@@ -89,6 +94,13 @@ export class CombatSimulation {
 
   syncBoard(suspendedTile: number | null = null): void {
     this.suspendedTile = suspendedTile;
+    const links = this.heroLinks;
+    for (const [key, state] of this.heroAttackers) {
+      if (!links.some(link => link.key === key && link.left === state.link.left && link.right === state.link.right)) this.heroAttackers.delete(key);
+    }
+    for (const link of links) {
+      if (!this.heroAttackers.has(link.key)) this.heroAttackers.set(link.key, { link, cooldown: heroCombat.attackInterval });
+    }
     for (const [index, attacker] of this.attackers) {
       if (!this.isAttackerValid(index, attacker.unit, attacker.level) || attacker.unit.type !== attacker.type) {
         this.attackers.delete(index);
@@ -115,6 +127,7 @@ export class CombatSimulation {
       if (this.progress && this.progress.status !== 'playing') {
         this.projectiles = [];
         this.attackers.clear();
+        this.heroAttackers.clear();
         this.elapsed = 0;
         break;
       }
@@ -129,6 +142,13 @@ export class CombatSimulation {
       this.wallet.money += this.config.enemy.killReward;
       events.push({ kind: 'kill', enemyId: enemy.id, position: { x: enemy.x, y: enemy.y }, reward: this.config.enemy.killReward });
     }
+  }
+
+  get heroLinks(): HeroLink[] { return getHeroLinks(this.map, this.board, this.suspendedTile); }
+
+  isHeroLinkValid(link: HeroLink): boolean {
+    return (!this.progress || this.progress.status === 'playing') && this.heroLinks.some(current =>
+      current.key === link.key && current.left === link.left && current.right === link.right);
   }
 
   private step(deltaMs: number, events: CombatEvent[]): void {
@@ -185,6 +205,15 @@ export class CombatSimulation {
             : [target];
         victims.forEach(enemy => this.hit(enemy, stats.damage, events));
       }
+    }
+    for (const attacker of this.heroAttackers.values()) {
+      attacker.cooldown = Math.max(0, attacker.cooldown - deltaMs);
+      if (attacker.cooldown > 1e-8) continue;
+      const target = selectTarget(this.enemies, attacker.link.origin, heroCombat.range);
+      if (!target) continue;
+      attacker.cooldown = heroCombat.attackInterval;
+      events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
+      this.hit(target, heroCombat.damage, events);
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

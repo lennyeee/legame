@@ -55,7 +55,7 @@ function pve() {
         if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
         if (key === 'getBounds') return () => ({ contains: (px, py) => Math.abs(px-x) <= width/2 && Math.abs(py-y) <= height/2 });
         if (key === 'clear') return () => { t.draws = []; return proxy; };
-        if (key === 'fillCircle') return (...args) => { t.draws.push(args); return proxy; };
+        if (key === 'fillCircle' || key === 'strokeRect' || key === 'lineBetween') return (...args) => { t.draws.push([key, ...args]); return proxy; };
         return () => proxy;
       } });
       list.push(proxy);
@@ -112,45 +112,67 @@ function pve() {
   return { game, overlay, objects, text, click, drag, run, snapshot, isActive: () => active, globalEvents };
 }
 
-test('武将字及完整武将暂停/结算不可操作，恢复可移动，重开彻底清除', () => {
+test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
   const random = Math.random;
+  const counts = waveConfig.enemyCounts;
   try {
     const p = pve();
-    Math.random = () => 15.5 / 21;
-    p.click(375, 1240);
-    p.drag([119, 1092], [195, 650]);
-    Math.random = () => 16.5 / 21;
-    p.click(375, 1240);
-    p.drag([119, 1092], [195, 650]);
-    assert.ok(p.objects.get(p.game).some(o => o.text === '赵云'));
-    assert.ok(p.objects.get(p.game).some(o => o.text === '云'));
-    assert.equal(p.objects.get(p.game).some(o => typeof o.text === 'string' && o.text.startsWith('Lv.')), false);
-    p.drag([195, 650], [119, 1092]);
-    p.drag([119, 1092], [285, 650]);
-    p.click(75, 49);
-    const paused = p.snapshot();
-    p.drag([247, 1092], [195, 650]);
-    p.drag([285, 650], [119, 1092]);
-    p.run(5000);
-    assert.equal(p.snapshot(), paused);
-    p.click(375, 765);
-    p.drag([247, 1092], [195, 650]);
-    assert.notEqual(p.snapshot(), paused);
-    p.run(30000);
-    assert.equal(p.text(375, 565, p.overlay), '失败');
-    const ended = p.snapshot();
-    p.drag([195, 650], [119, 1092]);
-    p.drag([285, 650], [247, 1092]);
-    p.click(375, 1240);
-    assert.equal(p.snapshot(), ended);
-    p.click(375, 765);
-    const names = ['赵', '云', '关', '羽', '张', '飞', '赵云', '关羽', '张飞'];
-    assert.equal(p.objects.get(p.game).some(o => names.includes(o.text)), false);
-    assert.equal(p.text(155, 109), '$ 100');
-    assert.equal(p.text(195, 650), '+');
-    assert.equal(p.text(285, 650), '+');
-    assert.equal(p.game.events.listenerCount('update'), 1);
-  } finally { Math.random = random; }
+    for (const win of [false, true, false]) {
+      waveConfig.enemyCounts = win ? [1] : counts;
+      Math.random = () => 15.5 / 21;
+      p.click(375, 1240);
+      p.drag([119, 1092], [195, 650]);
+      assert.equal(p.text(195, 631), 'Zz');
+      assert.equal(p.objects.get(p.game).filter(o => o.text === 'Zz').length, 1);
+      Math.random = () => 16.5 / 21;
+      p.click(375, 1240);
+      p.drag([119, 1092], [247, 650]);
+      assert.equal(p.text(195, 631), '');
+      assert.equal(p.text(247, 631), '');
+      assert.equal(p.objects.get(p.game).some(o => o.text === '赵云'), false);
+      const boxes = p.objects.get(p.game).filter(o => o.kind === 'rectangle' && o.y === 650 && [195,247].includes(o.x));
+      assert.ok(boxes.every(o => !o.visible));
+      const linkedBorder = () => p.objects.get(p.game).some(o => o.kind === 'graphics'
+        && o.draws.some(d => d[0] === 'strokeRect' && d[3] === 104 && d[4] === 52));
+      assert.equal(linkedBorder(), true);
+      const pointer = { id: 1, x: 247, y: 650, primaryDown: true };
+      p.game.input.emit('pointerdown', pointer);
+      p.run(10);
+      const range = p.objects.get(p.game).filter(o => o.kind === 'graphics').at(-2);
+      assert.ok(range.draws.some(d => d[0] === 'fillCircle' && d[1] === 221));
+      p.game.input.emit('pointermove', { ...pointer, x: 270 });
+      assert.equal(linkedBorder(), false);
+      assert.equal(p.text(195, 631), 'Zz');
+      assert.equal(range.draws.length, 0);
+      p.game.input.emit('pointerup', { ...pointer, x: 0, y: 0, primaryDown: false });
+      assert.equal(linkedBorder(), true);
+      // 收回字、反序交换、再放回都立即刷新边框及休眠状态。
+      p.drag([247,650],[119,1092]);
+      assert.equal(linkedBorder(),false);
+      p.drag([119,1092],[247,650]);
+      p.drag([195,650],[247,650]);
+      assert.equal(linkedBorder(),false);
+      p.drag([195,650],[247,650]);
+      assert.equal(linkedBorder(),true);
+      p.run(2100);
+      p.click(75,49);
+      const paused=p.snapshot();
+      p.run(5000);p.drag([247,650],[119,1092]);
+      assert.equal(p.snapshot(),paused);
+      p.click(375,765);p.run(90000);
+      assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+      const ended=p.snapshot();p.run(5000);p.drag([247,650],[119,1092]);
+      assert.equal(p.snapshot(),ended);
+      p.click(375,765);
+      assert.equal(linkedBorder(),false);
+      assert.equal(p.objects.get(p.game).some(o => ['赵','云','Zz'].includes(o.text)),false);
+      assert.equal(p.game.events.listenerCount('update'),1);
+      p.run(2000);
+      assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='lineBetween')),false);
+      // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
+      p.run(30000);p.click(375,765);
+    }
+  } finally { Math.random=random;waveConfig.enemyCounts=counts; }
 });
 
 test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止操作并原位恢复', () => {
@@ -169,7 +191,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   const paused = p.snapshot();
   p.run(30000);
   p.click(375, 1240);
-  p.drag([195, 650], [285, 650]);
+  p.drag([195, 650], [247, 650]);
   assert.equal(p.snapshot(), paused);
   assert.equal(p.game.time._active[0].elapsed, elapsed);
   p.click(375, 765);
@@ -200,7 +222,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       assert.equal(p.text(580, 117), '第 1 波');
       assert.equal(p.text(645, 945), '♥♥♥');
       assert.equal(p.text(730, 1314), 'v' + GAME_VERSION);
-      assert.equal(p.text(555, 735), '锁');
+      assert.equal(p.text(517, 735), '锁');
       assert.equal(p.objects.get(p.game).filter(o => o.kind === 'text' && o.text.startsWith('Lv.')).length, 0);
       assert.equal(p.game.events.listenerCount('update'), 1);
       assert.equal(p.globalEvents.listenerCount('blur'), 2);
@@ -212,11 +234,11 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       waveConfig.enemyCounts = win ? [1] : counts;
       Math.random = () => 0.65;
       p.click(375, 1240);
-      p.drag([119, 1092], [555, 735]);
-      assert.equal(p.text(555, 735), '+');
+      p.drag([119, 1092], [517, 735]);
+      assert.equal(p.text(517, 735), '+');
       Math.random = () => 0;
       p.click(375, 1240);
-      p.drag([119, 1092], [555, 735]);
+      p.drag([119, 1092], [517, 735]);
       p.run(30000);
       assert.equal(p.isActive(), false);
       assert.equal(p.text(375, 565, p.overlay), win ? '胜利' : '失败');

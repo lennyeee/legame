@@ -14,17 +14,18 @@ export class UnitView {
     this.background = scene.add.rectangle(0, 0, size, size, 0xfffcf4)
       .setStrokeStyle(2, 0x9aa58c);
     this.name = label(scene, 0, -8, '', 30);
-    this.level = label(scene, 0, 20, '', 17);
+    this.level = label(scene, 0, Math.min(20, size / 2 - 9), '', 17);
     this.root = scene.add.container(x, y, [this.background, this.name, this.level]);
     this.root.setVisible(false);
   }
 
-  show(item: DragItem | null): void {
+  show(item: DragItem | null, linked = false, sleeping = false): void {
     this.root.setVisible(item !== null);
+    this.background.setVisible(!linked);
     if (!item) return;
     const ordinary = isUnit(item);
     this.background.setFillStyle(getLevelColor(ordinary ? item.level : 1));
-    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : 0);
+    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : sleeping ? 7 : 0);
     this.name.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.name.width, 1)));
     this.level.setText(ordinary ? `Lv.${item.level}` : '');
     this.level.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.level.width, 1)));

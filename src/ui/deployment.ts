@@ -5,19 +5,27 @@ import { getDragItem, getDropAction } from '../systems/board';
 import type { RecruitmentState } from '../systems/recruitment';
 import { label } from './text';
 import { UnitView } from './unit';
+import { getHeroLinks } from '../systems/heroActivation';
+import { isUnit } from '../systems/items';
+import { heroVisuals } from '../config/heroes';
 
 // 只负责下半区和待放置栏；上半场没有可命中的交互格。
 export class DeploymentView {
   private readonly tiles;
   private readonly slots;
   private readonly highlights: Phaser.GameObjects.Graphics;
+  private readonly links: Phaser.GameObjects.Graphics;
+  private readonly map: BoardMap;
   readonly ghost: UnitView;
 
   constructor(scene: Phaser.Scene, map: BoardMap, slotCount: number) {
+    this.map = map;
+    this.links = scene.add.graphics();
     this.tiles = map.cells.map(cell => ({
       box: scene.add.rectangle(cell.x, cell.y, map.cellSize, map.cellSize),
       text: label(scene, cell.x, cell.y, '', 24),
       unit: new UnitView(scene, cell.x, cell.y, map.cellSize - 4),
+      sleep: label(scene, cell.x, cell.y - 19, '', 12, heroVisuals.sleepColor),
     }));
     label(scene, 375, 1022, '待放置', 24);
     this.slots = Array.from({ length: slotCount }, (_, index) => {
@@ -34,13 +42,27 @@ export class DeploymentView {
   }
 
   refresh(board: BoardState, recruitment: RecruitmentState, source?: UnitPosition): void {
+    const links = getHeroLinks(this.map, board, source?.kind === 'tile' ? source.index : null);
+    const linked = new Set(links.flatMap(link => [link.leftIndex, link.rightIndex]));
+    this.links.clear();
+    for (const link of links) {
+      const size = this.map.cellSize;
+      this.links.fillStyle(heroVisuals.fill);
+      this.links.fillRect(link.origin.x - size, link.origin.y - size / 2, size * 2, size);
+      this.links.lineStyle(3, heroVisuals.color);
+      this.links.strokeRect(link.origin.x - size, link.origin.y - size / 2, size * 2, size);
+    }
     this.tiles.forEach((view, index) => {
       const tile = board.tiles[index]!;
       view.box.setFillStyle(tile.unlocked ? 0xfffcf4 : 0xdcd7ca)
         .setStrokeStyle(2, tile.unlocked ? 0x87937d : 0xc2bcae);
+      view.box.setVisible(!linked.has(index));
       view.text.setText(tile.unit ? '' : tile.unlocked ? '+' : '锁')
         .setColor(tile.unlocked ? '#798970' : '#999284');
-      view.unit.show(tile.unit);
+      const sleeping = !!tile.unit && !isUnit(tile.unit) && !linked.has(index)
+        && !(source?.kind === 'tile' && source.index === index);
+      view.unit.show(tile.unit, linked.has(index), sleeping);
+      view.sleep.setText(sleeping ? 'Zz' : '');
     });
     this.slots.forEach((view, index) => {
       const item = getDragItem(board, recruitment, { kind: 'slot', index });

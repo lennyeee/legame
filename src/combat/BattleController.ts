@@ -42,7 +42,8 @@ export class BattleController {
     if (!pointer.primaryDown || this.previewPointerId !== null || this.deployment.draggedTile !== null) return;
     const position = this.deploymentView.positionAt(pointer.x, pointer.y);
     const index = position?.kind === 'tile' ? position.index : null;
-    const selected = index !== null && isUnit(this.battle.board.tiles[index]?.unit) ? index : null;
+    const selected = index !== null && (isUnit(this.battle.board.tiles[index]?.unit)
+      || this.battle.heroLinks.some(link => link.leftIndex === index || link.rightIndex === index)) ? index : null;
     this.previewPointerId = selected !== null ? pointer.id : null;
     this.view.select(selected);
   };
@@ -57,6 +58,7 @@ export class BattleController {
   };
 
   private hideWhenDragging = (pointer: Phaser.Input.Pointer): void => {
+    this.battle.syncBoard(this.deployment.draggedTile);
     if (pointer.id === this.previewPointerId && this.deployment.draggedTile !== null) this.hideRange();
   };
 

@@ -4,12 +4,14 @@ import { combatConfig, getCombatStats } from '../config/combat';
 import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { label } from './text';
+import { heroCombat, heroVisuals } from '../config/heroes';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly range: Phaser.GameObjects.Graphics;
   private readonly flashes = new Map<number, number>();
   private effects: { event: AttackEffect; expires: number }[] = [];
+  private heroEffects: { event: Extract<CombatEvent, { kind: 'heroAttack' }>; expires: number }[] = [];
   private rewards: { text: Phaser.GameObjects.Text; expires: number; y: number }[] = [];
   private selectedTile: number | null = null;
 
@@ -27,6 +29,7 @@ export class CombatView {
     const visuals = combatConfig.visuals;
     for (const event of events) {
       if (event.kind === 'attack') this.effects.push({ event, expires: now + visuals.attackEffectMs });
+      if (event.kind === 'heroAttack') this.heroEffects.push({ event, expires: now + visuals.attackEffectMs });
       if (event.kind === 'hit') this.flashes.set(event.enemyId, now + visuals.hitFlashMs);
       if (event.kind === 'kill') {
         const text = label(this.scene, event.position.x, event.position.y - 30, `+$${event.reward}`, 22, '#42693b').setDepth(15);
@@ -37,12 +40,14 @@ export class CombatView {
     this.range.clear();
     if (this.selectedTile !== null) {
       const unit = this.battle.board.tiles[this.selectedTile]?.unit;
-      if (isUnit(unit)) {
-        const point = this.battle.map.cells[this.selectedTile]!;
-        const radius = getCombatStats(unit).range;
-        this.range.fillStyle(visuals.attackColors[unit.type], 0.1);
+      const link = this.battle.heroLinks.find(link => link.leftIndex === this.selectedTile || link.rightIndex === this.selectedTile);
+      if (isUnit(unit) || link) {
+        const point = link?.origin ?? this.battle.map.cells[this.selectedTile]!;
+        const radius = isUnit(unit) ? getCombatStats(unit).range : heroCombat.range;
+        const color = isUnit(unit) ? visuals.attackColors[unit.type] : heroVisuals.color;
+        this.range.fillStyle(color, 0.1);
         this.range.fillCircle(point.x, point.y, radius);
-        this.range.lineStyle(2, visuals.attackColors[unit.type], 0.6);
+        this.range.lineStyle(2, color, 0.6);
         this.range.strokeCircle(point.x, point.y, radius);
       } else this.selectedTile = null;
     }
@@ -77,6 +82,11 @@ export class CombatView {
         this.graphics.lineStyle(event.type === '刀' ? 5 : 3, color, alpha);
         this.graphics.lineBetween(event.origin.x, event.origin.y, event.end.x, event.end.y);
       }
+    }
+    this.heroEffects = this.heroEffects.filter(({ event, expires }) => expires > now && this.battle.isHeroLinkValid(event.link));
+    for (const { event, expires } of this.heroEffects) {
+      this.graphics.lineStyle(3, heroVisuals.color, (expires - now) / visuals.attackEffectMs);
+      this.graphics.lineBetween(event.link.origin.x, event.link.origin.y, event.end.x, event.end.y);
     }
     for (const arrow of this.battle.projectiles) {
       this.graphics.fillStyle(visuals.attackColors.弓);
