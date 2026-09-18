@@ -28,6 +28,7 @@ const { testMap } = await import('../src/config/maps.ts');
 const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
 const { GameScene } = await import('../src/scenes/GameScene.ts');
+const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
@@ -36,11 +37,14 @@ const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
 // 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
-function pve() {
+function pve(startImmediately = true) {
   const game = new GameScene();
+  const ready = new ReadyScene();
   const overlay = new PveOverlayScene();
   let active = true;
   let overlayActive = false;
+  let readyActive = true;
+  let startCount = 0;
   let now = 0;
   const objects = new Map();
   const globalEvents = new EventEmitter();
@@ -82,21 +86,32 @@ function pve() {
     pause: () => { active = false; },
     launch: (_key, data) => { prepare(overlay); overlayActive = true; overlay.create(data); },
   };
+  ready.scene = {
+    start: key => {
+      assert.equal(key, 'GameScene');
+      startCount++;
+      shutdown(ready);
+      readyActive = false;
+      prepare(game);
+      game.create();
+    },
+  };
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
     stop: key => { if (key === 'GameScene') shutdown(game); else { shutdown(overlay); overlayActive = false; } },
-    start: () => { shutdown(overlay); overlayActive = false; prepare(game); active = true; game.create(); },
+    start: key => { assert.equal(key, 'GameScene'); shutdown(overlay); overlayActive = false; prepare(game); active = true; game.create(); },
   };
-  prepare(game);
-  game.create();
+  prepare(ready);
+  ready.create();
+  if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    const scene = overlayActive ? overlay : game;
+    const scene = readyActive ? ready : overlayActive ? overlay : game;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
     target?.emit('pointerdown', { id: 1, x, y, primaryDown: true }, 0, 0, { stopPropagation() {} });
   };
   const drag = (from, to) => {
-    if (!active || overlayActive) return;
+    if (!active || overlayActive || readyActive) return;
     const p = { id: 1, primaryDown: true, x: from[0], y: from[1] };
     game.input.emit('pointerdown', p);
     game.input.emit('pointermove', { ...p, x: to[0], y: to[1] });
@@ -106,14 +121,62 @@ function pve() {
     for (let i = 0; i < ms; i += 10) {
       now += 10;
       if (!active) continue;
-      game.time.preUpdate();
-      game.time.update(now, 10);
-      game.events.emit('update', now, 10);
+      const scene = readyActive ? ready : game;
+      scene.time.preUpdate();
+      scene.time.update(now, 10);
+      scene.events.emit('update', now, 10);
     }
   };
-  const snapshot = () => JSON.stringify(objects.get(game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { game, overlay, objects, text, click, drag, run, snapshot, isActive: () => active, globalEvents };
+  const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
+  return { game, ready, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !readyActive,
+    startCount: () => startCount, globalEvents };
 }
+
+test('初始READY无对局控制器和计时器，长时间等待无敌人/资源/技能/EXP/操作', () => {
+  const p = pve(false);
+  assert.equal(p.ready.startState, 'READY');
+  assert.equal(p.isActive(), false);
+  assert.equal(p.text(375,565,p.ready), '乐 GAME');
+  assert.equal(p.text(375,765,p.ready), '开始游戏');
+  assert.equal(p.text(730,1314,p.ready), 'v' + GAME_VERSION);
+  const before = p.snapshot();
+  p.run(120000);
+  p.click(375,1240);p.click(75,49);p.drag([119,1092],[195,650]);
+  assert.equal(p.snapshot(), before);
+  assert.equal(p.objects.has(p.game), false);
+  assert.equal(p.ready.events.listenerCount('update'), 0);
+  assert.equal(p.ready.input.listenerCount('pointerdown'), 0);
+  assert.equal(p.ready.time._active.length, 0);
+  assert.equal(p.ready.time._pendingInsertion.length, 0);
+  assert.equal(p.startCount(), 0);
+});
+
+test('开始后统一初始化一次，重复请求无效，资源/波次从点击时刻计时并恢复操作', () => {
+  const p = pve(false);
+  p.run(60000);
+  p.click(375,765);
+  for (let i=0;i<10;i++) p.ready.requestStartGame();
+  assert.equal(p.ready.startState, 'RUNNING');
+  assert.equal(p.isActive(), true);
+  assert.equal(p.startCount(), 1);
+  assert.equal(p.text(155,109), '$ 100');
+  assert.equal(p.text(580,117), '第 1 波');
+  assert.equal(p.game.events.listenerCount('update'), 1);
+  p.run(990);assert.equal(p.text(155,109), '$ 100');
+  p.run(10);assert.equal(p.text(155,109), '$ 101');
+  assert.equal(p.game.time._active.length, 1);
+  const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics')
+    .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===15);
+  p.run(990);assert.equal(enemyCircles().length, 0);
+  p.run(20);assert.equal(enemyCircles().length, 1);
+  const random = Math.random;
+  try { Math.random=()=>0;p.click(375,1240);p.drag([119,1092],[195,650]); }
+  finally { Math.random=random; }
+  assert.equal(p.text(155,109), '$ 92');
+  assert.equal(p.text(195,650), '');
+  p.click(75,49);assert.equal(p.text(375,565,p.overlay),'已暂停');
+  p.click(375,765);assert.equal(p.isActive(),true);
+});
 
 test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
   const random = Math.random;
@@ -303,6 +366,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       const oldClock = p.game.time;
       p.click(375, 765);
       assert.equal(p.isActive(), true);
+      assert.equal(p.startCount(), 1); // 重开直接走GameScene，未再次经过准备页。
       assert.equal(oldClock._active.length, 0);
       assert.equal(oldClock._pendingInsertion.length, 0);
       assert.ok(p.objects.get(p.game).filter(o => o.kind === 'graphics').every(o => o.draws.length === 0));

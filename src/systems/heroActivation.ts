@@ -26,6 +26,7 @@ export interface HeroLink extends HeroPlacement {
 }
 
 export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: number | null = null): HeroPlacement[] {
+  // TODO（后续武将版本）：同一玩家最多激活一个同名武将，多余字保留用于升级。
   const links: HeroPlacement[] = [];
   const used = new Set<number>();
   map.cells.forEach((cell, leftIndex) => {

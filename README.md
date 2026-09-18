@@ -146,3 +146,13 @@ src/combat/skills.ts 独立负责选敌与逻辑时序，产生 skillStart / ski
 参数集中在 src/config/waves.ts。波次为 w：敌人数 = 5 + (w−1) + 2×floor((w−1)/5)；HP = round(90×[1+0.25×(w−1)+0.04×max(0,w−5)²])。
 
 四阶段敌人数分别为5–9、12–16、19–23、26–30。第1/5/10/15/20波HP分别为90/180/383/765/1328。刷怪间隔2秒、波间隔3秒；保留已有每敌5美金和10EXP（配置仍分别在combat.ts和heroes.ts），不修改任何角色强度、不加入Boss。重开从第1波开始。
+
+## 游戏准备与启动（v0.50）
+
+首次打开由 ReadyScene 展示静态地图和“开始游戏”。READY阶段没有对局钱包、棋盘运行状态、控制器或计时器，因此波次、收入、技能和EXP均不推进，也没有征兵/拖拽入口。
+
+启动统一经过 requestStartGame → STARTING → startMatch → GameScene.create。首次请求立即锁定状态，防止重复点击排入多次启动。未来乐入场动画可插在 requestStartGame 与 startMatch 之间，动画完成后再初始化对局。本版本没有动画或倒计时。
+
+结算后的“再来一局”仍直接关闭旧GameScene并创建新GameScene，跳过ReadyScene，从第1波和初始资源重新开始。原20波参数和角色强度保持不变。
+
+已确认但未实现的后续规则：同一玩家同时最多拥有一个同名激活武将；多余字保留用于同字升级。TODO记录于heroActivation.ts，留待后续专门实现和测试。
