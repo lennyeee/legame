@@ -8,13 +8,13 @@ import { registerHooks, stripTypeScriptTypes } from 'node:module';
 const phaserStub = 'data:text/javascript,' + encodeURIComponent(`export default {
   Scene: class {},
   Math: { Angle: { Between: (x1, y1, x2, y2) => Math.atan2(y2-y1, x2-x1) } },
-  Scenes: { Events: { UPDATE: 'update', SHUTDOWN: 'shutdown' } },
+  Scenes: { Events: { UPDATE: 'update', SHUTDOWN: 'shutdown', RESUME: 'resume' } },
   Core: { Events: { BLUR: 'blur' } }
 };`);
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'phaser') return { url: phaserStub, shortCircuit: true };
-    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) specifier += '.ts';
+    if (!context.parentURL?.includes('/node_modules/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) specifier += '.ts';
     return next(specifier, context);
   },
   load(url, context, next) {
@@ -27,6 +27,173 @@ const { getBattlefieldLayout } = await import('../src/ui/boardLayout.ts');
 const { testMap } = await import('../src/config/maps.ts');
 const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
+const { GameScene } = await import('../src/scenes/GameScene.ts');
+const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
+const { waveConfig } = await import('../src/config/waves.ts');
+const { GAME_VERSION } = await import('../src/config/game.ts');
+const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
+
+// 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
+function pve() {
+  const game = new GameScene();
+  const overlay = new PveOverlayScene();
+  let active = true;
+  let overlayActive = false;
+  let now = 0;
+  const objects = new Map();
+  const globalEvents = new EventEmitter();
+  function prepare(scene) {
+    const list = [];
+    objects.set(scene, list);
+    const object = (kind, x = 0, y = 0, width = 0, height = 0) => {
+      const target = Object.assign(new EventEmitter(), { kind, x, y, width, height, text: '', visible: true, draws: [] });
+      let proxy;
+      proxy = new Proxy(target, { get(t, key) {
+        if (key in t) return t[key];
+        if (key === 'setText') return value => { t.text = value; return proxy; };
+        if (key === 'setVisible') return value => { t.visible = value; return proxy; };
+        if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
+        if (key === 'getBounds') return () => ({ contains: (px, py) => Math.abs(px-x) <= width/2 && Math.abs(py-y) <= height/2 });
+        if (key === 'clear') return () => { t.draws = []; return proxy; };
+        if (key === 'fillCircle') return (...args) => { t.draws.push(args); return proxy; };
+        return () => proxy;
+      } });
+      list.push(proxy);
+      return proxy;
+    };
+    scene.events ??= new EventEmitter();
+    scene.input ??= new EventEmitter();
+    scene.game = { events: globalEvents };
+    scene.scale = { width: 750 };
+    scene.add = Object.fromEntries(['rectangle', 'circle', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
+    scene.add.text = (x, y, text) => object('text', x, y).setText(text);
+    scene.sys = { events: new EventEmitter() };
+    scene.time = new Clock(scene);
+  }
+  function shutdown(scene) {
+    scene.events.emit('shutdown');
+    scene.time.shutdown();
+    for (const item of objects.get(scene)) item.removeAllListeners();
+  }
+  game.scene = {
+    pause: () => { active = false; },
+    launch: (_key, data) => { prepare(overlay); overlayActive = true; overlay.create(data); },
+  };
+  overlay.scene = {
+    resume: () => { active = true; game.events.emit('resume'); },
+    stop: key => { if (key === 'GameScene') shutdown(game); else { shutdown(overlay); overlayActive = false; } },
+    start: () => { shutdown(overlay); overlayActive = false; prepare(game); active = true; game.create(); },
+  };
+  prepare(game);
+  game.create();
+  const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
+  const click = (x, y) => {
+    const scene = overlayActive ? overlay : game;
+    const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
+    target?.emit('pointerdown', { id: 1, x, y, primaryDown: true }, 0, 0, { stopPropagation() {} });
+  };
+  const drag = (from, to) => {
+    if (!active || overlayActive) return;
+    const p = { id: 1, primaryDown: true, x: from[0], y: from[1] };
+    game.input.emit('pointerdown', p);
+    game.input.emit('pointermove', { ...p, x: to[0], y: to[1] });
+    game.input.emit('pointerup', { ...p, primaryDown: false, x: to[0], y: to[1] });
+  };
+  const run = ms => {
+    for (let i = 0; i < ms; i += 10) {
+      now += 10;
+      if (!active) continue;
+      game.time.preUpdate();
+      game.time.update(now, 10);
+      game.events.emit('update', now, 10);
+    }
+  };
+  const snapshot = () => JSON.stringify(objects.get(game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
+  return { game, overlay, objects, text, click, drag, run, snapshot, isActive: () => active, globalEvents };
+}
+
+test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止操作并原位恢复', () => {
+  const p = pve();
+  const random = Math.random;
+  try {
+    Math.random = () => 0.5; // 固定征到弓，保证暂停前已有自动攻击。
+    p.click(375, 1240);
+  } finally { Math.random = random; }
+  p.drag([119, 1092], [195, 650]);
+  p.run(2500);
+  const elapsed = p.game.time._active[0].elapsed;
+  p.click(675, 625);
+  assert.equal(p.text(375, 565, p.overlay), '已暂停');
+  assert.equal(p.game.input.enabled, false);
+  const paused = p.snapshot();
+  p.run(30000);
+  p.click(375, 1240);
+  p.drag([195, 650], [285, 650]);
+  assert.equal(p.snapshot(), paused);
+  assert.equal(p.game.time._active[0].elapsed, elapsed);
+  p.click(375, 765);
+  assert.equal(p.isActive(), true);
+  assert.equal(p.game.input.enabled, true);
+  assert.equal(p.snapshot(), paused);
+  p.run(490);
+  assert.equal(p.game.time._active[0].elapsed, 990);
+  const money = p.text(155, 109);
+  p.run(10);
+  assert.notEqual(p.text(155, 109), money);
+  for (let i = 0; i < 3; i++) {
+    p.click(675, 625);
+    p.run(5000);
+    p.click(375, 765);
+    assert.equal(p.game.time._active.length, 1);
+    assert.equal(p.game.events.listenerCount('update'), 1);
+  }
+});
+
+test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、计时器和监听', () => {
+  const counts = waveConfig.enemyCounts;
+  const random = Math.random;
+  try {
+    const p = pve();
+    for (let round = 0; round < 4; round++) {
+      assert.equal(p.text(155, 109), '$ 100');
+      assert.equal(p.text(580, 117), '第 1 波');
+      assert.equal(p.text(645, 945), '♥♥♥');
+      assert.equal(p.text(730, 1314), 'v' + GAME_VERSION);
+      assert.equal(p.text(555, 735), '锁');
+      assert.equal(p.objects.get(p.game).filter(o => o.kind === 'text' && o.text.startsWith('Lv.')).length, 0);
+      assert.equal(p.game.events.listenerCount('update'), 1);
+      assert.equal(p.globalEvents.listenerCount('blur'), 2);
+      assert.equal(p.game.input.listenerCount('pointerdown'), 2);
+      p.run(10);
+      assert.equal(p.game.time._active.length, 1);
+      const win = round % 2 === 0;
+      // 当前 WaveProgress 持有配置对象，调整为一只漏怪验证胜利结算；失败沿用正式5波。
+      waveConfig.enemyCounts = win ? [1] : counts;
+      Math.random = () => 0.99;
+      p.click(375, 1240);
+      p.drag([119, 1092], [555, 735]);
+      assert.equal(p.text(555, 735), '+');
+      Math.random = () => 0;
+      p.click(375, 1240);
+      p.drag([119, 1092], [555, 735]);
+      p.run(30000);
+      assert.equal(p.isActive(), false);
+      assert.equal(p.text(375, 565, p.overlay), win ? '胜利' : '失败');
+      if (win) assert.equal(p.text(375, 655, p.overlay), '乐：♥♥');
+      assert.equal(p.text(375, 765, p.overlay), '再来一局');
+      const ended = p.snapshot();
+      p.run(10000);
+      p.click(375, 1240);
+      assert.equal(p.snapshot(), ended);
+      const oldClock = p.game.time;
+      p.click(375, 765);
+      assert.equal(p.isActive(), true);
+      assert.equal(oldClock._active.length, 0);
+      assert.equal(oldClock._pendingInsertion.length, 0);
+      assert.ok(p.objects.get(p.game).filter(o => o.kind === 'graphics').every(o => o.draws.length === 0));
+    }
+  } finally { waveConfig.enemyCounts = counts; Math.random = random; }
+});
 
 test('上方入口右下、终点左上，路径和格子统一计算且不改变基础地图', () => {
   const before = structuredClone(testMap);
@@ -138,50 +305,4 @@ test('其他手指松开不影响当前按住；失焦会清除，退出场景�
     assert.equal(scene.input.listenerCount(event), 0);
   }
   assert.equal(scene.game.events.listenerCount('blur'), 0);
-});
-
-
-test('真实场景更新波次和爱心，结束显示胜负、关闭输入与收入，版本来自配置', async () => {
-  const { GameScene } = await import('../src/scenes/GameScene.ts');
-  const { waveConfig } = await import('../src/config/waves.ts');
-  const { GAME_VERSION } = await import('../src/config/game.ts');
-  const originalCounts = waveConfig.enemyCounts;
-  try {
-    for (const win of [false, true]) {
-      waveConfig.enemyCounts = win ? [1] : originalCounts;
-      const texts = [];
-      const object = (x = 0, y = 0, text = '') => {
-        const target = new EventEmitter();
-        Object.assign(target, { x, y, text, width: 80 });
-        let proxy;
-        proxy = new Proxy(target, { get(t, key) {
-          if (key in t) return t[key];
-          if (key === 'setText') return value => { t.text = value; return proxy; };
-          return () => proxy;
-        } });
-        return proxy;
-      };
-      const scene = new GameScene();
-      const timer = { removed: false, remove() { this.removed = true; } };
-      Object.assign(scene, {
-        events: new EventEmitter(), input: Object.assign(new EventEmitter(), { enabled: true }),
-        game: { events: new EventEmitter() }, scale: { width: 750 },
-        time: { addEvent: () => timer },
-        add: {
-          text: (x, y, text) => { const item = object(x, y, text); texts.push(item); return item; },
-          rectangle: object, circle: object, triangle: object, graphics: object, container: object,
-        },
-      });
-      scene.create();
-      assert.equal(texts.find(t => t.x === 580 && t.y === 117).text, '第 1 波');
-      assert.equal(texts.find(t => t.x === 645 && t.y === 945).text, '♥♥♥');
-      assert.equal(texts.find(t => t.x === 730 && t.y === 1314).text, 'v' + GAME_VERSION);
-      for (let time = 0; time < 25000; time += 100) scene.events.emit('update', time, 100);
-      assert.equal(texts.find(t => t.x === 375 && t.y === 667).text, win ? '胜利' : '失败');
-      assert.equal(texts.find(t => t.x === 645 && t.y === 945).text, win ? '♥♥' : '');
-      assert.equal(scene.input.enabled, false);
-      assert.equal(timer.removed, true);
-      scene.events.emit('shutdown');
-    }
-  } finally { waveConfig.enemyCounts = originalCounts; }
 });

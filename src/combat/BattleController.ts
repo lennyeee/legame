@@ -13,6 +13,7 @@ export class BattleController {
   private readonly battle: CombatSimulation;
   private readonly view: CombatView;
   private previewPointerId: number | null = null;
+  private visualTime = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -45,7 +46,7 @@ export class BattleController {
     this.view.select(selected);
   };
 
-  private hideRange = (): void => {
+  hideRange = (): void => {
     this.previewPointerId = null;
     this.view.select(null);
   };
@@ -58,11 +59,13 @@ export class BattleController {
     if (pointer.id === this.previewPointerId && this.deployment.draggedTile !== null) this.hideRange();
   };
 
-  private update = (time: number, delta: number): void => {
+  private update = (_time: number, delta: number): void => {
+    // 场景暂停时不累计视觉时间，恢复后弹道/闪光不会跳过暂停时长。
+    this.visualTime += delta;
     const before = this.wallet.money;
     const events = this.battle.update(delta, this.deployment.draggedTile);
     if (this.battle.progress!.status !== 'playing') this.hideRange();
-    this.view.render(events, time);
+    this.view.render(events, this.visualTime);
     this.refreshProgress(this.battle.progress!);
     if (this.wallet.money !== before) this.refreshMoney();
   };

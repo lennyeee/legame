@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
+import { PveOverlayScene } from './scenes/PveOverlayScene';
 import './style.css';
 
 new Phaser.Game({
@@ -12,5 +13,5 @@ new Phaser.Game({
     width: 750,
     height: 1334,
   },
-  scene: [GameScene],
+  scene: [GameScene, PveOverlayScene],
 });

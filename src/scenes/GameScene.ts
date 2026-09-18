@@ -15,6 +15,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.input.enabled = true;
     const state = createRecruitmentState();
     const board = createBoardState(testMap);
     label(this, 375, 49, '乐 GAME', 30, '#57674f');
@@ -25,7 +26,6 @@ export class GameScene extends Phaser.Scene {
     drawBoard(this, testMap);
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(this, goal.x, goal.y + 40, '', 24, '#a85c4d');
-    const resultText = label(this, 375, 667, '', 64, '#a85c4d').setDepth(200);
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
     let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
@@ -79,16 +79,30 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => incomeTimer.remove());
     deployment.refresh();
     refresh();
-    new BattleController(this, testMap, board, state, deployment, deploymentView, refresh, progress => {
+    const battle = new BattleController(this, testMap, board, state, deployment, deploymentView, refresh, progress => {
       waveText.setText(`第 ${progress.wave} 波`);
       healthText.setText('♥'.repeat(progress.health));
-      resultText.setText(progress.resultText);
       if (!ended && progress.status !== 'playing') {
         ended = true;
         incomeTimer.remove();
         deployment.cancel();
         this.input.enabled = false;
+        this.scene.pause();
+        this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health });
       }
+    });
+    const pauseButton = this.add.rectangle(675, 625, 62, 54, 0x697e67)
+      .setInteractive({ useHandCursor: true });
+    label(this, 675, 625, 'Ⅱ', 30, '#fffaf0');
+    pauseButton.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      if (ended) return;
+      deployment.cancel();
+      battle.hideRange();
+      this.input.enabled = false;
+      this.events.once(Phaser.Scenes.Events.RESUME, () => { this.input.enabled = true; });
+      this.scene.pause();
+      this.scene.launch('PveOverlayScene', { mode: 'paused', health: 0 });
     });
   }
 }
