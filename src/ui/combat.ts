@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isUnit } from '../systems/items';
 import { combatConfig, getCombatStats } from '../config/combat';
 import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
@@ -36,7 +37,7 @@ export class CombatView {
     this.range.clear();
     if (this.selectedTile !== null) {
       const unit = this.battle.board.tiles[this.selectedTile]?.unit;
-      if (unit) {
+      if (isUnit(unit)) {
         const point = this.battle.map.cells[this.selectedTile]!;
         const radius = getCombatStats(unit).range;
         this.range.fillStyle(visuals.attackColors[unit.type], 0.1);

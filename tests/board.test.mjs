@@ -120,7 +120,7 @@ test('再次征兵不删除棋盘单位，不重置解锁状态', () => {
   recruitment.slots[0] = unit('刀');
   applyDrop(board, recruitment, slot(0), tile(3));
   const before = structuredClone(board);
-  assert.equal(recruit(recruitment, () => 0.3), true);
+  assert.equal(recruit(recruitment, () => 0.2), true);
   assert.deepEqual(board, before);
   assert.deepEqual(recruitment.slots, Array.from({ length: 5 }, () => unit('枪')));
 });

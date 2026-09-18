@@ -1,10 +1,11 @@
 import type { BoardMap } from '../config/maps';
 import type { RecruitmentState } from './recruitment';
-import type { Unit, ReserveItem } from './items';
+import { mergeItems } from './items';
+import type { Deployable, ReserveItem } from './items';
 
 export interface TileState {
   unlocked: boolean;
-  unit: Unit | null;
+  unit: Deployable | null;
 }
 
 export interface BoardState {
@@ -66,7 +67,7 @@ export function getDropAction(
   // 铲子不参与交换，防止棋盘单位换回栏位时把铲子送进棋盘。
   if (occupant === '铲') return 'invalid';
   if (!occupant) return 'move';
-  if (occupant.type === item.type && occupant.level === item.level) return 'merge';
+  if (mergeItems(item, occupant)) return 'merge';
   return 'swap';
 }
 
@@ -80,8 +81,8 @@ export function applyDrop(
   if (action === 'unlock') {
     board.tiles[target.index]!.unlocked = true;
   } else {
-    const result = action === 'merge' && item !== '铲'
-      ? { type: item.type, level: item.level + 1 } : item;
+    const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
+      ? mergeItems(item, displacedItem)! : item;
     setItem(board, recruitment, target, result);
   }
   setItem(board, recruitment, source, action === 'swap' ? displacedItem : null);

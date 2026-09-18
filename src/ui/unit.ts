@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getLevelColor } from '../config/units';
 import type { DragItem } from '../systems/board';
 import { label } from './text';
+import { isUnit } from '../systems/items';
 
 export class UnitView {
   readonly root: Phaser.GameObjects.Container;
@@ -21,10 +22,11 @@ export class UnitView {
   show(item: DragItem | null): void {
     this.root.setVisible(item !== null);
     if (!item) return;
-    const shovel = item === '铲';
-    this.background.setFillStyle(getLevelColor(shovel ? 1 : item.level));
-    this.name.setText(shovel ? '铲' : item.type).setY(shovel ? 0 : -8);
-    this.level.setText(shovel ? '' : `Lv.${item.level}`);
+    const ordinary = isUnit(item);
+    this.background.setFillStyle(getLevelColor(ordinary ? item.level : 1));
+    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : 0);
+    this.name.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.name.width, 1)));
+    this.level.setText(ordinary ? `Lv.${item.level}` : '');
     this.level.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.level.width, 1)));
   }
 }

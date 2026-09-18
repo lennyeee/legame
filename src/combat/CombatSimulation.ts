@@ -3,6 +3,7 @@ import type { CombatConfig } from '../config/combat';
 import type { BoardMap, MapPoint } from '../config/maps';
 import type { BoardState } from '../systems/board';
 import type { Unit } from '../systems/items';
+import { isUnit } from '../systems/items';
 import { buildPath } from './path';
 import { advanceEnemy, createEnemy, damageEnemy } from './enemies';
 import type { Enemy } from './enemies';
@@ -94,7 +95,7 @@ export class CombatSimulation {
       }
     }
     this.board.tiles.forEach((tile, index) => {
-      if (!tile.unit || !tile.unlocked || index === suspendedTile || this.attackers.has(index)) return;
+      if (!isUnit(tile.unit) || !tile.unlocked || index === suspendedTile || this.attackers.has(index)) return;
       this.attackers.set(index, {
         unit: tile.unit, type: tile.unit.type, level: tile.unit.level,
         cooldown: getCombatStats(tile.unit).attackInterval,

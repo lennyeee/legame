@@ -112,11 +112,52 @@ function pve() {
   return { game, overlay, objects, text, click, drag, run, snapshot, isActive: () => active, globalEvents };
 }
 
+test('武将字及完整武将暂停/结算不可操作，恢复可移动，重开彻底清除', () => {
+  const random = Math.random;
+  try {
+    const p = pve();
+    Math.random = () => 15.5 / 21;
+    p.click(375, 1240);
+    p.drag([119, 1092], [195, 650]);
+    Math.random = () => 16.5 / 21;
+    p.click(375, 1240);
+    p.drag([119, 1092], [195, 650]);
+    assert.ok(p.objects.get(p.game).some(o => o.text === '赵云'));
+    assert.ok(p.objects.get(p.game).some(o => o.text === '云'));
+    assert.equal(p.objects.get(p.game).some(o => typeof o.text === 'string' && o.text.startsWith('Lv.')), false);
+    p.drag([195, 650], [119, 1092]);
+    p.drag([119, 1092], [285, 650]);
+    p.click(75, 49);
+    const paused = p.snapshot();
+    p.drag([247, 1092], [195, 650]);
+    p.drag([285, 650], [119, 1092]);
+    p.run(5000);
+    assert.equal(p.snapshot(), paused);
+    p.click(375, 765);
+    p.drag([247, 1092], [195, 650]);
+    assert.notEqual(p.snapshot(), paused);
+    p.run(30000);
+    assert.equal(p.text(375, 565, p.overlay), '失败');
+    const ended = p.snapshot();
+    p.drag([195, 650], [119, 1092]);
+    p.drag([285, 650], [247, 1092]);
+    p.click(375, 1240);
+    assert.equal(p.snapshot(), ended);
+    p.click(375, 765);
+    const names = ['赵', '云', '关', '羽', '张', '飞', '赵云', '关羽', '张飞'];
+    assert.equal(p.objects.get(p.game).some(o => names.includes(o.text)), false);
+    assert.equal(p.text(155, 109), '$ 100');
+    assert.equal(p.text(195, 650), '+');
+    assert.equal(p.text(285, 650), '+');
+    assert.equal(p.game.events.listenerCount('update'), 1);
+  } finally { Math.random = random; }
+});
+
 test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止操作并原位恢复', () => {
   const p = pve();
   const random = Math.random;
   try {
-    Math.random = () => 0.5; // 固定征到弓，保证暂停前已有自动攻击。
+    Math.random = () => 0.35; // 固定征到弓，保证暂停前已有自动攻击。
     p.click(375, 1240);
   } finally { Math.random = random; }
   p.drag([119, 1092], [195, 650]);
@@ -169,7 +210,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       const win = round % 2 === 0;
       // 当前 WaveProgress 持有配置对象，调整为一只漏怪验证胜利结算；失败沿用正式5波。
       waveConfig.enemyCounts = win ? [1] : counts;
-      Math.random = () => 0.99;
+      Math.random = () => 0.65;
       p.click(375, 1240);
       p.drag([119, 1092], [555, 735]);
       assert.equal(p.text(555, 735), '+');

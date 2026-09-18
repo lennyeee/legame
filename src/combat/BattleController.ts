@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isUnit } from '../systems/items';
 import { waveConfig } from '../config/waves';
 import { WaveProgress } from './WaveProgress';
 import type { BoardMap } from '../config/maps';
@@ -41,7 +42,7 @@ export class BattleController {
     if (!pointer.primaryDown || this.previewPointerId !== null || this.deployment.draggedTile !== null) return;
     const position = this.deploymentView.positionAt(pointer.x, pointer.y);
     const index = position?.kind === 'tile' ? position.index : null;
-    const selected = index !== null && this.battle.board.tiles[index]?.unit ? index : null;
+    const selected = index !== null && isUnit(this.battle.board.tiles[index]?.unit) ? index : null;
     this.previewPointerId = selected !== null ? pointer.id : null;
     this.view.select(selected);
   };

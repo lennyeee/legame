@@ -35,7 +35,7 @@ export class GameScene extends Phaser.Scene {
         invalid: '无法放置，已返回原位',
         move: '移动完成',
         swap: '位置已交换',
-        merge: '合成成功，等级提升',
+        merge: '合成成功',
         unlock: '部署格已解锁',
       };
       feedback.setText(messages[result]).setColor(result === 'invalid' ? '#a45e45' : '#697e67');

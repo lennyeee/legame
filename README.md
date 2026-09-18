@@ -52,7 +52,7 @@ npm run preview
 
 逻辑尺寸为 750×1334，采用 FIT 等比缩放和 CENTER_BOTH 居中；不同宽高比下可能留白，背景保持米白色。
 初始美金为 $100，每秒自动增加 $1。当前版本由 src/config/game.ts 中唯一的 GAME_VERSION 配置管理，画布右下角显示版本号。
-本阶段每次征兵固定花费 $10，五个槽位均独立等概率抽取刀、枪、弓、骑、铲（可重复），并替换旧内容。
+本阶段每次征兵固定花费 $10，五个槽位独立抽取刀、枪、弓、骑、铲和六个武将字（可重复），并替换旧内容。刀枪弓骑铲各占 3/21，赵云关羽张飞每个字各占 1/21；权重集中在 src/config/game.ts。
 美金不足时按钮变灰，点击只提示，不扣费或更换槽位。
 上半场仅镜像展示。下半场支持鼠标/触摸拖动：
 
@@ -104,3 +104,9 @@ npm run preview
 未来添加资源时，优先通过 Vite import 引用；放在 public 中并由 Phaser 动态加载的文件，应使用 `import.meta.env.BASE_URL + 'assets/文件名'`（或将 Phaser Loader 的 baseURL 设置为 `import.meta.env.BASE_URL`）。不要硬编码以 `/assets/` 开头的域名根路径，以免跳过 `/legame/`。
 
 参考：[Vite 官方部署指南](https://vite.dev/guide/static-deploy.html#github-pages)、[GitHub Pages 官方工作流指南](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+## 武将名字基础（v0.45）
+
+配方集中在 `src/config/heroes.ts`：赵+云→赵云，关+羽→关羽，张+飞→张飞，正反顺序均可。单字与完整武将可以在待放置栏和已解锁棋盘格之间移动、交换；四种来源/目标组合均支持名字合成，目标保留结果、来源清空。无关字和重复字只交换，不会升级。铲子维持原有限制，不参与交换或合成。
+
+武将字与完整武将均不攻击、无射程预览、无等级/经验/技能。再次征兵仍覆盖全部5槽，包括栏中的完整武将；已部署对象保留。暂停、结算禁止操作，再来一局清除所有武将字和完整武将。普通兵合成、等级颜色及战斗不变。`tests/heroes.test.mjs` 覆盖配方、概率入口、位置组合、交换与战斗隔离。
