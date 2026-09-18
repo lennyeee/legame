@@ -7,6 +7,7 @@ import { label } from '../ui/text';
 import { createBoardState } from '../systems/board';
 import { DeploymentView } from '../ui/deployment';
 import { DeploymentController } from '../input/DeploymentController';
+import { BattleController } from '../combat/BattleController';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -73,5 +74,6 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => incomeTimer.remove());
     deployment.refresh();
     refresh();
+    new BattleController(this, testMap, board, state, deployment, deploymentView, refresh);
   }
 }

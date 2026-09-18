@@ -6,7 +6,7 @@ import type { DeploymentView } from '../ui/deployment';
 
 // 鼠标与触摸共享 Phaser Pointer；松手前不改数据，取消即恢复原位。
 export class DeploymentController {
-  private active: { pointerId: number; source: UnitPosition } | null = null;
+  private active: { pointerId: number; source: UnitPosition; x: number; y: number; moved: boolean } | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -25,8 +25,12 @@ export class DeploymentController {
 
   get isDragging(): boolean { return this.active !== null; }
 
+  get draggedTile(): number | null {
+    return this.active?.moved && this.active.source.kind === 'tile' ? this.active.source.index : null;
+  }
+
   refresh(): void {
-    this.view.refresh(this.board, this.recruitment, this.active?.source);
+    this.view.refresh(this.board, this.recruitment, this.active?.moved ? this.active.source : undefined);
   }
 
   private start = (pointer: Phaser.Input.Pointer): void => {
@@ -35,20 +39,25 @@ export class DeploymentController {
     if (!source) return;
     const item = getDragItem(this.board, this.recruitment, source);
     if (!item) return;
-    this.active = { pointerId: pointer.id, source };
-    this.view.ghost.show(item);
-    this.refresh();
-    this.move(pointer);
+    this.active = { pointerId: pointer.id, source, x: pointer.x, y: pointer.y, moved: false };
   };
 
   private move = (pointer: Phaser.Input.Pointer): void => {
     if (!this.active || pointer.id !== this.active.pointerId) return;
+    if (!this.active.moved) {
+      if (Math.hypot(pointer.x - this.active.x, pointer.y - this.active.y) < 8) return;
+      this.active.moved = true;
+      this.view.ghost.show(getDragItem(this.board, this.recruitment, this.active.source));
+      this.refresh();
+    }
     this.view.ghost.root.setPosition(pointer.x, pointer.y);
     this.view.highlight(this.board, this.recruitment, this.active.source, this.view.positionAt(pointer.x, pointer.y));
   };
 
   private finish = (pointer: Phaser.Input.Pointer): void => {
     if (!this.active || pointer.id !== this.active.pointerId) return;
+    // 单击只用于查看射程，不能被当成原位拖放失败，也不暂停战斗。
+    if (!this.active.moved) { this.cancel(); return; }
     const cancelled = pointer.event?.type === 'touchcancel';
     const result = cancelled ? 'invalid' : applyDrop(
       this.board, this.recruitment, this.active.source, this.view.positionAt(pointer.x, pointer.y),
