@@ -19,6 +19,7 @@ export class CombatView {
 
   select(tile: number | null): void {
     this.selectedTile = tile;
+    if (tile === null) this.range.clear();
   }
 
   render(events: CombatEvent[], now: number): void {
