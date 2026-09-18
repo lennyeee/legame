@@ -11,7 +11,8 @@ import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
 import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
-import { heroCombat } from '../config/heroes';
+import { getHeroStats, heroGrowth } from '../config/heroes';
+import { getHeroProgression } from '../systems/heroProgression';
 
 interface Attacker {
   unit: Unit;
@@ -94,12 +95,13 @@ export class CombatSimulation {
 
   syncBoard(suspendedTile: number | null = null): void {
     this.suspendedTile = suspendedTile;
+    getHeroProgression(this.board).sync(suspendedTile);
     const links = this.heroLinks;
     for (const [key, state] of this.heroAttackers) {
-      if (!links.some(link => link.key === key && link.left === state.link.left && link.right === state.link.right)) this.heroAttackers.delete(key);
+      if (!links.some(link => link.key === key && link === state.link)) this.heroAttackers.delete(key);
     }
     for (const link of links) {
-      if (!this.heroAttackers.has(link.key)) this.heroAttackers.set(link.key, { link, cooldown: heroCombat.attackInterval });
+      if (!this.heroAttackers.has(link.key)) this.heroAttackers.set(link.key, { link, cooldown: getHeroStats(link.level).attackInterval });
     }
     for (const [index, attacker] of this.attackers) {
       if (!this.isAttackerValid(index, attacker.unit, attacker.level) || attacker.unit.type !== attacker.type) {
@@ -128,6 +130,7 @@ export class CombatSimulation {
         this.projectiles = [];
         this.attackers.clear();
         this.heroAttackers.clear();
+        getHeroProgression(this.board).clearParticipation();
         this.elapsed = 0;
         break;
       }
@@ -135,19 +138,22 @@ export class CombatSimulation {
     return events;
   }
 
-  private hit(enemy: Enemy, damage: number, events: CombatEvent[]): void {
+  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink): void {
     const result = damageEnemy(enemy, damage);
+    if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
     if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id });
     if (result.killed) {
+      getHeroProgression(this.board).awardKill(enemy.id, heroGrowth.enemyExp);
       this.wallet.money += this.config.enemy.killReward;
       events.push({ kind: 'kill', enemyId: enemy.id, position: { x: enemy.x, y: enemy.y }, reward: this.config.enemy.killReward });
     }
   }
 
-  get heroLinks(): HeroLink[] { return getHeroLinks(this.map, this.board, this.suspendedTile); }
+  get heroLinks(): HeroLink[] { return [...getHeroProgression(this.board).links.values()]; }
 
   isHeroLinkValid(link: HeroLink): boolean {
-    return (!this.progress || this.progress.status === 'playing') && this.heroLinks.some(current =>
+    return (!this.progress || this.progress.status === 'playing') && getHeroProgression(this.board).isActive(link)
+      && getHeroLinks(this.map, this.board, this.suspendedTile).some(current =>
       current.key === link.key && current.left === link.left && current.right === link.right);
   }
 
@@ -158,6 +164,7 @@ export class CombatSimulation {
       if (enemy.hp <= 0) continue;
       if (!advanceEnemy(enemy, this.path, seconds)) continue;
       events.push({ kind: 'escape', enemyId: enemy.id });
+      getHeroProgression(this.board).forgetEnemy(enemy.id);
       this.enemies = this.enemies.filter(candidate => candidate !== enemy);
       this.progress?.escape();
       if (this.progress?.status === 'defeat') return;
@@ -207,13 +214,14 @@ export class CombatSimulation {
       }
     }
     for (const attacker of this.heroAttackers.values()) {
-      attacker.cooldown = Math.max(0, attacker.cooldown - deltaMs);
+      const stats = getHeroStats(attacker.link.level);
+      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, stats.attackInterval) - deltaMs);
       if (attacker.cooldown > 1e-8) continue;
-      const target = selectTarget(this.enemies, attacker.link.origin, heroCombat.range);
+      const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
       if (!target) continue;
-      attacker.cooldown = heroCombat.attackInterval;
+      attacker.cooldown = stats.attackInterval;
       events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
-      this.hit(target, heroCombat.damage, events);
+      this.hit(target, stats.damage, events, attacker.link);
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

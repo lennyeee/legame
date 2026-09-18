@@ -5,7 +5,7 @@ export interface Unit {
   level: number;
 }
 
-export interface HeroLetter { kind: 'heroLetter'; type: HeroLetterType }
+export interface HeroLetter { kind: 'heroLetter'; type: HeroLetterType; level: number }
 export type Deployable = Unit | HeroLetter;
 export type ReserveItem = Deployable | '铲';
 
@@ -14,6 +14,7 @@ export function isUnit(item: ReserveItem | null | undefined): item is Unit {
 }
 
 export function mergeItems(a: Deployable, b: Deployable): Deployable | null {
+  if (!isUnit(a) && !isUnit(b) && a.type === b.type) return { ...b, level: b.level + 1 };
   if (isUnit(a) && isUnit(b)) {
     return a.type === b.type && a.level === b.level ? { type: a.type, level: a.level + 1 } : null;
   }

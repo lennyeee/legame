@@ -31,6 +31,7 @@ const { GameScene } = await import('../src/scenes/GameScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
+const { heroCombat } = await import('../src/config/heroes.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
 // 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
@@ -55,7 +56,8 @@ function pve() {
         if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
         if (key === 'getBounds') return () => ({ contains: (px, py) => Math.abs(px-x) <= width/2 && Math.abs(py-y) <= height/2 });
         if (key === 'clear') return () => { t.draws = []; return proxy; };
-        if (key === 'fillCircle' || key === 'strokeRect' || key === 'lineBetween') return (...args) => { t.draws.push([key, ...args]); return proxy; };
+        if (key === 'destroy') return () => { t.text = ''; t.visible = false; t.draws = []; return proxy; };
+        if (key === 'fillCircle' || key === 'fillRect' || key === 'strokeRect' || key === 'lineBetween') return (...args) => { t.draws.push([key, ...args]); return proxy; };
         return () => proxy;
       } });
       list.push(proxy);
@@ -115,9 +117,11 @@ function pve() {
 test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
   const random = Math.random;
   const counts = waveConfig.enemyCounts;
+  const damage = heroCombat.damage;
   try {
     const p = pve();
     for (const win of [false, true, false]) {
+      heroCombat.damage = win ? damage : 1;
       waveConfig.enemyCounts = win ? [1] : counts;
       Math.random = () => 15.5 / 21;
       p.click(375, 1240);
@@ -172,7 +176,33 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
       p.run(30000);p.click(375,765);
     }
-  } finally { Math.random=random;waveConfig.enemyCounts=counts; }
+  } finally { Math.random=random;waveConfig.enemyCounts=counts;heroCombat.damage=damage; }
+});
+
+test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/重开清理', () => {
+  const random = Math.random;
+  try {
+    const p = pve();
+    Math.random = () => 15.5 / 21;p.click(375,1240);p.drag([119,1092],[195,650]);
+    assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
+    Math.random = () => 16.5 / 21;p.click(375,1240);p.drag([119,1092],[247,650]);
+    p.run(4500);
+    assert.equal(p.text(221,665),'Lv.1');
+    const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics')
+      .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===175&&d[2]===671&&d[4]===3);
+    assert.ok(expBars().some(d=>Math.abs(d[3]-92/3)<0.001));
+    p.click(75,49);const paused=p.snapshot();p.run(10000);p.drag([247,1092],[247,650]);
+    assert.equal(p.snapshot(),paused);p.click(375,765);
+    Math.random = () => 15.5 / 21;p.click(375,1240);p.drag([119,1092],[195,650]);p.run(10);
+    assert.equal(p.text(221,665),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
+    p.drag([247,650],[119,1092]);p.run(10);
+    assert.equal(expBars().length,0);assert.equal(p.text(195,631),'Zz');
+    assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
+    p.run(30000);const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
+    p.click(375,765);assert.equal(expBars().length,0);
+    assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'),false);
+    Math.random=()=>15.5/21;p.click(375,1240);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
+  } finally { Math.random=random; }
 });
 
 test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止操作并原位恢复', () => {

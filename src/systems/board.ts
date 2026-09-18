@@ -1,6 +1,8 @@
 import type { BoardMap } from '../config/maps';
 import type { RecruitmentState } from './recruitment';
 import { mergeItems } from './items';
+import { isUnit } from './items';
+import { initializeHeroProgression, getHeroProgression } from './heroProgression';
 import type { Deployable, ReserveItem } from './items';
 
 export interface TileState {
@@ -19,7 +21,9 @@ export type DragItem = ReserveItem;
 export type DropAction = 'invalid' | 'move' | 'swap' | 'merge' | 'unlock';
 
 export function createBoardState(map: BoardMap): BoardState {
-  return { tiles: map.cells.map(cell => ({ unlocked: cell.unlocked, unit: null })) };
+  const board = { tiles: map.cells.map(cell => ({ unlocked: cell.unlocked, unit: null })) };
+  initializeHeroProgression(board, map);
+  return board;
 }
 
 export function getDragItem(
@@ -83,8 +87,12 @@ export function applyDrop(
   } else {
     const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
       ? mergeItems(item, displacedItem)! : item;
-    setItem(board, recruitment, target, result);
+    if (action === 'merge' && displacedItem && displacedItem !== '铲' && !isUnit(displacedItem)) {
+      displacedItem.level++;
+      setItem(board, recruitment, target, displacedItem);
+    } else setItem(board, recruitment, target, result);
   }
   setItem(board, recruitment, source, action === 'swap' ? displacedItem : null);
+  getHeroProgression(board).sync();
   return action;
 }

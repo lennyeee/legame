@@ -6,7 +6,7 @@ import type { HeroLetter } from './items';
 import { isUnit } from './items';
 
 // 派生关系，不替换/删除棋盘对象；引用两个字，后续双格状态可挂接在关系上。
-export interface HeroLink {
+export interface HeroPlacement {
   key: string;
   name: HeroName;
   leftIndex: number;
@@ -16,8 +16,14 @@ export interface HeroLink {
   origin: MapPoint;
 }
 
-export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: number | null = null): HeroLink[] {
-  const links: HeroLink[] = [];
+export interface HeroLink extends HeroPlacement {
+  cycleId: number;
+  level: number;
+  currentExp: number;
+}
+
+export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: number | null = null): HeroPlacement[] {
+  const links: HeroPlacement[] = [];
   const used = new Set<number>();
   map.cells.forEach((cell, leftIndex) => {
     const left = board.tiles[leftIndex];

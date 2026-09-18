@@ -4,7 +4,7 @@ import { combatConfig, getCombatStats } from '../config/combat';
 import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { label } from './text';
-import { heroCombat, heroVisuals } from '../config/heroes';
+import { heroCombat, heroVisuals, heroExpRequired } from '../config/heroes';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
@@ -14,6 +14,7 @@ export class CombatView {
   private heroEffects: { event: Extract<CombatEvent, { kind: 'heroAttack' }>; expires: number }[] = [];
   private rewards: { text: Phaser.GameObjects.Text; expires: number; y: number }[] = [];
   private selectedTile: number | null = null;
+  private readonly heroLevels = new Map<string, Phaser.GameObjects.Text>();
 
   constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation) {
     this.range = scene.add.graphics().setDepth(1);
@@ -38,6 +39,25 @@ export class CombatView {
     }
     this.graphics.clear();
     this.range.clear();
+    const links = this.battle.heroLinks;
+    for (const [key, text] of this.heroLevels) {
+      if (!links.some(link => link.key === key)) { text.destroy(); this.heroLevels.delete(key); }
+    }
+    for (const link of links) {
+      let text = this.heroLevels.get(link.key);
+      if (!text) {
+        text = label(this.scene, link.origin.x, link.origin.y + 15, '', 12, '#685528').setDepth(12);
+        this.heroLevels.set(link.key, text);
+      }
+      text.setText(`Lv.${link.level}`);
+      const width = this.battle.map.cellSize * 2 - 12;
+      const x = link.origin.x - width / 2;
+      const y = link.origin.y + this.battle.map.cellSize / 2 - 5;
+      this.graphics.fillStyle(0xd6ccb2);
+      this.graphics.fillRect(x, y, width, 3);
+      this.graphics.fillStyle(heroVisuals.color);
+      this.graphics.fillRect(x, y, width * link.currentExp / heroExpRequired(link.level), 3);
+    }
     if (this.selectedTile !== null) {
       const unit = this.battle.board.tiles[this.selectedTile]?.unit;
       const link = this.battle.heroLinks.find(link => link.leftIndex === this.selectedTile || link.rightIndex === this.selectedTile);

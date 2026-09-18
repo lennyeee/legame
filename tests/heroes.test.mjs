@@ -12,7 +12,7 @@ const { getHeroLinks } = await import('../src/systems/heroActivation.ts');
 const { createRecruitmentState, recruit } = await import('../src/systems/recruitment.ts');
 const { CombatSimulation } = await import('../src/combat/CombatSimulation.ts');
 const { testMap } = await import('../src/config/maps.ts');
-const letter = type => ({ kind: 'heroLetter', type });
+const letter = (type, level = 1) => ({ kind: 'heroLetter', type, level });
 const pos = (kind, index) => ({ kind, index });
 function setup(map = testMap) { return { board: createBoardState(map), reserve: createRecruitmentState() }; }
 function put(board, reserve, p, item) { if (p.kind === 'slot') reserve.slots[p.index] = item; else board.tiles[p.index].unit = item; }

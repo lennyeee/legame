@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getHeroProgression } from '../systems/heroProgression';
 import { applyDrop, getDragItem } from '../systems/board';
 import type { BoardState, UnitPosition, DropAction } from '../systems/board';
 import type { RecruitmentState } from '../systems/recruitment';
@@ -30,6 +31,7 @@ export class DeploymentController {
   }
 
   refresh(): void {
+    getHeroProgression(this.board).sync(this.draggedTile);
     this.view.refresh(this.board, this.recruitment, this.active?.moved ? this.active.source : undefined);
   }
 

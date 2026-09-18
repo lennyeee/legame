@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { isUnit } from '../systems/items';
+import { getHeroProgression } from '../systems/heroProgression';
 import { waveConfig } from '../config/waves';
 import { WaveProgress } from './WaveProgress';
 import type { BoardMap } from '../config/maps';
@@ -67,6 +68,7 @@ export class BattleController {
     this.visualTime += delta;
     const before = this.wallet.money;
     const events = this.battle.update(delta, this.deployment.draggedTile);
+    if (events.some(event => event.kind === 'kill')) this.deployment.refresh();
     if (this.battle.progress!.status !== 'playing') this.hideRange();
     this.view.render(events, this.visualTime);
     this.refreshProgress(this.battle.progress!);
@@ -74,6 +76,7 @@ export class BattleController {
   };
 
   private destroy = (): void => {
+    getHeroProgression(this.battle.board).clear();
     this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.update);
     this.scene.input.off('pointerdown', this.select);
     this.scene.input.off('pointermove', this.hideWhenDragging);

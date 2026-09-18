@@ -25,9 +25,11 @@ export class UnitView {
     if (!item) return;
     const ordinary = isUnit(item);
     this.background.setFillStyle(getLevelColor(ordinary ? item.level : 1));
-    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : sleeping ? 7 : 0);
+    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : sleeping ? -2 : -7);
+    this.name.setFontSize(ordinary || item === '铲' ? 30 : 24);
     this.name.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.name.width, 1)));
-    this.level.setText(ordinary ? `Lv.${item.level}` : '');
+    this.level.setText(item !== '铲' && !linked ? `Lv.${item.level}` : '');
+    this.level.setFontSize(sleeping ? 12 : 17);
     this.level.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.level.width, 1)));
   }
 }

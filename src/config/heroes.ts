@@ -9,3 +9,12 @@ export type HeroLetterType = (typeof heroRecipes)[number]['letters'][number];
 
 export const heroCombat = { damage: 35, range: 230, attackInterval: 1200 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
+
+export const heroGrowth = { expBase: 30, expPerLevel: 20, enemyExp: 10, damagePerLevel: 0.5, speedPerLevel: 0.08 };
+export function heroExpRequired(level: number): number {
+  return heroGrowth.expBase + (level - 1) * heroGrowth.expPerLevel;
+}
+export function getHeroStats(level: number) {
+  return { damage: Math.round(heroCombat.damage * (1 + (level - 1) * heroGrowth.damagePerLevel)),
+    attackInterval: heroCombat.attackInterval / (1 + (level - 1) * heroGrowth.speedPerLevel), range: heroCombat.range };
+}
