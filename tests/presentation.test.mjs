@@ -29,6 +29,7 @@ const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
 const { GameScene } = await import('../src/scenes/GameScene.ts');
 const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
+const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
@@ -40,6 +41,8 @@ const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.j
 function pve(startImmediately = true) {
   const game = new GameScene();
   const ready = new ReadyScene();
+  const items = new ItemsScene();
+  let itemsActive = false;
   const overlay = new PveOverlayScene();
   let active = true;
   let overlayActive = false;
@@ -61,7 +64,7 @@ function pve(startImmediately = true) {
         if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
         if (key === 'getBounds') return () => ({ contains: (px, py) => Math.abs(px-x) <= width/2 && Math.abs(py-y) <= height/2 });
         if (key === 'clear') return () => { t.draws = []; return proxy; };
-        if (key === 'destroy') return () => { t.text = ''; t.visible = false; t.draws = []; return proxy; };
+        if (key === 'destroy') return () => { t.text = ''; t.visible = false; t.interactive = false; t.draws = []; return proxy; };
         if (key === 'fillCircle' || key === 'fillRect' || key === 'strokeRect' || key === 'lineBetween') return (...args) => { t.draws.push([key, ...args]); return proxy; };
         return () => proxy;
       } });
@@ -87,31 +90,37 @@ function pve(startImmediately = true) {
     launch: (_key, data) => { prepare(overlay); overlayActive = true; overlay.create(data); },
   };
   ready.scene = {
-    start: key => {
+    start: (key, data) => {
+      if (key === 'ItemsScene') {
+        shutdown(ready);readyActive=false;itemsActive=true;prepare(items);items.create(data);return;
+      }
       assert.equal(key, 'GameScene');
       startCount++;
       shutdown(ready);
       readyActive = false;
       prepare(game);
-      game.create();
+      game.create(data);
     },
   };
+  items.scene = { start: (key,data) => {
+    assert.equal(key,'ReadyScene');shutdown(items);itemsActive=false;readyActive=true;prepare(ready);ready.create(data);
+  } };
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
     stop: key => { if (key === 'GameScene') shutdown(game); else { shutdown(overlay); overlayActive = false; } },
-    start: key => { assert.equal(key, 'GameScene'); shutdown(overlay); overlayActive = false; prepare(game); active = true; game.create(); },
+    start: (key,data) => { assert.equal(key, 'GameScene'); shutdown(overlay); overlayActive = false; prepare(game); active = true; game.create(data); },
   };
   prepare(ready);
   ready.create();
   if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    const scene = readyActive ? ready : overlayActive ? overlay : game;
+    const scene = itemsActive ? items : readyActive ? ready : overlayActive ? overlay : game;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
     target?.emit('pointerdown', { id: 1, x, y, primaryDown: true }, 0, 0, { stopPropagation() {} });
   };
   const drag = (from, to) => {
-    if (!active || overlayActive || readyActive) return;
+    if (!active || overlayActive || readyActive || itemsActive) return;
     const p = { id: 1, primaryDown: true, x: from[0], y: from[1] };
     game.input.emit('pointerdown', p);
     game.input.emit('pointermove', { ...p, x: to[0], y: to[1] });
@@ -121,16 +130,47 @@ function pve(startImmediately = true) {
     for (let i = 0; i < ms; i += 10) {
       now += 10;
       if (!active) continue;
-      const scene = readyActive ? ready : game;
+      const scene = itemsActive ? items : readyActive ? ready : game;
       scene.time.preUpdate();
       scene.time.update(now, 10);
       scene.events.emit('update', now, 10);
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { game, ready, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !readyActive,
+  return { game, ready, items, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !readyActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
+
+test('背包详情、装卸返回、单局被动栏及连续重开保留loadout',()=>{
+  const p=pve(false);assert.equal(p.text(375,885,p.ready),'道具');p.click(375,885);
+  p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,630,p.items),'农民');
+  p.click(155,630);assert.equal(p.text(375,510,p.items),'农民');assert.equal(p.text(375,565,p.items),'被动道具');
+  assert.equal(p.text(375,655,p.items),'携带后，征兵时有概率出现农民。部署后的农民不会攻击，会周期性生产美金。');
+  const shade=p.objects.get(p.items).findLast(o=>o.kind==='rectangle'&&o.width===750);
+  shade.emit('pointerdown');assert.equal(p.objects.get(p.items).some(o=>o.text==='装备'&&o.visible),false);
+  p.click(155,630);p.click(375,815);assert.equal(p.text(125,410,p.items),'农民');
+  p.click(155,630);assert.ok(p.objects.get(p.items).some(o=>o.text==='卸下'&&o.visible));p.click(375,815);
+  assert.equal(p.text(125,410,p.items),'—');p.click(155,630);p.click(375,815);
+  p.click(375,1200);assert.equal(p.ready.startState,'READY');p.click(375,885);
+  assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,765);
+  p.click(75,49);p.run(10000);assert.equal(p.text(160,1303),'农民');p.click(375,765);
+  for(let round=0;round<3;round++){
+    assert.equal(p.text(160,1303),'农民');assert.equal(p.text(590,1303),'—');
+    for(const x of [90,660])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1240).interactive,true);
+    p.run(1000);assert.equal(p.text(155,109),'$ 101');
+    p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
+    assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(580,117),'第 1 波');
+  }
+  const counts=waveConfig.enemyCounts;
+  try {
+    waveConfig.enemyCounts=[1];p.run(30000);assert.equal(p.text(375,565,p.overlay),'胜利');
+    p.click(375,765);assert.equal(p.text(160,1303),'农民');
+  } finally { waveConfig.enemyCounts=counts; }
+});
+
+test('未装备农民开局被动栏为空',()=>{
+  const p=pve();assert.equal(p.text(160,1303),'—');assert.equal(p.objects.get(p.game).some(o=>o.text==='农民'),false);
+});
 
 test('初始READY无对局控制器和计时器，长时间等待无敌人/资源/技能/EXP/操作', () => {
   const p = pve(false);

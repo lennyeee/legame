@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { label } from '../ui/text';
+import type { Loadout } from '../systems/equipment';
 
 export interface PveOverlayData {
   mode: 'paused' | 'victory' | 'defeat';
   health: number;
+  loadout?: Loadout;
 }
 
 // PVE 专用界面：暂停整个游戏场景，战斗规则本身不依赖暂停状态。
@@ -33,7 +35,7 @@ export class PveOverlayScene extends Phaser.Scene {
       } else {
         // stop 完整触发旧场景 shutdown；start 重新执行 create，生成全新单局数据。
         this.scene.stop('GameScene');
-        this.scene.start('GameScene');
+        this.scene.start('GameScene', { loadout: data.loadout });
       }
     });
   }

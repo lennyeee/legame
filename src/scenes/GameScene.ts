@@ -8,13 +8,17 @@ import { createBoardState } from '../systems/board';
 import { DeploymentView } from '../ui/deployment';
 import { DeploymentController } from '../input/DeploymentController';
 import { BattleController } from '../combat/BattleController';
+import { copyLoadout } from '../systems/equipment';
+import type { Loadout } from '../systems/equipment';
+import { drawLoadout } from '../ui/loadout';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
     super('GameScene');
   }
 
-  create(): void {
+  create(data: { loadout?: Loadout } = {}): void {
+    const loadout = copyLoadout(data.loadout);
     this.input.enabled = true;
     const state = createRecruitmentState();
     const board = createBoardState(testMap);
@@ -27,6 +31,7 @@ export class GameScene extends Phaser.Scene {
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(this, goal.x, goal.y + 40, '', 24, '#a85c4d');
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
+    drawLoadout(this, loadout);
     let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const feedback = label(this, 375, 1170, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
@@ -88,7 +93,7 @@ export class GameScene extends Phaser.Scene {
         deployment.cancel();
         this.input.enabled = false;
         this.scene.pause();
-        this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health });
+        this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health, loadout });
       }
     });
     const pauseButton = this.add.rectangle(75, 49, 62, 54, 0x697e67)
@@ -102,7 +107,7 @@ export class GameScene extends Phaser.Scene {
       this.input.enabled = false;
       this.events.once(Phaser.Scenes.Events.RESUME, () => { this.input.enabled = true; });
       this.scene.pause();
-      this.scene.launch('PveOverlayScene', { mode: 'paused', health: 0 });
+      this.scene.launch('PveOverlayScene', { mode: 'paused', health: 0, loadout });
     });
   }
 }
