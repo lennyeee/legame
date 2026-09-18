@@ -92,3 +92,15 @@ npm run preview
 玩家战场右上角的“Ⅱ”按钮打开半透明暂停遮罩。“继续游戏”从原位置恢复，暂停期间波次、敌人、攻击、收入和操作全部冻结。暂停使用 Phaser 场景生命周期，不进入战斗核心规则。
 
 `src/scenes/PveOverlayScene.ts` 负责暂停、胜负遮罩与继续/重开按钮。重开先关闭旧游戏场景，再创建新一局；原有控制器在 shutdown 时移除监听，Phaser 负责清理场景对象与时钟。自动测试覆盖暂停恢复、真实 Phaser 收入计时器、连续重开及监听数量。
+
+## GitHub Pages 部署
+
+目标地址：https://lennyeee.github.io/legame/
+
+`vite.config.ts` 将 base 配置为 `/legame/`，开发及构建预览也使用此子路径，请打开终端显示的完整地址。
+
+首次部署前，在 GitHub 仓库 Settings → Pages → Build and deployment 中，将 Source 设为 GitHub Actions。之后推送到 main 会自动运行 `.github/workflows/deploy.yml`；也可在 Actions 中选择 Deploy to GitHub Pages → Run workflow 手动运行。流程使用 Node 24，执行 npm ci、自动测试、TypeScript检查和构建，再通过官方 Pages Actions 发布 dist。
+
+未来添加资源时，优先通过 Vite import 引用；放在 public 中并由 Phaser 动态加载的文件，应使用 `import.meta.env.BASE_URL + 'assets/文件名'`（或将 Phaser Loader 的 baseURL 设置为 `import.meta.env.BASE_URL`）。不要硬编码以 `/assets/` 开头的域名根路径，以免跳过 `/legame/`。
+
+参考：[Vite 官方部署指南](https://vite.dev/guide/static-deploy.html#github-pages)、[GitHub Pages 官方工作流指南](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
