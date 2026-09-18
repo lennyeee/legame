@@ -7,6 +7,7 @@ import { buildPath } from './path';
 import { advanceEnemy, createEnemy, damageEnemy } from './enemies';
 import type { Enemy } from './enemies';
 import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
+import type { WaveProgress } from './WaveProgress';
 
 interface Attacker {
   unit: Unit;
@@ -52,7 +53,7 @@ export class CombatSimulation {
   projectiles: Projectile[] = [];
   private readonly attackers = new Map<number, Attacker>();
   private elapsed = 0;
-  private spawnClock = 0;
+  readonly progress: WaveProgress | null;
   private nextEnemyId = 1;
   private nextProjectileId = 1;
   private suspendedTile: number | null = null;
@@ -62,7 +63,9 @@ export class CombatSimulation {
     board: BoardState,
     wallet: { money: number },
     config: CombatConfig = combatConfig,
+    progress: WaveProgress | null = null,
   ) {
+    this.progress = progress;
     this.map = map;
     this.board = board;
     this.wallet = wallet;
@@ -70,8 +73,10 @@ export class CombatSimulation {
     this.path = buildPath(map.path);
   }
 
-  spawnEnemy(): Enemy {
-    const enemy = createEnemy(this.nextEnemyId++, this.path, this.config.enemy);
+  spawnEnemy(hpMultiplier = 1): Enemy {
+    const enemy = createEnemy(this.nextEnemyId++, this.path, {
+      ...this.config.enemy, maxHp: Math.round(this.config.enemy.maxHp * hpMultiplier),
+    });
     this.enemies.push(enemy);
     return enemy;
   }
@@ -99,12 +104,19 @@ export class CombatSimulation {
   }
 
   update(deltaMs: number, suspendedTile: number | null = null): CombatEvent[] {
+    if (this.progress && this.progress.status !== 'playing') return [];
     this.syncBoard(suspendedTile);
     const events: CombatEvent[] = [];
     this.elapsed += Math.max(0, Math.min(deltaMs, this.config.maxFrameMs));
     while (this.elapsed + 1e-8 >= this.config.stepMs) {
       this.step(this.config.stepMs, events);
       this.elapsed -= this.config.stepMs;
+      if (this.progress && this.progress.status !== 'playing') {
+        this.projectiles = [];
+        this.attackers.clear();
+        this.elapsed = 0;
+        break;
+      }
     }
     return events;
   }
@@ -120,17 +132,15 @@ export class CombatSimulation {
 
   private step(deltaMs: number, events: CombatEvent[]): void {
     const seconds = deltaMs / 1000;
-    this.spawnClock += deltaMs;
-    if (this.spawnClock + 1e-8 >= this.config.spawnInterval) {
-      this.spawnClock -= this.config.spawnInterval;
-      this.spawnEnemy();
-    }
-    this.enemies = this.enemies.filter(enemy => {
-      if (enemy.hp <= 0) return false;
-      if (!advanceEnemy(enemy, this.path, seconds)) return true;
+    this.progress?.tick(deltaMs, multiplier => this.spawnEnemy(multiplier));
+    for (const enemy of [...this.enemies]) {
+      if (enemy.hp <= 0) continue;
+      if (!advanceEnemy(enemy, this.path, seconds)) continue;
       events.push({ kind: 'escape', enemyId: enemy.id });
-      return false;
-    });
+      this.enemies = this.enemies.filter(candidate => candidate !== enemy);
+      this.progress?.escape();
+      if (this.progress?.status === 'defeat') return;
+    }
 
     this.projectiles = this.projectiles.filter(arrow => {
       const target = this.enemies.find(enemy => enemy.id === arrow.targetId && enemy.hp > 0);
@@ -176,5 +186,6 @@ export class CombatSimulation {
       }
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
+    this.progress?.finishStep(this.enemies.length);
   }
 }

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { gameConfig } from '../config/game';
+import { GAME_VERSION, gameConfig } from '../config/game';
 import { testMap } from '../config/maps';
 import { createRecruitmentState, recruit } from '../systems/recruitment';
 import { drawBoard } from '../ui/board';
@@ -21,8 +21,13 @@ export class GameScene extends Phaser.Scene {
     this.add.rectangle(375, 117, 686, 80, 0xeee9dc);
     const moneyText = label(this, 155, 109, '', 32);
     label(this, 155, 138, `每秒 +$${gameConfig.incomePerSecond}`, 16, '#8b8272');
-    label(this, 580, 117, `第 ${gameConfig.initialWave} 波`, 28);
+    const waveText = label(this, 580, 117, '', 28);
     drawBoard(this, testMap);
+    const goal = testMap.path[testMap.path.length - 1]!;
+    const healthText = label(this, goal.x, goal.y + 40, '', 24, '#a85c4d');
+    const resultText = label(this, 375, 667, '', 64, '#a85c4d').setDepth(200);
+    label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
+    let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const feedback = label(this, 375, 1170, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
     const deployment = new DeploymentController(this, board, state, deploymentView, result => {
@@ -74,6 +79,16 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => incomeTimer.remove());
     deployment.refresh();
     refresh();
-    new BattleController(this, testMap, board, state, deployment, deploymentView, refresh);
+    new BattleController(this, testMap, board, state, deployment, deploymentView, refresh, progress => {
+      waveText.setText(`第 ${progress.wave} 波`);
+      healthText.setText('♥'.repeat(progress.health));
+      resultText.setText(progress.resultText);
+      if (!ended && progress.status !== 'playing') {
+        ended = true;
+        incomeTimer.remove();
+        deployment.cancel();
+        this.input.enabled = false;
+      }
+    });
   }
 }

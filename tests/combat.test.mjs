@@ -28,7 +28,7 @@ function setup(type, options = {}) {
   const wallet = createRecruitmentState();
   if (type) board.tiles[0].unit = unit(type);
   const config = {
-    ...combatConfig, spawnInterval: 1e9,
+    ...combatConfig,
     ...options.config,
     enemy: { ...combatConfig.enemy, maxHp: 1000, moveSpeed: 0, ...options.config?.enemy },
   };
@@ -69,14 +69,10 @@ test('到达乐正确移除，只发出一次漏怪事件且不奖励', () => {
   assert.equal(wallet.money, 100);
 });
 
-test('循环生成敌人且完整路径漏怪后不会无限累积', () => {
-  const { sim, wallet } = setup(null, { map: testMap, config: { spawnInterval: 2000, enemy: { moveSpeed: 55 } } });
-  run(sim, 6100);
-  assert.equal(sim.enemies.length, 3);
-  assert.ok(sim.enemies[0].distance > sim.enemies[1].distance);
+test('未启用波次的独立战斗不会无限自动刷怪', () => {
+  const { sim } = setup();
   run(sim, 60000);
-  assert.ok(sim.enemies.length <= 8);
-  assert.equal(wallet.money, 100);
+  assert.equal(sim.enemies.length, 0);
 });
 
 test('刀近距离快速单体攻击，范围外不受伤', () => {

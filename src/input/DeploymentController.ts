@@ -70,7 +70,7 @@ export class DeploymentController {
     if (pointer.id === this.active?.pointerId) this.cancel();
   };
 
-  private cancel = (): void => {
+  cancel = (): void => {
     this.active = null;
     this.view.clearDrag();
     this.refresh();

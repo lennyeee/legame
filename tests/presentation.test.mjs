@@ -6,6 +6,8 @@ import { registerHooks, stripTypeScriptTypes } from 'node:module';
 
 // 使用真实控制器及范围绘制代码，只替代依赖浏览器的 Phaser 常量和图形对象。
 const phaserStub = 'data:text/javascript,' + encodeURIComponent(`export default {
+  Scene: class {},
+  Math: { Angle: { Between: (x1, y1, x2, y2) => Math.atan2(y2-y1, x2-x1) } },
   Scenes: { Events: { UPDATE: 'update', SHUTDOWN: 'shutdown' } },
   Core: { Events: { BLUR: 'blur' } }
 };`);
@@ -136,4 +138,50 @@ test('其他手指松开不影响当前按住；失焦会清除，退出场景�
     assert.equal(scene.input.listenerCount(event), 0);
   }
   assert.equal(scene.game.events.listenerCount('blur'), 0);
+});
+
+
+test('真实场景更新波次和爱心，结束显示胜负、关闭输入与收入，版本来自配置', async () => {
+  const { GameScene } = await import('../src/scenes/GameScene.ts');
+  const { waveConfig } = await import('../src/config/waves.ts');
+  const { GAME_VERSION } = await import('../src/config/game.ts');
+  const originalCounts = waveConfig.enemyCounts;
+  try {
+    for (const win of [false, true]) {
+      waveConfig.enemyCounts = win ? [1] : originalCounts;
+      const texts = [];
+      const object = (x = 0, y = 0, text = '') => {
+        const target = new EventEmitter();
+        Object.assign(target, { x, y, text, width: 80 });
+        let proxy;
+        proxy = new Proxy(target, { get(t, key) {
+          if (key in t) return t[key];
+          if (key === 'setText') return value => { t.text = value; return proxy; };
+          return () => proxy;
+        } });
+        return proxy;
+      };
+      const scene = new GameScene();
+      const timer = { removed: false, remove() { this.removed = true; } };
+      Object.assign(scene, {
+        events: new EventEmitter(), input: Object.assign(new EventEmitter(), { enabled: true }),
+        game: { events: new EventEmitter() }, scale: { width: 750 },
+        time: { addEvent: () => timer },
+        add: {
+          text: (x, y, text) => { const item = object(x, y, text); texts.push(item); return item; },
+          rectangle: object, circle: object, triangle: object, graphics: object, container: object,
+        },
+      });
+      scene.create();
+      assert.equal(texts.find(t => t.x === 580 && t.y === 117).text, '第 1 波');
+      assert.equal(texts.find(t => t.x === 645 && t.y === 945).text, '♥♥♥');
+      assert.equal(texts.find(t => t.x === 730 && t.y === 1314).text, 'v' + GAME_VERSION);
+      for (let time = 0; time < 25000; time += 100) scene.events.emit('update', time, 100);
+      assert.equal(texts.find(t => t.x === 375 && t.y === 667).text, win ? '胜利' : '失败');
+      assert.equal(texts.find(t => t.x === 645 && t.y === 945).text, win ? '♥♥' : '');
+      assert.equal(scene.input.enabled, false);
+      assert.equal(timer.removed, true);
+      scene.events.emit('shutdown');
+    }
+  } finally { waveConfig.enemyCounts = originalCounts; }
 });

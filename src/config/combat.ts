@@ -15,7 +15,6 @@ export const unitCombatStats: Record<Unit['type'], CombatStats> = {
 
 export const combatConfig = {
   enemy: { maxHp: 90, moveSpeed: 55, killReward: 5 },
-  spawnInterval: 2000,
   stepMs: 1000 / 60,
   maxFrameMs: 250, // 切回页面时不瞬间补发大量敌人和攻击
   growth: { damageMultiplier: 1.55, rangePerLevel: 0.06, attackSpeedPerLevel: 0.08 },

@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { waveConfig } from '../config/waves';
+import { WaveProgress } from './WaveProgress';
 import type { BoardMap } from '../config/maps';
 import type { BoardState } from '../systems/board';
 import type { DeploymentController } from '../input/DeploymentController';
@@ -20,9 +22,11 @@ export class BattleController {
     private readonly deployment: DeploymentController,
     private readonly deploymentView: DeploymentView,
     private readonly refreshMoney: () => void,
+    private readonly refreshProgress: (progress: WaveProgress) => void = () => {},
   ) {
-    this.battle = new CombatSimulation(map, board, wallet);
+    this.battle = new CombatSimulation(map, board, wallet, undefined, new WaveProgress(waveConfig));
     this.view = new CombatView(scene, this.battle);
+    this.refreshProgress(this.battle.progress!);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.update);
     scene.input.on('pointerdown', this.select);
     scene.input.on('pointermove', this.hideWhenDragging);
@@ -57,7 +61,9 @@ export class BattleController {
   private update = (time: number, delta: number): void => {
     const before = this.wallet.money;
     const events = this.battle.update(delta, this.deployment.draggedTile);
+    if (this.battle.progress!.status !== 'playing') this.hideRange();
     this.view.render(events, time);
+    this.refreshProgress(this.battle.progress!);
     if (this.wallet.money !== before) this.refreshMoney();
   };
 
