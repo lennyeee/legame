@@ -7,6 +7,8 @@ import { label } from './text';
 import { heroCombat, heroVisuals, heroExpRequired } from '../config/heroes';
 import { skillConfigs } from '../config/skills';
 import type { HeroLink } from '../systems/heroActivation';
+import { boardDisplayScene } from './boardDisplay';
+import { boardToScreen } from '../config/layout';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
@@ -20,6 +22,8 @@ export class CombatView {
   private skillFlashes: { link: HeroLink; text: Phaser.GameObjects.Text; expires: number }[] = [];
 
   constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation) {
+    this.scene = boardDisplayScene(scene);
+    scene = this.scene;
     this.range = scene.add.graphics().setDepth(1);
     this.graphics = scene.add.graphics().setDepth(10);
   }
@@ -127,7 +131,7 @@ export class CombatView {
     this.rewards = this.rewards.filter(reward => {
       if (reward.expires <= now) { reward.text.destroy(); return false; }
       const remaining = (reward.expires - now) / visuals.rewardMs;
-      reward.text.setY(reward.y - (1 - remaining) * 30).setAlpha(remaining);
+      reward.text.setY(boardToScreen(0, reward.y - (1 - remaining) * 30).y).setAlpha(remaining);
       return true;
     });
   }

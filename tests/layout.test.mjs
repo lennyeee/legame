@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {registerHooks} from 'node:module';
 registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
 const {testMap,gridToWorld}=await import('../src/config/maps.ts');
-const {CELL_SIZE,battleLayout,HALF_HEIGHT,controlsLayout}=await import('../src/config/layout.ts');
+const {CELL_SIZE,battleLayout,HALF_HEIGHT,controlsLayout,boardToScreen,boardDisplay}=await import('../src/config/layout.ts');
 const {getBattlefieldLayout,transformBattlefieldPoint}=await import('../src/ui/boardLayout.ts');
 const {createBoardState}=await import('../src/systems/board.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
@@ -39,13 +39,15 @@ test('40个空间和入口/终点均使用相同180度变换，上下正好填�
    assert.deepEqual(transformBattlefieldPoint(testMap,750,true,p),{x:space.x,y:space.y});
  }
 });
-test('顶部/双战场/三层操作区边界和间隔不重叠',()=>{
- assert.equal(battleLayout.top,190);assert.equal(controlsLayout.top,940);assert.equal(1334-controlsLayout.top,394);
- assert.ok(controlsLayout.reserveY-50>controlsLayout.top);
- assert.ok(controlsLayout.reserveY+50<controlsLayout.feedbackY-12);
- assert.ok(controlsLayout.feedbackY+12<controlsLayout.recruitY-42);
- assert.ok(controlsLayout.recruitY+42<controlsLayout.passiveY-controlsLayout.passiveHeight/2);
- assert.ok(controlsLayout.passiveY+controlsLayout.passiveHeight/2<1314);
+test('显示放大不改变逻辑棋盘，HUD间距及圆形被动槽边界',()=>{
+ assert.deepEqual(boardToScreen(75,190),{x:37.5,y:110});
+ assert.deepEqual(boardToScreen(675,940),{x:712.5,y:953.75});
+ assert.equal(600*boardDisplay.scale/750,0.9);assert.equal(CELL_SIZE*boardDisplay.scale,84.375);
+ assert.equal(CELL_SIZE,75);assert.equal(controlsLayout.top,953.75);
+ assert.ok(controlsLayout.reserveY-42>controlsLayout.top);
+ assert.ok(controlsLayout.reserveY+42<controlsLayout.recruitY-controlsLayout.recruitHeight/2);
+ assert.ok(controlsLayout.recruitY+controlsLayout.recruitHeight/2<controlsLayout.feedbackY-10);
+ assert.ok(controlsLayout.passiveY+2*controlsLayout.passiveStep+controlsLayout.passiveRadius<controlsLayout.feedbackY);
 });
 for(const type of ['刀','枪','弓','骑',...heroRecipes.map(r=>r.id)])test(`新地图${type}正常索敌攻击且路径可完整漏怪`,()=>{
  const board=createBoardState(testMap),wallet={money:0};

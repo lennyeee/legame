@@ -1,4 +1,4 @@
-import { controlsLayout } from '../config/layout';
+import { controlsLayout, boardToScreen, boardDisplay } from '../config/layout';
 import Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
 import type { BoardState, UnitPosition } from '../systems/board';
@@ -22,24 +22,29 @@ export class DeploymentView {
 
   constructor(scene: Phaser.Scene, map: BoardMap, slotCount: number) {
     this.map = map;
-    this.links = scene.add.graphics();
-    this.tiles = map.cells.map(cell => ({
-      box: scene.add.rectangle(cell.x, cell.y, map.cellSize, map.cellSize),
-      text: label(scene, cell.x, cell.y, '', 24),
-      unit: new UnitView(scene, cell.x, cell.y, map.cellSize - 4),
-      sleep: label(scene, cell.x, cell.y - 19, '', 12, heroVisuals.sleepColor),
-    }));
+    this.links = scene.add.graphics().setPosition(boardDisplay.x, boardDisplay.y).setScale(boardDisplay.scale);
+    this.tiles = map.cells.map(cell => {
+      const point = boardToScreen(cell.x, cell.y);
+      const box = scene.add.rectangle(point.x, point.y, map.cellSize * boardDisplay.scale, map.cellSize * boardDisplay.scale);
+      const text = label(scene, point.x, point.y, '', 24 * boardDisplay.scale);
+      const unit = new UnitView(scene, point.x, point.y, map.cellSize - 4);
+      unit.root.setScale(boardDisplay.scale);
+      return {
+        box, text, unit,
+        sleep: label(scene, point.x, point.y - 19 * boardDisplay.scale, '', 12 * boardDisplay.scale, heroVisuals.sleepColor),
+      };
+    });
     label(scene, 375, controlsLayout.reserveTitleY, '待放置', 24);
     this.slots = Array.from({ length: slotCount }, (_, index) => {
-      const x = 375 + (index - (slotCount - 1) / 2) * 128;
+      const x = 375 + (index - (slotCount - 1) / 2) * controlsLayout.reserveStep;
       return {
-        box: scene.add.rectangle(x, controlsLayout.reserveY, 108, 100, 0xfffcf4).setStrokeStyle(2, 0xd3caba),
+        box: scene.add.rectangle(x, controlsLayout.reserveY, controlsLayout.reserveWidth, controlsLayout.reserveHeight, 0xfffcf4).setStrokeStyle(2, 0xd3caba),
         text: label(scene, x, controlsLayout.reserveY, '—', 38, '#b6ae9f'),
-        unit: new UnitView(scene, x, controlsLayout.reserveY, 84),
+        unit: new UnitView(scene, x, controlsLayout.reserveY, 72),
       };
     });
     this.highlights = scene.add.graphics().setDepth(20);
-    this.ghost = new UnitView(scene, 0, 0, map.cellSize);
+    this.ghost = new UnitView(scene, 0, 0, map.cellSize * boardDisplay.scale);
     this.ghost.root.setDepth(100).setAlpha(0.9);
   }
 
