@@ -27,7 +27,7 @@ test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', (
   let offset = 0;
   for (const type of gameConfig.recruitmentPool) {
     const state = createRecruitmentState();
-    state.slots.fill(letter('赵'));
+    state.slots.fill(letter('小'));
     recruit(state, () => (offset + 0.5) / total);
     const expected = type === '铲' ? type : heroRecipes.some(r=>r.letters.includes(type)) ? letter(type) : {type,level:1};
     assert.deepEqual(state.slots, Array(5).fill(expected));
@@ -51,36 +51,36 @@ for (const recipe of heroRecipes) {
 for(const [name,dx,dy] of [['纵向',0,52],['纵向反序',0,-52],['对角线',52,52],['隔格',104,0],['不同排',52,1]]) {
   test(`${name}不能激活`,()=>{
     const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:195+dx,y:650+dy,unlocked:true}]};
-    const {board}=setup(map); board.tiles[0].unit=letter('赵');board.tiles[1].unit=letter('云');
+    const {board}=setup(map); board.tiles[0].unit=letter('小');board.tiles[1].unit=letter('美');
     assert.deepEqual(getHeroLinks(map,board),[]);
   });
 }
 for(const a of ['slot','tile']) for(const b of ['slot','tile']) test(`${a}→${b}字只交换不压缩合成`,()=>{
   const {board,reserve}=setup(); const source=pos(a,0),target=pos(b,1);
-  const x=letter('赵'),y=letter('云');put(board,reserve,source,x);put(board,reserve,target,y);
+  const x=letter('小'),y=letter('美');put(board,reserve,source,x);put(board,reserve,target,y);
   assert.equal(applyDrop(board,reserve,source,target),'swap');
   assert.equal(getDragItem(board,reserve,source),y);assert.equal(getDragItem(board,reserve,target),x);
 });
 
 test('单字、无关字、重复字、锁定格、待放置栏均不激活',()=>{
-  for(const other of [null,letter('赵'),letter('羽'),{type:'刀',level:1}]) {
-    const {board,reserve}=setup();board.tiles[0].unit=letter('赵');board.tiles[1].unit=other;reserve.slots[0]=letter('云');
+  for(const other of [null,letter('小'),letter('饼'),{type:'刀',level:1}]) {
+    const {board,reserve}=setup();board.tiles[0].unit=letter('小');board.tiles[1].unit=other;reserve.slots[0]=letter('美');
     assert.deepEqual(getHeroLinks(testMap,board),[]);
   }
-  const {board}=setup();board.tiles[0].unit=letter('赵');board.tiles[1].unit=letter('云');board.tiles[1].unlocked=false;
+  const {board}=setup();board.tiles[0].unit=letter('小');board.tiles[1].unit=letter('美');board.tiles[1].unlocked=false;
   assert.deepEqual(getHeroLinks(testMap,board),[]);
 });
 
 test('多个武将关系无重叠、无重复，征兵不改变棋盘关系',()=>{
   const {board,reserve}=setup();
-  for(const [a,b,chars] of [[0,1,['赵','云']],[14,15,['关','羽']]]) {board.tiles[a].unit=letter(chars[0]);board.tiles[b].unit=letter(chars[1]);}
+  for(const [a,b,chars] of [[0,1,['小','美']],[14,15,['阿','饼']]]) {board.tiles[a].unit=letter(chars[0]);board.tiles[b].unit=letter(chars[1]);}
   assert.equal(getHeroLinks(testMap,board).length,2);
   const before=getHeroLinks(testMap,board);recruit(reserve,()=>0.8);
   assert.deepEqual(getHeroLinks(testMap,board),before);
 });
 
 function battle() {
-  const {board,reserve}=setup();board.tiles[0].unit=letter('赵');board.tiles[1].unit=letter('云');
+  const {board,reserve}=setup();board.tiles[0].unit=letter('小');board.tiles[1].unit=letter('美');
   const sim=new CombatSimulation(testMap,board,reserve);
   const enemy=sim.spawnEnemy();enemy.moveSpeed=0;enemy.hp=enemy.maxHp=1000;
   return {board,reserve,sim,enemy};
@@ -121,7 +121,7 @@ test('普通兵和铲子不会与武将字合成，休眠字替换弓后取消�
   const {board,reserve}=setup();const sim=new CombatSimulation(testMap,board,reserve);
   board.tiles[0].unit={type:'弓',level:1};const enemy=sim.spawnEnemy();enemy.moveSpeed=0;
   run(sim,1700);assert.equal(sim.projectiles.length,1);
-  reserve.slots[0]=letter('赵');assert.equal(applyDrop(board,reserve,pos('slot',0),pos('tile',0)),'swap');
+  reserve.slots[0]=letter('小');assert.equal(applyDrop(board,reserve,pos('slot',0),pos('tile',0)),'swap');
   sim.update(0);assert.equal(sim.projectiles.length,0);assert.deepEqual(run(sim,5000),[]);
   reserve.slots[1]='铲';assert.equal(applyDrop(board,reserve,pos('tile',0),pos('slot',1)),'invalid');
 });

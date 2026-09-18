@@ -2,7 +2,8 @@ import type { BoardMap } from '../config/maps';
 import type { BoardState } from './board';
 import { getHeroLinks } from './heroActivation';
 import type { HeroLink } from './heroActivation';
-import { heroExpRequired } from '../config/heroes';
+import { heroExpRequired, getHeroDefinition } from '../config/heroes';
+import { createSkillState } from '../combat/skills';
 
 // 与本局棋盘同寿命，弱引用避免旧局状态被全局保存；不向单字写入临时EXP。
 const sessions = new WeakMap<BoardState, HeroProgression>();
@@ -27,13 +28,16 @@ export class HeroProgression {
   sync(suspendedTile: number | null = null): void {
     const placements = getHeroLinks(this.map, this.board, suspendedTile);
     const keys = new Set(placements.map(p => p.key));
-    for (const key of this.links.keys()) if (!keys.has(key)) this.links.delete(key);
+    for (const [key, link] of this.links) if (!keys.has(key)) { link.skill = null; this.links.delete(key); }
     for (const placement of placements) {
       let link = this.links.get(placement.key);
       const level = Math.max(placement.left.level, placement.right.level);
       placement.left.level = placement.right.level = level;
-      if (!link || link.left !== placement.left || link.right !== placement.right || link.name !== placement.name) {
-        link = { ...placement, cycleId: this.nextCycle++, level, currentExp: 0 };
+      if (!link || link.left !== placement.left || link.right !== placement.right || link.heroId !== placement.heroId) {
+        if (link) link.skill = null;
+        const skillId = getHeroDefinition(placement.heroId).skillId;
+        link = { ...placement, cycleId: this.nextCycle++, level, currentExp: 0,
+          skill: skillId ? createSkillState(skillId, level) : null };
         this.links.set(placement.key, link);
       } else if (link.level !== level) {
         link.level = level;
@@ -70,5 +74,6 @@ export class HeroProgression {
 
   forgetEnemy(enemyId: number): void { this.participants.delete(enemyId); }
   clearParticipation(): void { this.participants.clear(); }
-  clear(): void { this.links.clear(); this.participants.clear(); }
+  clearSkills(): void { for (const link of this.links.values()) link.skill = null; }
+  clear(): void { this.clearSkills(); this.links.clear(); this.participants.clear(); }
 }

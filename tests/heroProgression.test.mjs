@@ -14,7 +14,7 @@ const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 const p=(kind,index)=>({kind,index});
 function setup(levels=[1,1],map=testMap){
  const board=createBoardState(map),reserve=createRecruitmentState();
- board.tiles[0].unit=letter('赵',levels[0]);board.tiles[1].unit=letter('云',levels[1]);
+ board.tiles[0].unit=letter('小',levels[0]);board.tiles[1].unit=letter('美',levels[1]);
  const growth=getHeroProgression(board);growth.sync();
  const sim=new CombatSimulation(map,board,reserve);sim.update(0);
  return {board,reserve,growth,sim,link:sim.heroLinks[0]};
@@ -24,10 +24,10 @@ function enemy(sim,hp=1000){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=e.maxHp=
 function grant(growth,link,exp,id=999){growth.recordDamage(id,link,1);growth.awardKill(id,exp);}
 
 test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
- const {board,reserve}=setup([3,3]);recruit(reserve,()=>15.5/21);assert.deepEqual(reserve.slots[0],letter('赵'));
+ const {board,reserve}=setup([3,3]);recruit(reserve,()=>15.5/20);assert.deepEqual(reserve.slots[0],letter('小'));
  const original=board.tiles[0].unit;reserve.slots[0]=null;
  applyDrop(board,reserve,p('tile',0),p('slot',0));assert.equal(reserve.slots[0],original);assert.equal(original.level,3);
- reserve.slots[1]=letter('羽',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
+ reserve.slots[1]=letter('饼',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
 });
 for(const levels of [[3,1],[2,5],[7,7]])test(`${levels.join('+')}向高等级同步且拆开永久保留`,()=>{
  const {board,reserve,growth,link}=setup(levels);const high=Math.max(...levels);
@@ -38,27 +38,27 @@ for(const levels of [[3,1],[2,5],[7,7]])test(`${levels.join('+')}向高等级同
 });
 
 test('通用配方支持未来共享字，不修改生产征兵池',()=>{
- heroRecipes.push({name:'黄忠',letters:['黄','忠']},{name:'黄祖',letters:['黄','祖']});
+ heroRecipes.push({id:'huangzhong',skillId:null,name:'黄忠',letters:['黄','忠']},{id:'huangzu',skillId:null,name:'黄祖',letters:['黄','祖']});
  try{const {board,reserve,growth}=setup();board.tiles[0].unit=letter('黄',3);board.tiles[1].unit=letter('祖');growth.sync();assert.equal(board.tiles[1].unit.level,3);assert.equal([...growth.links.values()][0].name,'黄祖');
  applyDrop(board,reserve,p('tile',1),p('slot',0));board.tiles[1].unit=letter('忠');growth.sync();assert.equal(board.tiles[1].unit.level,3);
  }finally{heroRecipes.splice(-2);}
 });
 for(const a of ['slot','tile'])for(const b of ['slot','tile'])for(const material of [1,4,20])test(`${a}→${b}同字Lv.${material}材料只让目标6→7`,()=>{
  const board=createBoardState(testMap),reserve=createRecruitmentState();
- const source=p(a,0),target=p(b,2);const item=letter('赵',6);
+ const source=p(a,0),target=p(b,2);const item=letter('小',6);
  function put(pos,value){if(pos.kind==='tile')board.tiles[pos.index].unit=value;else reserve.slots[pos.index]=value;}
- put(source,letter('赵',material));put(target,item);
+ put(source,letter('小',material));put(target,item);
  assert.equal(applyDrop(board,reserve,source,target),'merge');assert.equal(item.level,7);
  assert.equal(a==='tile'?board.tiles[0].unit:reserve.slots[0],null);
  assert.equal(b==='tile'?board.tiles[2].unit:reserve.slots[2],item);
 });
 test('不同字只能交换不能触发等级提升',()=>{
- const {board,reserve}=setup([3,3]);reserve.slots[0]=letter('赵',4);
+ const {board,reserve}=setup([3,3]);reserve.slots[0]=letter('小',4);
  assert.equal(applyDrop(board,reserve,p('slot',0),p('tile',1)),'swap');assert.equal(board.tiles[1].unit.level,4);assert.equal(reserve.slots[0].level,3);
 });
 test('激活组合同字目标+1、伙伴同步、EXP清零、保持目标对象',()=>{
  const {board,reserve,growth,link}=setup([3,3]);grant(growth,link,25);
- const original=board.tiles[0].unit;reserve.slots[0]=letter('赵',9);
+ const original=board.tiles[0].unit;reserve.slots[0]=letter('小',9);
  applyDrop(board,reserve,p('slot',0),p('tile',0));
  assert.equal(board.tiles[0].unit,original);assert.equal(link.level,4);assert.equal(link.currentExp,0);assert.equal(board.tiles[1].unit.level,4);
 });
@@ -92,9 +92,9 @@ test('普通兵最后一击仍让实际参战武将获得完整EXP',()=>{
 });
 test('两个武将有效参战，各得完整EXP；第三个只在范围内不得EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:690,unlocked:true},{x:247,y:690,unlocked:true},{x:195,y:610,unlocked:true},{x:247,y:610,unlocked:true},{x:195,y:650,unlocked:true}]};
- const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('关');board.tiles[3].unit=letter('羽');
+ const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
  const e=enemy(sim);run(sim,1200);assert.equal(e.hp,930);
- board.tiles[4].unit=letter('张');board.tiles[5].unit=letter('飞');board.tiles[6].unit={type:'刀',level:20};run(sim,300);
+ board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');board.tiles[6].unit={type:'刀',level:20};run(sim,300);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,10);
  assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[10,10,0]);
 });
@@ -115,5 +115,5 @@ test('结算停止EXP和攻击，独立新局从空状态及Lv.1开始',()=>{
  enemy(sim);run(sim,1200);const link=sim.heroLinks[0];progress.status='defeat';const before=link.currentExp;
  assert.deepEqual(run(sim,10000),[]);assert.equal(link.currentExp,before);
  growth.clear();assert.equal(growth.links.size,0);const freshBoard=createBoardState(testMap),freshReserve=createRecruitmentState();
- assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>15.5/21);assert.equal(freshReserve.slots[0].level,1);
+ assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>15.5/20);assert.equal(freshReserve.slots[0].level,1);
 });

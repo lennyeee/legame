@@ -5,6 +5,8 @@ import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { label } from './text';
 import { heroCombat, heroVisuals, heroExpRequired } from '../config/heroes';
+import { skillConfigs } from '../config/skills';
+import type { HeroLink } from '../systems/heroActivation';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
@@ -15,6 +17,7 @@ export class CombatView {
   private rewards: { text: Phaser.GameObjects.Text; expires: number; y: number }[] = [];
   private selectedTile: number | null = null;
   private readonly heroLevels = new Map<string, Phaser.GameObjects.Text>();
+  private skillFlashes: { link: HeroLink; text: Phaser.GameObjects.Text; expires: number }[] = [];
 
   constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation) {
     this.range = scene.add.graphics().setDepth(1);
@@ -29,6 +32,10 @@ export class CombatView {
   render(events: CombatEvent[], now: number): void {
     const visuals = combatConfig.visuals;
     for (const event of events) {
+      if (event.kind === 'skillStart') {
+        const text = label(this.scene, event.link.origin.x, event.link.origin.y - 34, event.link.name, 23, '#fff3a1').setDepth(30);
+        this.skillFlashes.push({ link: event.link, text, expires: now + skillConfigs[event.skillId].flashDuration });
+      }
       if (event.kind === 'attack') this.effects.push({ event, expires: now + visuals.attackEffectMs });
       if (event.kind === 'heroAttack') this.heroEffects.push({ event, expires: now + visuals.attackEffectMs });
       if (event.kind === 'hit') this.flashes.set(event.enemyId, now + visuals.hitFlashMs);
@@ -38,6 +45,11 @@ export class CombatView {
       }
     }
     this.graphics.clear();
+    this.skillFlashes = this.skillFlashes.filter(flash => {
+      if (flash.expires <= now || !this.battle.isHeroLinkValid(flash.link)) { flash.text.destroy(); return false; }
+      flash.text.setAlpha(0.4 + 0.6 * Math.abs(Math.cos((flash.expires - now) / 55)));
+      return true;
+    });
     this.range.clear();
     const links = this.battle.heroLinks;
     for (const [key, text] of this.heroLevels) {

@@ -1,13 +1,15 @@
 export const heroRecipes = [
-  { name: '赵云', letters: ['赵', '云'] },
-  { name: '关羽', letters: ['关', '羽'] },
-  { name: '张飞', letters: ['张', '飞'] },
+  { id: 'xiaomei', name: '小美', letters: ['小', '美'], attackMode: 'single', skillId: 'xiaomei_barrage' },
+  { id: 'abing', name: '阿饼', letters: ['阿', '饼'], attackMode: 'splash', skillId: null },
+  { id: 'xiaoliu', name: '小六', letters: ['小', '六'], attackMode: 'splash', skillId: null },
 ] as const;
 
 export type HeroName = (typeof heroRecipes)[number]['name'];
+export type HeroId = (typeof heroRecipes)[number]['id'];
+export function getHeroDefinition(id: HeroId) { return heroRecipes.find(hero => hero.id === id)!; }
 export type HeroLetterType = (typeof heroRecipes)[number]['letters'][number];
 
-export const heroCombat = { damage: 35, range: 230, attackInterval: 1200 };
+export const heroCombat = { damage: 35, range: 230, attackInterval: 1200, splashRadius: 70 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
 
 export const heroGrowth = { expBase: 30, expPerLevel: 20, enemyExp: 10, damagePerLevel: 0.5, speedPerLevel: 0.08 };

@@ -8,6 +8,7 @@ export interface Enemy extends MapPoint {
   hp: number;
   moveSpeed: number;
   distance: number;
+  isBoss?: boolean;
 }
 
 export function createEnemy(id: number, path: BattlePath, stats: { maxHp: number; moveSpeed: number }): Enemy {

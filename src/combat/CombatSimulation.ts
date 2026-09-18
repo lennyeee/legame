@@ -11,8 +11,10 @@ import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
 import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
-import { getHeroStats, heroGrowth } from '../config/heroes';
+import { getHeroStats, heroGrowth, getHeroDefinition, heroCombat } from '../config/heroes';
 import { getHeroProgression } from '../systems/heroProgression';
+import { updateHeroSkill } from './skills';
+import type { SkillEvent } from './skills';
 
 interface Attacker {
   unit: Unit;
@@ -42,7 +44,7 @@ export interface Projectile extends MapPoint {
   range: number;
 }
 
-export type CombatEvent = AttackEffect
+export type CombatEvent = AttackEffect | SkillEvent
   | { kind: 'heroAttack'; link: HeroLink; end: MapPoint }
   | { kind: 'hit'; enemyId: number }
   | { kind: 'kill'; enemyId: number; position: MapPoint; reward: number }
@@ -131,6 +133,7 @@ export class CombatSimulation {
         this.attackers.clear();
         this.heroAttackers.clear();
         getHeroProgression(this.board).clearParticipation();
+        getHeroProgression(this.board).clearSkills();
         this.elapsed = 0;
         break;
       }
@@ -221,7 +224,13 @@ export class CombatSimulation {
       if (!target) continue;
       attacker.cooldown = stats.attackInterval;
       events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
-      this.hit(target, stats.damage, events, attacker.link);
+      const victims = getHeroDefinition(attacker.link.heroId).attackMode === 'splash'
+        ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, heroCombat.splashRadius)) : [target];
+      for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
+    }
+    for (const link of this.heroLinks) {
+      updateHeroSkill(link, this.enemies, deltaMs,
+        (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event));
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

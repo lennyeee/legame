@@ -32,6 +32,7 @@ const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
 const { heroCombat } = await import('../src/config/heroes.ts');
+const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
 // 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
@@ -118,22 +119,24 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
   const random = Math.random;
   const counts = waveConfig.enemyCounts;
   const damage = heroCombat.damage;
+  const skillDamage = skillConfigs.xiaomei_barrage.damage;
   try {
     const p = pve();
     for (const win of [false, true, false]) {
       heroCombat.damage = win ? damage : 1;
+      skillConfigs.xiaomei_barrage.damage = win ? skillDamage : 1;
       waveConfig.enemyCounts = win ? [1] : counts;
-      Math.random = () => 15.5 / 21;
+      Math.random = () => 15.5 / 20;
       p.click(375, 1240);
       p.drag([119, 1092], [195, 650]);
       assert.equal(p.text(195, 631), 'Zz');
       assert.equal(p.objects.get(p.game).filter(o => o.text === 'Zz').length, 1);
-      Math.random = () => 16.5 / 21;
+      Math.random = () => 16.5 / 20;
       p.click(375, 1240);
       p.drag([119, 1092], [247, 650]);
       assert.equal(p.text(195, 631), '');
       assert.equal(p.text(247, 631), '');
-      assert.equal(p.objects.get(p.game).some(o => o.text === '赵云'), false);
+      assert.equal(p.objects.get(p.game).some(o => o.text === '小美'), false);
       const boxes = p.objects.get(p.game).filter(o => o.kind === 'rectangle' && o.y === 650 && [195,247].includes(o.x));
       assert.ok(boxes.every(o => !o.visible));
       const linkedBorder = () => p.objects.get(p.game).some(o => o.kind === 'graphics'
@@ -169,23 +172,23 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       assert.equal(p.snapshot(),ended);
       p.click(375,765);
       assert.equal(linkedBorder(),false);
-      assert.equal(p.objects.get(p.game).some(o => ['赵','云','Zz'].includes(o.text)),false);
+      assert.equal(p.objects.get(p.game).some(o => ['小','美','Zz'].includes(o.text)),false);
       assert.equal(p.game.events.listenerCount('update'),1);
       p.run(2000);
       assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='lineBetween')),false);
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
       p.run(30000);p.click(375,765);
     }
-  } finally { Math.random=random;waveConfig.enemyCounts=counts;heroCombat.damage=damage; }
+  } finally { Math.random=random;waveConfig.enemyCounts=counts;heroCombat.damage=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
 });
 
 test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/重开清理', () => {
   const random = Math.random;
   try {
     const p = pve();
-    Math.random = () => 15.5 / 21;p.click(375,1240);p.drag([119,1092],[195,650]);
+    Math.random = () => 15.5 / 20;p.click(375,1240);p.drag([119,1092],[195,650]);
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
-    Math.random = () => 16.5 / 21;p.click(375,1240);p.drag([119,1092],[247,650]);
+    Math.random = () => 16.5 / 20;p.click(375,1240);p.drag([119,1092],[247,650]);
     p.run(4500);
     assert.equal(p.text(221,665),'Lv.1');
     const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics')
@@ -193,7 +196,7 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     assert.ok(expBars().some(d=>Math.abs(d[3]-92/3)<0.001));
     p.click(75,49);const paused=p.snapshot();p.run(10000);p.drag([247,1092],[247,650]);
     assert.equal(p.snapshot(),paused);p.click(375,765);
-    Math.random = () => 15.5 / 21;p.click(375,1240);p.drag([119,1092],[195,650]);p.run(10);
+    Math.random = () => 15.5 / 20;p.click(375,1240);p.drag([119,1092],[195,650]);p.run(10);
     assert.equal(p.text(221,665),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
     p.drag([247,650],[119,1092]);p.run(10);
     assert.equal(expBars().length,0);assert.equal(p.text(195,631),'Zz');
@@ -201,7 +204,26 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     p.run(30000);const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
     p.click(375,765);assert.equal(expBars().length,0);
     assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'),false);
-    Math.random=()=>15.5/21;p.click(375,1240);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
+    Math.random=()=>15.5/20;p.click(375,1240);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
+  } finally { Math.random=random; }
+});
+
+test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害，重开清理闪烁', () => {
+  const random=Math.random;
+  try {
+    const p=pve();
+    Math.random=()=>15.5/20;p.click(375,1240);p.drag([119,1092],[195,650]);
+    Math.random=()=>16.5/20;p.click(375,1240);p.drag([119,1092],[247,650]);
+    const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible);
+    p.run(9500);assert.equal(flashes().length,0);
+    p.click(75,49);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
+    p.click(375,765);p.run(490);assert.equal(flashes().length,0);
+    p.run(20);assert.equal(flashes().length,1);
+    p.click(75,49);const casting=p.snapshot();p.run(5000);assert.equal(p.snapshot(),casting);
+    p.click(375,765);p.run(500);assert.equal(flashes().length,0);
+    p.drag([247,650],[119,1092]);p.run(30000);
+    assert.equal(p.text(375,565,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
+    p.click(375,765);assert.equal(flashes().length,0);p.run(10000);assert.equal(flashes().length,0);
   } finally { Math.random=random; }
 });
 
