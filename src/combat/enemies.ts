@@ -28,3 +28,10 @@ export function damageEnemy(enemy: Enemy, damage: number): { applied: number; ki
   enemy.hp = Math.max(0, enemy.hp - damage);
   return { applied: before - enemy.hp, killed: enemy.hp === 0 };
 }
+
+export function executeEnemy(enemy: Enemy): { applied: number; killed: boolean } {
+  if (enemy.hp <= 0 || enemy.isBoss) return { applied: 0, killed: false };
+  const applied = enemy.hp;
+  enemy.hp = 0;
+  return { applied, killed: true };
+}

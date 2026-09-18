@@ -5,7 +5,7 @@ import type { BoardState } from '../systems/board';
 import type { Unit } from '../systems/items';
 import { isUnit } from '../systems/items';
 import { buildPath } from './path';
-import { advanceEnemy, createEnemy, damageEnemy } from './enemies';
+import { advanceEnemy, createEnemy, damageEnemy, executeEnemy } from './enemies';
 import type { Enemy } from './enemies';
 import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
@@ -13,7 +13,7 @@ import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
 import { getHeroStats, heroGrowth, getHeroDefinition, heroCombat } from '../config/heroes';
 import { getHeroProgression } from '../systems/heroProgression';
-import { updateHeroSkill } from './skills';
+import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack } from './skills';
 import type { SkillEvent } from './skills';
 
 interface Attacker {
@@ -141,8 +141,8 @@ export class CombatSimulation {
     return events;
   }
 
-  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink): void {
-    const result = damageEnemy(enemy, damage);
+  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink, execution = false): void {
+    const result = execution ? executeEnemy(enemy) : damageEnemy(enemy, damage);
     if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
     if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id });
     if (result.killed) {
@@ -156,7 +156,7 @@ export class CombatSimulation {
 
   isHeroLinkValid(link: HeroLink): boolean {
     return (!this.progress || this.progress.status === 'playing') && getHeroProgression(this.board).isActive(link)
-      && getHeroLinks(this.map, this.board, this.suspendedTile).some(current =>
+      && getHeroLinks(this.map, this.board, this.suspendedTile, this.heroLinks).some(current =>
       current.key === link.key && current.left === link.left && current.right === link.right);
   }
 
@@ -218,19 +218,27 @@ export class CombatSimulation {
     }
     for (const attacker of this.heroAttackers.values()) {
       const stats = getHeroStats(attacker.link.level);
-      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, stats.attackInterval) - deltaMs);
+      // 强化结束的当前逻辑步不提前推进新 CD；小美原有打击时序保持不变。
+      if (attacker.link.skill?.skillId === 'xiaoliu_haste') {
+        updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), () => {});
+      }
+      const interval = heroAttackInterval(attacker.link, stats.attackInterval);
+      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, interval) - deltaMs);
       if (attacker.cooldown > 1e-8) continue;
       const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
       if (!target) continue;
-      attacker.cooldown = stats.attackInterval;
       events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
       const victims = getHeroDefinition(attacker.link.heroId).attackMode === 'splash'
         ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, heroCombat.splashRadius)) : [target];
       for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
+      consumeEmpoweredAttack(attacker.link, event => events.push(event));
+      attacker.cooldown = heroAttackInterval(attacker.link, getHeroStats(attacker.link.level).attackInterval);
     }
     for (const link of this.heroLinks) {
+      if (link.skill?.skillId === 'xiaoliu_haste') continue;
       updateHeroSkill(link, this.enemies, deltaMs,
-        (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event));
+        (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event),
+        (enemy, source) => this.hit(enemy, 0, events, source, true));
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

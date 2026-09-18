@@ -290,6 +290,32 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
   } finally { Math.random=random; }
 });
 
+for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19.5,12000]]) {
+  test(`${name}技能事件闪烁、充能及发动后暂停冻结、拆开结算和重开清理`, () => {
+    const random=Math.random;
+    try {
+      const p=pve();
+      Math.random=()=>left/20;p.click(375,1240);p.drag([119,1092],[195,650]);
+      Math.random=()=>right/20;p.click(375,1240);p.drag([119,1092],[247,650]);
+      const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text===name&&o.visible);
+      // 观察真实成长后的首次发动，不假定击杀升级前后的CD完全相同。
+      p.run(1000);p.click(75,49);const paused=p.snapshot();
+      p.run(30000);p.drag([247,650],[119,1092]);assert.equal(p.snapshot(),paused);
+      p.click(375,765);
+      let seen=false;
+      for(let ms=0;ms<cd&&!seen;ms+=10){p.run(10);seen=flashes().length>0;}
+      assert.equal(seen,true);
+      p.click(75,49);const casting=p.snapshot();p.run(20000);assert.equal(p.snapshot(),casting);
+      p.click(375,765);p.drag([247,650],[119,1092]);p.run(10);assert.equal(flashes().length,0);
+      p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');
+      const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
+      p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
+      assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,1);
+      assert.equal(p.objects.get(p.game).some(o=>o.text===name||o.text==='Zz'),false);
+    } finally { Math.random=random; }
+  });
+}
+
 test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止操作并原位恢复', () => {
   const p = pve();
   const random = Math.random;

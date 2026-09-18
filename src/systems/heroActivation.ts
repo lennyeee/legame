@@ -25,8 +25,8 @@ export interface HeroLink extends HeroPlacement {
   skill: SkillState | null;
 }
 
-export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: number | null = null): HeroPlacement[] {
-  // TODO（后续武将版本）：同一玩家最多激活一个同名武将，多余字保留用于升级。
+export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: number | null = null,
+  incumbents: readonly HeroLink[] = []): HeroPlacement[] {
   const links: HeroPlacement[] = [];
   const used = new Set<number>();
   map.cells.forEach((cell, leftIndex) => {
@@ -41,5 +41,12 @@ export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: nu
     links.push({ key: `${leftIndex}:${rightIndex}`, heroId: recipe.id, name: recipe.name, leftIndex, rightIndex,
       left: left.unit, right: right.unit, origin: { x: cell.x + map.cellSize / 2, y: cell.y } });
   });
-  return links;
+  // 已激活组合优先；空出的身份按地图顺序选取，避免新部署抢走旧组合的 EXP/CD。
+  const selected = new Map<HeroId, HeroPlacement>();
+  for (const old of incumbents) {
+    const valid = links.find(link => link.key === old.key && link.left === old.left && link.right === old.right);
+    if (valid) selected.set(valid.heroId, valid);
+  }
+  for (const link of links) if (!selected.has(link.heroId)) selected.set(link.heroId, link);
+  return [...selected.values()];
 }

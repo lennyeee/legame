@@ -6,6 +6,7 @@ import type { RecruitmentState } from '../systems/recruitment';
 import { label } from './text';
 import { UnitView } from './unit';
 import { getHeroLinks } from '../systems/heroActivation';
+import { getHeroProgression } from '../systems/heroProgression';
 import { isUnit } from '../systems/items';
 import { heroVisuals } from '../config/heroes';
 
@@ -42,7 +43,8 @@ export class DeploymentView {
   }
 
   refresh(board: BoardState, recruitment: RecruitmentState, source?: UnitPosition): void {
-    const links = getHeroLinks(this.map, board, source?.kind === 'tile' ? source.index : null);
+    const links = getHeroLinks(this.map, board, source?.kind === 'tile' ? source.index : null,
+      [...getHeroProgression(board).links.values()]);
     const linked = new Set(links.flatMap(link => [link.leftIndex, link.rightIndex]));
     this.links.clear();
     for (const link of links) {

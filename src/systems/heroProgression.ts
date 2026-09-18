@@ -26,7 +26,7 @@ export class HeroProgression {
   constructor(board: BoardState, map: BoardMap) { this.board = board; this.map = map; }
 
   sync(suspendedTile: number | null = null): void {
-    const placements = getHeroLinks(this.map, this.board, suspendedTile);
+    const placements = getHeroLinks(this.map, this.board, suspendedTile, [...this.links.values()]);
     const keys = new Set(placements.map(p => p.key));
     for (const [key, link] of this.links) if (!keys.has(key)) { link.skill = null; this.links.delete(key); }
     for (const placement of placements) {

@@ -1,4 +1,4 @@
-export const GAME_VERSION = '0.50';
+export const GAME_VERSION = '0.51';
 
 export const gameConfig = {
   initialMoney: 100,

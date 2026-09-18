@@ -93,9 +93,9 @@ test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
 test('技能伤害随等级升高、CD缩短且不低于最小值',()=>{
  for(const level of [2,10,100000]){const stats=getSkillStats(id,level);assert.ok(stats.damage>cfg.damage);assert.ok(stats.cooldown<cfg.cooldown);assert.ok(stats.cooldown>=cfg.minCooldown);}
 });
-for(const hero of ['abing','xiaoliu'])test(`${hero}范围普攻正常，无技能状态或技能事件`,()=>{
+for(const hero of ['abing','xiaoliu'])test(`${hero}范围普攻正常，完整CD前不发动技能`,()=>{
  const {sim,link}=setup(hero,testMap);const a=enemy(sim),b=enemy(sim);const events=run(sim,1200);
- assert.ok(a.hp<1000&&b.hp<1000);assert.equal(link.skill,null);assert.equal(events.some(e=>e.kind.startsWith('skill')),false);
+ assert.ok(a.hp<1000&&b.hp<1000);assert.equal(link.skill.phase,'charging');assert.equal(events.some(e=>e.kind.startsWith('skill')),false);
 });
 test('小美普攻仅单体，技能框架不依赖表现监听者',()=>{
  const {sim}=setup('xiaomei',testMap);const a=enemy(sim),b=enemy(sim);run(sim,1200);assert.equal([a,b].filter(e=>e.hp<1000).length,1);
