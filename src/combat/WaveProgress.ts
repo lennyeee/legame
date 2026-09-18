@@ -1,4 +1,5 @@
 import type { WaveConfig } from '../config/waves';
+import { getWaveHpMultiplier } from '../config/waves';
 
 // 只管理出兵节奏、基地生命和胜负，不依赖画面或兵种规则。
 export class WaveProgress {
@@ -34,7 +35,7 @@ export class WaveProgress {
       && this.spawnClock + 1e-8 >= this.config.spawnInterval) {
       this.spawnClock -= this.config.spawnInterval;
       this.spawned++;
-      spawn(1 + (this.wave - 1) * this.config.hpGrowth);
+      spawn(getWaveHpMultiplier(this.wave, this.config));
     }
   }
 
