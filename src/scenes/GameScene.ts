@@ -91,9 +91,9 @@ export class GameScene extends Phaser.Scene {
         this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health });
       }
     });
-    const pauseButton = this.add.rectangle(675, 625, 62, 54, 0x697e67)
+    const pauseButton = this.add.rectangle(75, 49, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });
-    label(this, 675, 625, 'Ⅱ', 30, '#fffaf0');
+    label(this, 75, 49, 'Ⅱ', 30, '#fffaf0');
     pauseButton.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
       if (ended) return;

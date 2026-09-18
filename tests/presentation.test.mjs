@@ -122,7 +122,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   p.drag([119, 1092], [195, 650]);
   p.run(2500);
   const elapsed = p.game.time._active[0].elapsed;
-  p.click(675, 625);
+  p.click(75, 49);
   assert.equal(p.text(375, 565, p.overlay), '已暂停');
   assert.equal(p.game.input.enabled, false);
   const paused = p.snapshot();
@@ -141,7 +141,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   p.run(10);
   assert.notEqual(p.text(155, 109), money);
   for (let i = 0; i < 3; i++) {
-    p.click(675, 625);
+    p.click(75, 49);
     p.run(5000);
     p.click(375, 765);
     assert.equal(p.game.time._active.length, 1);
