@@ -15,6 +15,7 @@ export class DeploymentController {
     private readonly recruitment: RecruitmentState,
     private readonly view: DeploymentView,
     private readonly onDrop: (result: DropAction) => void,
+    private readonly canInteract: () => boolean = () => true,
   ) {
     scene.input.on('pointerdown', this.start);
     scene.input.on('pointermove', this.move);
@@ -36,7 +37,7 @@ export class DeploymentController {
   }
 
   private start = (pointer: Phaser.Input.Pointer): void => {
-    if (this.active || !pointer.primaryDown) return;
+    if (!this.canInteract() || this.active || !pointer.primaryDown) return;
     const source = this.view.positionAt(pointer.x, pointer.y);
     if (!source) return;
     const item = getDragItem(this.board, this.recruitment, source);

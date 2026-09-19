@@ -14,6 +14,8 @@ import type { Loadout } from '../systems/equipment';
 import { drawLoadout } from '../ui/loadout';
 import { boardDisplayScene } from '../ui/boardDisplay';
 import { FarmerProduction } from '../systems/FarmerProduction';
+import { ActiveItems } from '../systems/ActiveItems';
+import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
 
 export class GameScene extends Phaser.Scene {
@@ -34,7 +36,9 @@ export class GameScene extends Phaser.Scene {
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(boardScene, goal.x, goal.y + 24, '', 24, '#a85c4d');
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
-    drawLoadout(this, loadout);
+    const activeSlots = drawLoadout(this, loadout);
+    const activeItems = new ActiveItems(loadout);
+    let activeController: ActiveItemController | undefined;
     let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
@@ -49,7 +53,7 @@ export class GameScene extends Phaser.Scene {
         unlock: '部署格已解锁',
       };
       feedback.setText(messages[result]).setColor(result === 'invalid' ? '#a45e45' : '#697e67');
-    });
+    }, () => !ended && this.input.enabled && !activeController?.isDragging);
     const buttonShape = this.add.graphics();
     const button = this.add.rectangle(375, controlsLayout.recruitY, controlsLayout.recruitWidth, controlsLayout.recruitHeight, 0x697e67, 0)
       .setInteractive({ useHandCursor: true });
@@ -64,11 +68,17 @@ export class GameScene extends Phaser.Scene {
       buttonText.setText(`来财 $${gameConfig.recruitmentCost}`);
     };
     const farmerView = new FarmerView(this, testMap, farmers,
-      () => !ended && this.input.enabled && !deployment.isDragging, refresh);
+      () => !ended && this.input.enabled && !deployment.isDragging && !activeController?.isDragging, refresh);
+
+    activeController = new ActiveItemController(this, activeItems, activeSlots, board, state, deploymentView,
+      () => !ended && this.input.enabled && !deployment.isDragging, success => {
+        farmers.sync(); farmerView.refresh(); deployment.refresh();
+        feedback.setText(success ? '升级成功' : '无法升级，已返回主动槽').setColor(success ? '#697e67' : '#a45e45');
+      });
 
     button.on('pointerdown', () => {
       // 防止另一根手指在拖动中征兵，替换正在拖动的槽位。
-      if (deployment.isDragging) return;
+      if (ended || !this.input.enabled || deployment.isDragging || activeController?.isDragging) return;
       if (!recruit(state)) {
         feedback.setText('美金不足，请等待资源增长').setColor('#a45e45');
         return;
@@ -98,6 +108,8 @@ export class GameScene extends Phaser.Scene {
       if (!ended && progress.status !== 'playing') {
         ended = true;
         farmers.stop();
+        activeItems.stop();
+        activeController?.cancel();
         incomeTimer.remove();
         deployment.cancel();
         this.input.enabled = false;
@@ -106,17 +118,22 @@ export class GameScene extends Phaser.Scene {
       }
     });
     // 排在战斗帧更新之后：本帧若已结算，不再推进生产或过期。
-    const updateFarmers = (_time: number, delta: number): void => {
+    const updateItemSystems = (_time: number, delta: number): void => {
       if (ended) return;
+      activeItems.update(delta);
+      activeController?.refresh();
       farmers.update(delta);
       farmerView.refresh();
     };
-    this.events.on(Phaser.Scenes.Events.UPDATE, updateFarmers);
+    this.events.on(Phaser.Scenes.Events.UPDATE, updateItemSystems);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.events.off(Phaser.Scenes.Events.UPDATE, updateFarmers);
+      this.events.off(Phaser.Scenes.Events.UPDATE, updateItemSystems);
+      activeItems.destroy();
       farmers.destroy();
       farmerView.destroy();
     });
+    const resumeInput = (): void => { this.input.enabled = true; };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));
     const pauseButton = this.add.rectangle(75, 55, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });
     label(this, 75, 55, 'Ⅱ', 30, '#fffaf0');
@@ -124,9 +141,10 @@ export class GameScene extends Phaser.Scene {
       event.stopPropagation();
       if (ended) return;
       deployment.cancel();
+      activeController?.cancel();
       battle.hideRange();
       this.input.enabled = false;
-      this.events.once(Phaser.Scenes.Events.RESUME, () => { this.input.enabled = true; });
+      this.events.once(Phaser.Scenes.Events.RESUME, resumeInput);
       this.scene.pause();
       this.scene.launch('PveOverlayScene', { mode: 'paused', health: 0, loadout });
     });

@@ -27,36 +27,40 @@ export class PveOverlayScene extends Phaser.Scene {
     let handled = false;
     let confirming = false;
     // 暂停确认与结算共用同一重开入口，完整shutdown后创建新局并保留loadout。
-    const restart = (): void => {
+    const leaveMatch = (destination: 'GameScene' | 'ReadyScene'): void => {
       if (handled) return;
       handled = true;
       this.scene.stop('GameScene');
-      this.scene.start('GameScene', { loadout: data.loadout });
+      this.scene.start(destination, { loadout: data.loadout });
     };
     if (paused) {
       const restartButton = this.add.rectangle(375, 875, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
       const restartText = label(this, 375, 875, '重新开始', 30, '#fffaf0');
-      restartButton.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+      const homeButton = this.add.rectangle(375, 985, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
+      const homeText = label(this, 375, 985, '回到主页', 30, '#fffaf0');
+      const menu = [[button, buttonText], [restartButton, restartText], [homeButton, homeText]] as const;
+      const confirmAction = (home: boolean) => ((_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
         event.stopPropagation();
         if (handled || confirming) return;
         confirming = true;
-        title.setText('确定重新开始？');
-        button.setVisible(false).disableInteractive();buttonText.setVisible(false);
-        restartButton.setVisible(false).disableInteractive();restartText.setVisible(false);
-        const warning = label(this, 375, 655, '当前进度将丢失。', 26, '#fffaf0');
+        title.setText(home ? '确定回到主页？' : '确定重新开始？');
+        for (const [control, text] of menu) { control.setVisible(false).disableInteractive(); text.setVisible(false); }
+        const warning = label(this, 375, 655, home ? '当前对局进度将丢失。' : '当前进度将丢失。', 26, '#fffaf0');
         const cancelButton = this.add.rectangle(220, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
         const cancelText = label(this, 220, 765, '取消', 28, '#fffaf0');
         const confirmButton = this.add.rectangle(530, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
-        const confirmText = label(this, 530, 765, '重新开始', 28, '#fffaf0');
+        const confirmText = label(this, 530, 765, home ? '回到主页' : '重新开始', 28, '#fffaf0');
         cancelButton.on('pointerdown', () => {
           if (handled || !confirming) return;
           confirming = false;
           [warning,cancelButton,cancelText,confirmButton,confirmText].forEach(object=>object.destroy());
-          title.setText('已暂停');button.setVisible(true).setInteractive({ useHandCursor: true });buttonText.setVisible(true);
-          restartButton.setVisible(true).setInteractive({ useHandCursor: true });restartText.setVisible(true);
+          title.setText('已暂停');
+          for (const [control, text] of menu) { control.setVisible(true).setInteractive({ useHandCursor: true }); text.setVisible(true); }
         });
-        confirmButton.on('pointerdown', () => { if (confirming) restart(); });
+        confirmButton.on('pointerdown', () => { if (confirming) leaveMatch(home ? 'ReadyScene' : 'GameScene'); });
       });
+      restartButton.on('pointerdown', confirmAction(false));
+      homeButton.on('pointerdown', confirmAction(true));
     }
     button.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
@@ -66,7 +70,7 @@ export class PveOverlayScene extends Phaser.Scene {
         this.scene.resume('GameScene');
         this.scene.stop();
       } else {
-        restart();
+        leaveMatch('GameScene');
       }
     });
   }

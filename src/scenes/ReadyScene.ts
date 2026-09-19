@@ -3,8 +3,8 @@ import { GAME_VERSION } from '../config/game';
 import { testMap } from '../config/maps';
 import { drawBoard } from '../ui/board';
 import { label } from '../ui/text';
-import { createInventory, createLoadout } from '../systems/equipment';
-import type { InventoryItem } from '../systems/equipment';
+import { inventoryFromLoadout, createLoadout } from '../systems/equipment';
+import type { InventoryItem, Loadout } from '../systems/equipment';
 
 // 仅静态预览，不创建钱包、棋盘运行状态、输入控制器、战斗或计时器。
 export class ReadyScene extends Phaser.Scene {
@@ -14,8 +14,8 @@ export class ReadyScene extends Phaser.Scene {
 
   constructor() { super('ReadyScene'); }
 
-  create(data: { inventory?: InventoryItem[] } = {}): void {
-    this.inventory = data.inventory ?? createInventory();
+  create(data: { inventory?: InventoryItem[]; loadout?: Loadout } = {}): void {
+    this.inventory = data.inventory ?? inventoryFromLoadout(data.loadout);
     this.openingItems = false;
     this.startState = 'READY';
     drawBoard(this, testMap);

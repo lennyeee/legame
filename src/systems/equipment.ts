@@ -15,7 +15,7 @@ export interface Loadout {
 
 // 本次网页会话内的开发背包；不持久化，局内系统只读取独立loadout快照。
 export function createInventory(): InventoryItem[] {
-  return [{ id: 'farmer', level: 1, owned: true, equipped: false }];
+  return itemDefinitions.map(({ id }) => ({ id, level: 1, owned: true, equipped: false }));
 }
 
 export function setEquipped(inventory: InventoryItem[], id: string, equipped: boolean,
@@ -53,4 +53,13 @@ export function createLoadout(inventory: readonly InventoryItem[],
 export function copyLoadout(loadout?: Loadout): Loadout {
   return createLoadout([...(loadout?.active ?? []), ...(loadout?.passive ?? [])]
     .map(item => ({ ...item, owned: true, equipped: true })));
+}
+
+export function inventoryFromLoadout(loadout?: Loadout): InventoryItem[] {
+  const inventory = createInventory();
+  for (const carried of [...(loadout?.active ?? []), ...(loadout?.passive ?? [])]) {
+    const item = inventory.find(entry => entry.id === carried.id);
+    if (item) { item.level = carried.level; setEquipped(inventory, item.id, true); }
+  }
+  return inventory;
 }

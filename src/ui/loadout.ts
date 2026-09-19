@@ -4,11 +4,14 @@ import { equipmentLimits, itemDefinitions } from '../config/equipment';
 import type { Loadout } from '../systems/equipment';
 import { label } from './text';
 
-// 纯展示，无输入和道具效果。底部留出版本号，左右空槽不覆盖征兵按钮。
-export function drawLoadout(scene: Phaser.Scene, loadout: Loadout): void {
+export interface ActiveSlotView { box: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }
+// 只绘制槽位；主动道具输入与效果由独立控制器负责。
+export function drawLoadout(scene: Phaser.Scene, loadout: Loadout): ActiveSlotView[] {
+  const active: ActiveSlotView[] = [];
   for (const x of [80, 670]) {
-    scene.add.rectangle(x, controlsLayout.reserveY, 74, 86, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
-    label(scene, x, controlsLayout.reserveY, '空', 20, '#999284');
+    const box = scene.add.rectangle(x, controlsLayout.reserveY, 74, 86, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
+    const text = label(scene, x, controlsLayout.reserveY, '空', 20, '#999284');
+    active.push({ box, text });
   }
   for (let index = 0; index < equipmentLimits.passive; index++) {
     const x = index < 3 ? 120 : 630;
@@ -18,4 +21,5 @@ export function drawLoadout(scene: Phaser.Scene, loadout: Loadout): void {
     scene.add.ellipse(x, y, controlsLayout.passiveWidth, controlsLayout.passiveHeight, 0xeee9dc).setStrokeStyle(1, 0xc2bcae);
     label(scene, x, y, definition?.name ?? '—', 18, '#697e67');
   }
+  return active;
 }
