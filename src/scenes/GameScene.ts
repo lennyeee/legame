@@ -13,6 +13,8 @@ import { copyLoadout } from '../systems/equipment';
 import type { Loadout } from '../systems/equipment';
 import { drawLoadout } from '../ui/loadout';
 import { boardDisplayScene } from '../ui/boardDisplay';
+import { FarmerProduction } from '../systems/FarmerProduction';
+import { FarmerView } from '../ui/FarmerView';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -22,8 +24,9 @@ export class GameScene extends Phaser.Scene {
   create(data: { loadout?: Loadout } = {}): void {
     const loadout = copyLoadout(data.loadout);
     this.input.enabled = true;
-    const state = createRecruitmentState();
+    const state = createRecruitmentState(loadout);
     const board = createBoardState(testMap);
+    const farmers = new FarmerProduction(board, state);
     const moneyText = label(this, 170, 55, '', 32);
     const waveText = label(this, 625, 55, '', 28);
     const boardScene = boardDisplayScene(this);
@@ -36,6 +39,8 @@ export class GameScene extends Phaser.Scene {
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
     const deployment = new DeploymentController(this, board, state, deploymentView, result => {
+      farmers.sync();
+      farmerView.refresh();
       const messages = {
         invalid: '无法放置，已返回原位',
         move: '移动完成',
@@ -58,6 +63,8 @@ export class GameScene extends Phaser.Scene {
           controlsLayout.recruitWidth, controlsLayout.recruitHeight, 20);
       buttonText.setText(`来财 $${gameConfig.recruitmentCost}`);
     };
+    const farmerView = new FarmerView(this, testMap, farmers,
+      () => !ended && this.input.enabled && !deployment.isDragging, refresh);
 
     button.on('pointerdown', () => {
       // 防止另一根手指在拖动中征兵，替换正在拖动的槽位。
@@ -90,12 +97,25 @@ export class GameScene extends Phaser.Scene {
       healthText.setText('♥'.repeat(progress.health));
       if (!ended && progress.status !== 'playing') {
         ended = true;
+        farmers.stop();
         incomeTimer.remove();
         deployment.cancel();
         this.input.enabled = false;
         this.scene.pause();
         this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health, loadout });
       }
+    });
+    // 排在战斗帧更新之后：本帧若已结算，不再推进生产或过期。
+    const updateFarmers = (_time: number, delta: number): void => {
+      if (ended) return;
+      farmers.update(delta);
+      farmerView.refresh();
+    };
+    this.events.on(Phaser.Scenes.Events.UPDATE, updateFarmers);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.events.off(Phaser.Scenes.Events.UPDATE, updateFarmers);
+      farmers.destroy();
+      farmerView.destroy();
     });
     const pauseButton = this.add.rectangle(75, 55, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });

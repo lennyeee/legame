@@ -1,7 +1,7 @@
 import type { BoardMap } from '../config/maps';
 import type { RecruitmentState } from './recruitment';
 import { mergeItems } from './items';
-import { isUnit } from './items';
+import { isUnit, isHeroLetter } from './items';
 import { initializeHeroProgression, getHeroProgression } from './heroProgression';
 import type { Deployable, ReserveItem } from './items';
 import { MAX_LEVEL } from '../config/levels';
@@ -73,7 +73,7 @@ export function getDropAction(
   if (occupant === '铲') return 'invalid';
   if (!occupant) return 'move';
   if (item.type === occupant.type && isUnit(item) === isUnit(occupant) && occupant.level >= MAX_LEVEL
-    && (!isUnit(item) || item.level === occupant.level)) return 'invalid';
+    && (isHeroLetter(item) || item.level === occupant.level)) return 'invalid';
   if (mergeItems(item, occupant)) return 'merge';
   return 'swap';
 }
@@ -90,7 +90,7 @@ export function applyDrop(
   } else {
     const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
       ? mergeItems(item, displacedItem)! : item;
-    if (action === 'merge' && displacedItem && displacedItem !== '铲' && !isUnit(displacedItem)) {
+    if (action === 'merge' && isHeroLetter(displacedItem)) {
       displacedItem.level = result !== '铲' ? result.level : displacedItem.level;
       setItem(board, recruitment, target, displacedItem);
     } else setItem(board, recruitment, target, result);

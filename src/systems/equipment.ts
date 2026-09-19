@@ -13,7 +13,7 @@ export interface Loadout {
   readonly passive: readonly LoadoutItem[];
 }
 
-// 本次网页会话内的开发背包；不持久化，不接入征兵或道具效果。
+// 本次网页会话内的开发背包；不持久化，局内系统只读取独立loadout快照。
 export function createInventory(): InventoryItem[] {
   return [{ id: 'farmer', level: 1, owned: true, equipped: false }];
 }

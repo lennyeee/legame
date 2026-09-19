@@ -34,6 +34,7 @@ const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
 const { heroCombat } = await import('../src/config/heroes.ts');
+const { combatConfig } = await import('../src/config/combat.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
@@ -168,7 +169,7 @@ test('背包详情、装卸返回、单局被动栏及连续重开保留loadout'
     for(const x of [80,670])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1018).interactive,true);
     p.run(1000);assert.equal(p.text(170, 55),'$ 101');
     p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
-    assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(625, 55),'第 1 波');
+    assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.text(625, 55),'第 1 波');
   }
   const counts=waveConfig.enemyCounts;
   try {
@@ -210,7 +211,7 @@ test('开始后统一初始化一次，重复请求无效，资源/波次从点�
   assert.equal(p.startCount(), 1);
   assert.equal(p.text(170, 55), '$ 100');
   assert.equal(p.text(625, 55), '第 1 波');
-  assert.equal(p.game.events.listenerCount('update'), 1);
+  assert.equal(p.game.events.listenerCount('update'),2);
   p.run(990);assert.equal(p.text(170, 55), '$ 100');
   p.run(10);assert.equal(p.text(170, 55), '$ 101');
   assert.equal(p.game.time._active.length, 1);
@@ -286,7 +287,7 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       p.click(375,765);
       assert.equal(linkedBorder(),false);
       assert.equal(p.objects.get(p.game).some(o => ['小','美','Zz'].includes(o.text)),false);
-      assert.equal(p.game.events.listenerCount('update'),1);
+      assert.equal(p.game.events.listenerCount('update'),2);
       p.run(2000);
       assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='lineBetween')),false);
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
@@ -360,7 +361,7 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');
       const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
       p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
-      assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,1);
+      assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.game.time._active.length,1);
       assert.equal(p.objects.get(p.game).some(o=>o.text===name||o.text==='Zz'),false);
     } finally { Math.random=random; }
   });
@@ -399,7 +400,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
     p.run(5000);
     p.click(375, 765);
     assert.equal(p.game.time._active.length, 1);
-    assert.equal(p.game.events.listenerCount('update'), 1);
+    assert.equal(p.game.events.listenerCount('update'),2);
   }
 });
 
@@ -415,7 +416,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       assert.equal(p.text(730, 1314), 'v' + GAME_VERSION);
       assert.equal(p.text(501.5625,658.4375), '锁');
       assert.equal(p.objects.get(p.game).filter(o => o.kind === 'text' && o.text.startsWith('Lv.')).length, 0);
-      assert.equal(p.game.events.listenerCount('update'), 1);
+      assert.equal(p.game.events.listenerCount('update'),2);
       assert.equal(p.globalEvents.listenerCount('blur'), 2);
       assert.equal(p.game.input.listenerCount('pointerdown'), 2);
       p.run(10);
@@ -587,8 +588,8 @@ test('暂停重开取消保持冻结，确认复用完整重开并保留loadout�
  try {
   const p=pve(false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
   for(let round=0;round<3;round++){
-   Math.random=()=>15.5/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-   Math.random=()=>16.5/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+   Math.random=()=>15.5/30;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+   Math.random=()=>16.5/30;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
    p.run(12000);p.click(75,55);const snapshot=p.snapshot(),clock=p.game.time;
    assert.equal(p.text(375,875,p.overlay),'重新开始');p.click(375,875);
    assert.equal(p.text(375,565,p.overlay),'确定重新开始？');assert.equal(p.text(375,655,p.overlay),'当前进度将丢失。');
@@ -598,7 +599,7 @@ test('暂停重开取消保持冻结，确认复用完整重开并保留loadout�
    assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
    assert.equal(p.text(170,55),'$ 100');assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,938.5625),'♥♥♥');
    assert.equal(p.text(120,1110),'农民');assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.1'||o.text==='Zz'||o.text==='小美'),false);
-   assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.input.listenerCount('pointerdown'),2);
+   assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.game.input.listenerCount('pointerdown'),2);
    p.run(1000);assert.equal(p.text(170,55),'$ 101');assert.equal(p.game.time._active.length,1);
   }
  }finally{Math.random=random;}
@@ -611,4 +612,54 @@ test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',
    scene.input.emit('pointerdown',pointer);render();assert.equal(range.radius,expected);
    scene.input.emit('pointerup',pointer);assert.equal(range.circle,false);
  }
+});
+
+
+function farmerGame(){
+ const p=pve(false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
+ return p;
+}
+const farmCash=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&/^\$[0-9]+$/.test(o.text)&&o.visible);
+const farmMoney=p=>Number(p.text(170,55).slice(2));
+
+test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点击/过期旧对象不加钱',()=>{
+ const random=Math.random,speed=combatConfig.enemy.moveSpeed;
+ try{
+  combatConfig.enemy.moveSpeed=0;Math.random=()=>0.9;const p=farmerGame();
+  p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+  assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,552.6875),'');
+  p.run(3990);p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
+  p.click(375,765);p.run(4000);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
+  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28);
+  const emit=()=>badge.emit('pointerdown',{},0,0,{stopPropagation(){}});
+  p.click(75,55);const ready=p.snapshot(),money=farmMoney(p);p.run(10000);emit();assert.equal(farmMoney(p),money);assert.equal(p.snapshot(),ready);
+  p.click(375,765);p.run(4990);assert.equal(farmCash(p).length,1);
+  const before=farmMoney(p);let stopped=false;
+  badge.emit('pointerdown',{},0,0,{stopPropagation(){stopped=true;}});
+  assert.equal(stopped,true);assert.equal(farmMoney(p),before+5);emit();assert.equal(farmMoney(p),before+5);assert.equal(farmCash(p).length,0);
+  p.run(7990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
+  p.drag([164.0625,574.0625],[248.4375,574.0625]);assert.equal(farmCash(p)[0].x,248.4375);
+  const prior=farmMoney(p);p.run(5000);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),prior+5); // 只有每秒被动收入。
+  p.run(7990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
+  p.drag([248.4375,574.0625],[183,1018]);assert.equal(farmCash(p).length,0);
+  p.drag([183,1018],[248.4375,574.0625]);p.run(7990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
+  p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),100);
+  emit();assert.equal(farmMoney(p),100);assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.text(120,1110),'农民');
+  p.run(8000);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),108);assert.equal(p.game.time._active.length,1);
+ }finally{Math.random=random;combatConfig.enemy.moveSpeed=speed;}
+});
+for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益冻结不可领取，再来一局清空并保留农民loadout',()=>{
+ const random=Math.random,counts=waveConfig.enemyCounts;
+ try{
+  waveConfig.enemyCounts=win?[1]:counts;Math.random=()=>0.9;const p=farmerGame();
+  p.click(375,1158);p.run(win?5000:9000);p.drag([183,1018],[164.0625,574.0625]);
+  p.run(8000);assert.equal(farmCash(p).length,1);
+  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28);
+  p.run(5000);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+  const ended=p.snapshot(),money=farmMoney(p);p.run(30000);badge.emit('pointerdown',{},0,0,{stopPropagation(){}});
+  assert.equal(p.snapshot(),ended);assert.equal(farmMoney(p),money);
+  p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),100);assert.equal(p.text(120,1110),'农民');
+  p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));
+  assert.equal(p.game.events.listenerCount('update'),2);
+ }finally{Math.random=random;waveConfig.enemyCounts=counts;}
 });

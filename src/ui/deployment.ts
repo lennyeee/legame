@@ -8,7 +8,7 @@ import { label } from './text';
 import { UnitView } from './unit';
 import { getHeroLinks } from '../systems/heroActivation';
 import { getHeroProgression } from '../systems/heroProgression';
-import { isUnit } from '../systems/items';
+import { isHeroLetter } from '../systems/items';
 import { heroVisuals } from '../config/heroes';
 
 // 只负责下半区和待放置栏；上半场没有可命中的交互格。
@@ -66,7 +66,7 @@ export class DeploymentView {
       view.box.setVisible(!linked.has(index));
       view.text.setText(tile.unit ? '' : tile.unlocked ? '+' : '锁')
         .setColor(tile.unlocked ? '#798970' : '#999284');
-      const sleeping = !!tile.unit && !isUnit(tile.unit) && !linked.has(index)
+      const sleeping = isHeroLetter(tile.unit) && !linked.has(index)
         && !(source?.kind === 'tile' && source.index === index);
       view.unit.show(tile.unit, linked.has(index), sleeping);
       view.sleep.setText(sleeping ? 'Zz' : '');
