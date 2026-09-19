@@ -36,7 +36,7 @@ export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
 
     if (mirrored) cells.forEach((cell) => {
       scene.add.rectangle(cell.x, cell.y, map.cellSize, map.cellSize,
-        cell.unlocked ? 0xfffcf4 : 0xdcd7ca,
+        cell.unlocked ? 0xfffcf4 : 0xc8c0af,
       ).setStrokeStyle(2, cell.unlocked ? 0x87937d : 0xc2bcae).setAlpha(alpha);
       label(scene, cell.x, cell.y, cell.unlocked ? '+' : '锁',
         cell.unlocked ? 32 : 21, cell.unlocked ? '#798970' : '#999284',

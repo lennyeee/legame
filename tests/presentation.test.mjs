@@ -63,6 +63,7 @@ function pve(startImmediately = true) {
         if (key === 'setPosition') return (x,y) => {t.x=x;t.y=y;return proxy;};
         if (key === 'setScale') return (scale) => {t.scale=scale;return proxy;};
         if (key === 'setVisible') return value => { t.visible = value; return proxy; };
+        if (key === 'disableInteractive') return () => {t.interactive=false;return proxy;};
         if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
         if (key === 'setWordWrapWidth') return (width, advanced) => { t.wrapWidth=width;t.advancedWrap=advanced;return proxy; };
         if (key === 'setFixedSize') return (width,height) => { t.fixedWidth=width;t.fixedHeight=height;return proxy; };
@@ -478,7 +479,7 @@ test('不同地图及分界线沿用同一变换，无第二套上半坐标', ()
   });
 });
 
-function setup() {
+function setup(unit = { type: '刀', level: 1 }) {
   const graphics = [];
   const scene = {
     events: new EventEmitter(), input: new EventEmitter(), game: { events: new EventEmitter() },
@@ -488,14 +489,14 @@ function setup() {
         circle: false,
         clear() { this.circle = false; return this; },
         setDepth() { return this; }, fillStyle() { return this; }, lineStyle() { return this; },
-        fillCircle() { this.circle = true; return this; }, strokeCircle() { return this; },
+        fillCircle(_x,_y,radius) { this.circle = true; this.radius=radius; return this; }, strokeCircle() { return this; },
       };
       graphics.push(graphic);
       return graphic;
     } },
   };
   const board = createBoardState(testMap);
-  board.tiles[0].unit = { type: '刀', level: 1 };
+  board.tiles[0].unit = unit;
   const deployment = { draggedTile: null };
   let position = { kind: 'tile', index: 0 };
   new BattleController(scene, testMap, board, { money: 100 }, deployment,
@@ -578,4 +579,36 @@ test('v0.541保持顶部、放大紧凑七槽、竖向椭圆被动栏和上移�
  for(let i=0;i<11;i++)p.click(375,1158);
  assert.equal(p.text(375,1264),'美金不足，请等待资源增长');assert.equal(p.text(375,1158),'来财 $10');
  assert.equal(button.y,1158);p.run(10000);assert.equal(p.text(375,1264),'美金已足够，可以再次征兵');
+});
+
+
+test('暂停重开取消保持冻结，确认复用完整重开并保留loadout，无重复循环',()=>{
+ const random=Math.random;
+ try {
+  const p=pve(false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
+  for(let round=0;round<3;round++){
+   Math.random=()=>15.5/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+   Math.random=()=>16.5/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+   p.run(12000);p.click(75,55);const snapshot=p.snapshot(),clock=p.game.time;
+   assert.equal(p.text(375,875,p.overlay),'重新开始');p.click(375,875);
+   assert.equal(p.text(375,565,p.overlay),'确定重新开始？');assert.equal(p.text(375,655,p.overlay),'当前进度将丢失。');
+   p.run(10000);p.click(375,765);assert.equal(p.isActive(),false);assert.equal(p.snapshot(),snapshot);
+   p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');p.run(10000);assert.equal(p.snapshot(),snapshot);
+   p.click(375,875);p.click(530,765);assert.equal(p.isActive(),true);
+   assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
+   assert.equal(p.text(170,55),'$ 100');assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,938.5625),'♥♥♥');
+   assert.equal(p.text(120,1110),'农民');assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.1'||o.text==='Zz'||o.text==='小美'),false);
+   assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.input.listenerCount('pointerdown'),2);
+   p.run(1000);assert.equal(p.text(170,55),'$ 101');assert.equal(p.game.time._active.length,1);
+  }
+ }finally{Math.random=random;}
+});
+
+
+test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',()=>{
+ for(const [type,level,expected]of [['枪',1,150],['枪',5,150],['弓',1,187.5],['弓',2,225],['弓',5,225]]){
+   const {scene,pointer,render,range}=setup({type,level});
+   scene.input.emit('pointerdown',pointer);render();assert.equal(range.radius,expected);
+   scene.input.emit('pointerup',pointer);assert.equal(range.circle,false);
+ }
 });

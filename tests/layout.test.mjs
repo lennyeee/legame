@@ -10,10 +10,11 @@ const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
 const {buildPath,pointOnPath}=await import('../src/combat/path.ts');
 const {heroRecipes}=await import('../src/config/heroes.ts');
 
-test('当前地图8×5方格紧贴，16部署（9已解锁7锁定），道路及不可用位置互斥',()=>{
+test('当前地图8×5方格紧贴，28部署（9已解锁19锁定），所有非道路格都有地皮状态',()=>{
  assert.equal(CELL_SIZE,75);assert.equal(CELL_SIZE*8,battleLayout.width);assert.equal(HALF_HEIGHT,375);
- assert.equal(testMap.spaces.length,40);assert.equal(testMap.cells.length,16);
- assert.equal(testMap.cells.filter(c=>c.unlocked).length,9);
+ assert.equal(testMap.spaces.length,40);assert.equal(testMap.cells.length,28);
+ assert.equal(testMap.cells.filter(c=>c.unlocked).length,9);assert.equal(testMap.cells.filter(c=>!c.unlocked).length,19);
+ assert.equal(testMap.spaces.some(s=>s.kind==='unused'),false);
  assert.equal(new Set(testMap.spaces.map(p=>`${p.column}:${p.row}`)).size,40);
  for(const space of testMap.spaces){
    assert.deepEqual({x:space.x,y:space.y},gridToWorld(space));

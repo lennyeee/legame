@@ -21,7 +21,7 @@ export class ReadyScene extends Phaser.Scene {
     drawBoard(this, testMap);
     for (const cell of testMap.cells) {
       this.add.rectangle(cell.x, cell.y, testMap.cellSize, testMap.cellSize,
-        cell.unlocked ? 0xfffcf4 : 0xdcd7ca).setStrokeStyle(2, cell.unlocked ? 0x87937d : 0xc2bcae);
+        cell.unlocked ? 0xfffcf4 : 0xc8c0af).setStrokeStyle(2, cell.unlocked ? 0x87937d : 0xc2bcae);
       label(this, cell.x, cell.y, cell.unlocked ? '+' : '锁', 24);
     }
     this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.55).setInteractive();

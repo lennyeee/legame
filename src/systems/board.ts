@@ -4,6 +4,7 @@ import { mergeItems } from './items';
 import { isUnit } from './items';
 import { initializeHeroProgression, getHeroProgression } from './heroProgression';
 import type { Deployable, ReserveItem } from './items';
+import { MAX_LEVEL } from '../config/levels';
 
 export interface TileState {
   unlocked: boolean;
@@ -71,6 +72,8 @@ export function getDropAction(
   // 铲子不参与交换，防止棋盘单位换回栏位时把铲子送进棋盘。
   if (occupant === '铲') return 'invalid';
   if (!occupant) return 'move';
+  if (item.type === occupant.type && isUnit(item) === isUnit(occupant) && occupant.level >= MAX_LEVEL
+    && (!isUnit(item) || item.level === occupant.level)) return 'invalid';
   if (mergeItems(item, occupant)) return 'merge';
   return 'swap';
 }
@@ -88,7 +91,7 @@ export function applyDrop(
     const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
       ? mergeItems(item, displacedItem)! : item;
     if (action === 'merge' && displacedItem && displacedItem !== '铲' && !isUnit(displacedItem)) {
-      displacedItem.level++;
+      displacedItem.level = result !== '铲' ? result.level : displacedItem.level;
       setItem(board, recruitment, target, displacedItem);
     } else setItem(board, recruitment, target, result);
   }

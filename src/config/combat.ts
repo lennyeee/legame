@@ -1,4 +1,5 @@
 import type { Unit } from '../systems/items';
+import { attackRangeCells, rangePixels } from './ranges';
 
 export interface CombatStats {
   damage: number;
@@ -7,17 +8,17 @@ export interface CombatStats {
 }
 
 export const unitCombatStats: Record<Unit['type'], CombatStats> = {
-  刀: { damage: 12, attackInterval: 450, range: 115 },
-  枪: { damage: 18, attackInterval: 1250, range: 250 },
-  弓: { damage: 30, attackInterval: 1700, range: 330 },
-  骑: { damage: 22, attackInterval: 1600, range: 145 },
+  刀: { damage: 12, attackInterval: 450, range: rangePixels(attackRangeCells.刀) },
+  枪: { damage: 18, attackInterval: 1250, range: rangePixels(attackRangeCells.枪) },
+  弓: { damage: 30, attackInterval: 1700, range: rangePixels(attackRangeCells.弓) },
+  骑: { damage: 22, attackInterval: 1600, range: rangePixels(attackRangeCells.骑) },
 };
 
 export const combatConfig = {
   enemy: { maxHp: 90, moveSpeed: 55, killReward: 5 },
   stepMs: 1000 / 60,
   maxFrameMs: 250, // 切回页面时不瞬间补发大量敌人和攻击
-  growth: { damageMultiplier: 1.55, rangePerLevel: 0.06, attackSpeedPerLevel: 0.08 },
+  growth: { damageMultiplier: 1.55, attackSpeedPerLevel: 0.08 },
   spearWidth: 32,
   arrowSpeed: 560,
   visuals: {
@@ -39,6 +40,6 @@ export function getCombatStats(unit: Unit): CombatStats {
   return {
     damage: Math.round(base.damage * combatConfig.growth.damageMultiplier ** upgrades),
     attackInterval: base.attackInterval / (1 + combatConfig.growth.attackSpeedPerLevel * upgrades),
-    range: base.range * (1 + combatConfig.growth.rangePerLevel * upgrades),
+    range: unit.type === '弓' && unit.level >= 2 ? rangePixels(attackRangeCells.弓进阶) : base.range,
   };
 }

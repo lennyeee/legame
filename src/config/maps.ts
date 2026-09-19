@@ -19,7 +19,7 @@ export interface BoardMap {
 }
 
 export interface GridPoint { column: number; row: number }
-export interface MapSpace extends MapPoint, GridPoint { kind: 'path' | 'deployment' | 'locked' | 'unused' }
+export interface MapSpace extends MapPoint, GridPoint { kind: 'path' | 'deployment' | 'locked' }
 export function gridToWorld(point: GridPoint): MapPoint {
   return { x: battleLayout.left + (point.column + 0.5) * CELL_SIZE,
     y: MIRROR_Y + (point.row + 0.5) * CELL_SIZE };
@@ -42,10 +42,12 @@ const spaces: MapSpace[] = Array.from({length:battleLayout.columns * battleLayou
       &&point.row>=Math.min(start.row,end.row)&&point.row<=Math.max(start.row,end.row);
   });
   const cell=deploymentGrid.find(([column,row])=>column===point.column&&row===point.row);
-  return {...point,...gridToWorld(point),kind:road?'path':cell?(cell[2]?'deployment':'locked'):'unused'};
+  return {...point,...gridToWorld(point),kind:road?'path':cell?.[2]?'deployment':'locked'};
 });
 export const testMap: BoardMap = {
   name:'训练场', mirrorY:MIRROR_Y, cellSize:CELL_SIZE, spaces,
   path:pathGrid.map(gridToWorld),
-  cells:deploymentGrid.map(([column,row,unlocked])=>({...gridToWorld({column,row}),unlocked})),
+  cells:[...deploymentGrid.map(([column,row,unlocked])=>({...gridToWorld({column,row}),unlocked})),
+    ...spaces.filter(space=>space.kind==='locked'&&!deploymentGrid.some(([column,row])=>column===space.column&&row===space.row))
+      .map(space=>({x:space.x,y:space.y,unlocked:false}))],
 };

@@ -61,7 +61,7 @@ export class DeploymentView {
     }
     this.tiles.forEach((view, index) => {
       const tile = board.tiles[index]!;
-      view.box.setFillStyle(tile.unlocked ? 0xfffcf4 : 0xdcd7ca)
+      view.box.setFillStyle(tile.unlocked ? 0xfffcf4 : 0xc8c0af)
         .setStrokeStyle(2, tile.unlocked ? 0x87937d : 0xc2bcae);
       view.box.setVisible(!linked.has(index));
       view.text.setText(tile.unit ? '' : tile.unlocked ? '+' : '锁')

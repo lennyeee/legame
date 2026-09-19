@@ -88,8 +88,8 @@ test('同类型不同等级也只交换、不合成', () => {
   assert.deepEqual(board.tiles[1].unit, unit('刀', 1));
 });
 
-test('同类型同等级在目标格升级，清空来源，无等级上限', () => {
-  for (const level of [1, 2, 5, 6, 20]) {
+test('同类型同等级在目标格升级，清空来源，逐级升至Lv.5', () => {
+  for (const level of [1, 2, 3, 4]) {
     const { board, recruitment } = setup();
     board.tiles[0].unit = unit('骑', level);
     board.tiles[1].unit = unit('骑', level);

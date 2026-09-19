@@ -30,7 +30,7 @@ test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
  reserve.slots[1]=letter('饼',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
 });
 for(const levels of [[3,1],[2,5],[7,7]])test(`${levels.join('+')}向高等级同步且拆开永久保留`,()=>{
- const {board,reserve,growth,link}=setup(levels);const high=Math.max(...levels);
+ const {board,reserve,growth,link}=setup(levels);const high=Math.min(5,Math.max(...levels));
  assert.equal(link.level,high);assert.equal(link.currentExp,0);
  assert.deepEqual([board.tiles[0].unit.level,board.tiles[1].unit.level],[high,high]);
  applyDrop(board,reserve,p('tile',1),p('slot',0));assert.equal(growth.links.size,0);assert.equal(reserve.slots[0].level,high);
@@ -43,12 +43,12 @@ test('通用配方支持未来共享字，不修改生产征兵池',()=>{
  applyDrop(board,reserve,p('tile',1),p('slot',0));board.tiles[1].unit=letter('忠');growth.sync();assert.equal(board.tiles[1].unit.level,3);
  }finally{heroRecipes.splice(-2);}
 });
-for(const a of ['slot','tile'])for(const b of ['slot','tile'])for(const material of [1,4,20])test(`${a}→${b}同字Lv.${material}材料只让目标6→7`,()=>{
+for(const a of ['slot','tile'])for(const b of ['slot','tile'])for(const material of [1,4,5])test(`${a}→${b}同字Lv.${material}材料只让目标4→5`,()=>{
  const board=createBoardState(testMap),reserve=createRecruitmentState();
- const source=p(a,0),target=p(b,2);const item=letter('小',6);
+ const source=p(a,0),target=p(b,2);const item=letter('小',4);
  function put(pos,value){if(pos.kind==='tile')board.tiles[pos.index].unit=value;else reserve.slots[pos.index]=value;}
  put(source,letter('小',material));put(target,item);
- assert.equal(applyDrop(board,reserve,source,target),'merge');assert.equal(item.level,7);
+ assert.equal(applyDrop(board,reserve,source,target),'merge');assert.equal(item.level,5);
  assert.equal(a==='tile'?board.tiles[0].unit:reserve.slots[0],null);
  assert.equal(b==='tile'?board.tiles[2].unit:reserve.slots[2],item);
 });

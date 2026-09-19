@@ -91,7 +91,7 @@ test('刀近距离快速单体攻击，范围外不受伤', () => {
 test('枪朝目标方向一次穿透多个沿线敌人', () => {
   const lineMap = { ...map, cells: [{ x: 400, y: 0, unlocked: true }] };
   const { sim } = setup('枪', { map: lineMap });
-  const a = enemyAt(sim, 200);
+  const a = enemyAt(sim, 260);
   const b = enemyAt(sim, 300);
   const outside = enemyAt(sim, 100);
   const events = run(sim, 1250);
@@ -99,7 +99,7 @@ test('枪朝目标方向一次穿透多个沿线敌人', () => {
   assert.equal(b.hp, 982);
   assert.equal(outside.hp, 1000);
   const shot = events.find(event => event.kind === 'attack');
-  assert.equal(shot.end.x, 150);
+  assert.equal(shot.end.x, 250);
 });
 
 test('枪的宽度、前向射线与最大射程限制都有效', () => {
@@ -113,8 +113,8 @@ test('枪的宽度、前向射线与最大射程限制都有效', () => {
 
 test('弓远程单体弹道在命中时扣血，不在发射时扣血', () => {
   const { sim } = setup('弓');
-  const target = enemyAt(sim, 650);
-  const other = enemyAt(sim, 600);
+  const target = enemyAt(sim, 550);
+  const other = enemyAt(sim, 500);
   const far = enemyAt(sim, 900);
   run(sim, 1700);
   assert.equal(sim.projectiles.length, 1);
@@ -170,13 +170,13 @@ test('伤害归零、死亡移除、多个攻击者同帧击杀只奖励一次',
   assert.equal(wallet.money, 105);
 });
 
-test('所有兵种升级伤害、射程和攻速均提高', () => {
+test('升级提高伤害和攻速，仅弓在Lv.2增加射程', () => {
   for (const type of ['刀', '枪', '弓', '骑']) {
     const base = getCombatStats(unit(type));
-    for (const level of [2, 3, 6]) {
+    for (const level of [2, 3, 5]) {
       const upgraded = getCombatStats(unit(type, level));
       assert.ok(upgraded.damage > base.damage);
-      assert.ok(upgraded.range > base.range);
+      assert.equal(upgraded.range, type === '弓' ? 225 : base.range);
       assert.ok(upgraded.attackInterval < base.attackInterval);
     }
   }
@@ -192,7 +192,7 @@ test('待放置栏即使全是高级兵也不能攻击', () => {
 
 test('收回正在射箭的单位立即取消旧箭，栏位不会继续攻击', () => {
   const { sim, wallet, board } = setup('弓');
-  const enemy = enemyAt(sim, 650);
+  const enemy = enemyAt(sim, 550);
   run(sim, 1700);
   assert.equal(sim.projectiles.length, 1);
   assert.equal(applyDrop(board, wallet, tile(0), slot(0)), 'move');
@@ -205,7 +205,7 @@ test('收回正在射箭的单位立即取消旧箭，栏位不会继续攻击',
 test('移动和换位均清除旧位置的攻击状态与飞行箭', () => {
   for (const swap of [false, true]) {
     const { sim, wallet, board } = setup('弓');
-    const enemy = enemyAt(sim, 650);
+    const enemy = enemyAt(sim, 550);
     if (swap) board.tiles[1].unit = unit('刀');
     run(sim, 1700);
     const oldUnit = board.tiles[0].unit;
@@ -222,7 +222,7 @@ test('移动和换位均清除旧位置的攻击状态与飞行箭', () => {
 
 test('战斗中合成会取消旧箭并立即采用升级属性', () => {
   const { sim, wallet, board } = setup('弓');
-  const enemy = enemyAt(sim, 650);
+  const enemy = enemyAt(sim, 550);
   run(sim, 1700);
   const oldUnit = board.tiles[0].unit;
   wallet.slots[0] = unit('弓');
@@ -240,7 +240,7 @@ test('战斗中合成会取消旧箭并立即采用升级属性', () => {
 
 test('拖动期间暂停来源单位，取消旧箭，无幽灵伤害', () => {
   const { sim } = setup('弓');
-  const enemy = enemyAt(sim, 650);
+  const enemy = enemyAt(sim, 550);
   run(sim, 1700);
   sim.update(0, 0);
   assert.equal(sim.projectiles.length, 0);
@@ -251,14 +251,14 @@ test('拖动期间暂停来源单位，取消旧箭，无幽灵伤害', () => {
 test('弓箭目标死亡、消失或出界时取消，随后可重新索敌', () => {
   for (const reason of ['dead', 'gone', 'range']) {
     const { sim } = setup('弓');
-    const enemy = enemyAt(sim, 650);
+    const enemy = enemyAt(sim, 550);
     run(sim, 1700);
     if (reason === 'dead') enemy.hp = 0;
     if (reason === 'gone') sim.enemies = [];
     if (reason === 'range') enemy.distance = 950;
     run(sim, 30);
     assert.equal(sim.projectiles.length, 0);
-    const next = enemyAt(sim, 600);
+    const next = enemyAt(sim, 500);
     run(sim, 2300);
     assert.ok(next.hp < next.maxHp);
   }

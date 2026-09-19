@@ -4,6 +4,7 @@ import { getHeroLinks } from './heroActivation';
 import type { HeroLink } from './heroActivation';
 import { heroExpRequired, getHeroDefinition } from '../config/heroes';
 import { createSkillState } from '../combat/skills';
+import { MAX_LEVEL, clampLevel } from '../config/levels';
 
 // 与本局棋盘同寿命，弱引用避免旧局状态被全局保存；不向单字写入临时EXP。
 const sessions = new WeakMap<BoardState, HeroProgression>();
@@ -31,7 +32,7 @@ export class HeroProgression {
     for (const [key, link] of this.links) if (!keys.has(key)) { link.skill = null; this.links.delete(key); }
     for (const placement of placements) {
       let link = this.links.get(placement.key);
-      const level = Math.max(placement.left.level, placement.right.level);
+      const level = clampLevel(Math.max(placement.left.level, placement.right.level));
       placement.left.level = placement.right.level = level;
       if (!link || link.left !== placement.left || link.right !== placement.right || link.heroId !== placement.heroId) {
         if (link) link.skill = null;
@@ -43,6 +44,7 @@ export class HeroProgression {
         link.level = level;
         link.currentExp = 0; // 同字升级/外部等级同步，不继承旧等级EXP。
       }
+      if (level === MAX_LEVEL) link.currentExp = 0;
     }
     for (const [id, set] of this.participants) {
       for (const link of set) if (!this.isActive(link)) set.delete(link);
@@ -62,12 +64,14 @@ export class HeroProgression {
   awardKill(enemyId: number, exp: number): void {
     for (const link of this.participants.get(enemyId) ?? []) {
       if (!this.isActive(link)) continue;
+      if (link.level >= MAX_LEVEL) { link.currentExp = 0; continue; }
       link.currentExp += exp;
-      while (link.currentExp >= heroExpRequired(link.level)) {
+      while (link.level < MAX_LEVEL && link.currentExp >= heroExpRequired(link.level)) {
         link.currentExp -= heroExpRequired(link.level);
         link.level++;
         link.left.level = link.right.level = link.level;
       }
+      if (link.level === MAX_LEVEL) link.currentExp = 0;
     }
     this.participants.delete(enemyId);
   }
