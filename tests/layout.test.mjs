@@ -44,10 +44,10 @@ test('显示放大不改变逻辑棋盘，HUD间距及圆形被动槽边界',()=
  assert.deepEqual(boardToScreen(675,940),{x:712.5,y:953.75});
  assert.equal(600*boardDisplay.scale/750,0.9);assert.equal(CELL_SIZE*boardDisplay.scale,84.375);
  assert.equal(CELL_SIZE,75);assert.equal(controlsLayout.top,953.75);
- assert.ok(controlsLayout.reserveY-42>controlsLayout.top);
- assert.ok(controlsLayout.reserveY+42<controlsLayout.recruitY-controlsLayout.recruitHeight/2);
+ assert.ok(controlsLayout.reserveY-45>controlsLayout.top);
+ assert.ok(controlsLayout.reserveY+45<controlsLayout.recruitY-controlsLayout.recruitHeight/2);
  assert.ok(controlsLayout.recruitY+controlsLayout.recruitHeight/2<controlsLayout.feedbackY-10);
- assert.ok(controlsLayout.passiveY+2*controlsLayout.passiveStep+controlsLayout.passiveRadius<controlsLayout.feedbackY);
+ assert.ok(controlsLayout.passiveY+2*controlsLayout.passiveStep+controlsLayout.passiveHeight/2<1314);
 });
 for(const type of ['刀','枪','弓','骑',...heroRecipes.map(r=>r.id)])test(`新地图${type}正常索敌攻击且路径可完整漏怪`,()=>{
  const board=createBoardState(testMap),wallet={money:0};

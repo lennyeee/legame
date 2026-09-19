@@ -34,13 +34,12 @@ export class DeploymentView {
         sleep: label(scene, point.x, point.y - 19 * boardDisplay.scale, '', 12 * boardDisplay.scale, heroVisuals.sleepColor),
       };
     });
-    label(scene, 375, controlsLayout.reserveTitleY, '待放置', 24);
     this.slots = Array.from({ length: slotCount }, (_, index) => {
       const x = 375 + (index - (slotCount - 1) / 2) * controlsLayout.reserveStep;
       return {
         box: scene.add.rectangle(x, controlsLayout.reserveY, controlsLayout.reserveWidth, controlsLayout.reserveHeight, 0xfffcf4).setStrokeStyle(2, 0xd3caba),
         text: label(scene, x, controlsLayout.reserveY, '—', 38, '#b6ae9f'),
-        unit: new UnitView(scene, x, controlsLayout.reserveY, 72),
+        unit: new UnitView(scene, x, controlsLayout.reserveY, controlsLayout.reserveWidth - 8),
       };
     });
     this.highlights = scene.add.graphics().setDepth(20);
