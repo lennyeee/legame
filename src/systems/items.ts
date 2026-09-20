@@ -7,7 +7,7 @@ export interface Unit {
   level: number;
 }
 
-export interface HeroLetter { kind: 'heroLetter'; type: HeroLetterType; level: number }
+export interface HeroLetter { hasteEnhanced?: boolean; kind: 'heroLetter'; type: HeroLetterType; level: number }
 export interface Farmer { kind: 'farmer'; type: '农'; level: number }
 export type Deployable = Unit | HeroLetter | Farmer;
 export type ReserveItem = Deployable | '铲';
@@ -24,7 +24,8 @@ export function isFarmer(item: ReserveItem | null | undefined): item is Farmer {
 
 export function mergeItems(a: Deployable, b: Deployable): Deployable | null {
   if (b.level >= MAX_LEVEL) return null;
-  if (isHeroLetter(a) && isHeroLetter(b) && a.type === b.type) return { ...b, level: clampLevel(b.level + 1) };
+  if (isHeroLetter(a) && isHeroLetter(b) && a.type === b.type) return { ...b, level: clampLevel(b.level + 1),
+    ...(a.hasteEnhanced || b.hasteEnhanced ? { hasteEnhanced: true } : {}) };
   if (isFarmer(a) && isFarmer(b) && a.level === b.level) return { ...b, level: clampLevel(b.level + 1) };
   if (isUnit(a) && isUnit(b)) {
     return a.type === b.type && a.level === b.level ? { type: a.type, level: clampLevel(a.level + 1),

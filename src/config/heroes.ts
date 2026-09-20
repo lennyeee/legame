@@ -1,9 +1,9 @@
 import { attackRangeCells, rangePixels } from './ranges';
 
 export const heroRecipes = [
-  { id: 'xiaomei', name: '小美', letters: ['小', '美'], attackMode: 'single', skillId: 'xiaomei_barrage' },
-  { id: 'abing', name: '阿饼', letters: ['阿', '饼'], attackMode: 'splash', skillId: 'abing_execute' },
-  { id: 'xiaoliu', name: '小六', letters: ['小', '六'], attackMode: 'splash', skillId: 'xiaoliu_haste' },
+  { id: 'xiaomei', hasteCarrier: '美', name: '小美', letters: ['小', '美'], attackMode: 'single', skillId: 'xiaomei_barrage' },
+  { id: 'abing', hasteCarrier: '饼', name: '阿饼', letters: ['阿', '饼'], attackMode: 'splash', skillId: 'abing_execute' },
+  { id: 'xiaoliu', hasteCarrier: '六', name: '小六', letters: ['小', '六'], attackMode: 'splash', skillId: 'xiaoliu_haste' },
 ] as const;
 
 export type HeroName = (typeof heroRecipes)[number]['name'];

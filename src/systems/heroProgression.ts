@@ -1,6 +1,6 @@
 import type { BoardMap } from '../config/maps';
 import type { BoardState } from './board';
-import { getHeroLinks } from './heroActivation';
+import { getHeroLinks, getHasteCarrier } from './heroActivation';
 import type { HeroLink } from './heroActivation';
 import { heroExpRequired, getHeroDefinition } from '../config/heroes';
 import { createSkillState } from '../combat/skills';
@@ -44,6 +44,7 @@ export class HeroProgression {
         link.level = level;
         link.currentExp = 0; // 同字升级/外部等级同步，不继承旧等级EXP。
       }
+      link.hasteEnhanced = getHasteCarrier(link).hasteEnhanced;
       if (level === MAX_LEVEL) link.currentExp = 0;
     }
     for (const [id, set] of this.participants) {

@@ -91,6 +91,7 @@ export function applyDrop(
     const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
       ? mergeItems(item, displacedItem)! : item;
     if (action === 'merge' && isHeroLetter(displacedItem)) {
+      if (isHeroLetter(result) && result.hasteEnhanced) displacedItem.hasteEnhanced = true;
       displacedItem.level = result !== '铲' ? result.level : displacedItem.level;
       setItem(board, recruitment, target, displacedItem);
     } else setItem(board, recruitment, target, result);

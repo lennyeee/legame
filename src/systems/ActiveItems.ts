@@ -1,3 +1,4 @@
+import { getHasteCarrier } from './heroActivation';
 import { isUnit, isHeroLetter } from './items';
 import { itemEffects, activeItemCooldown } from '../config/itemEffects';
 import { MAX_LEVEL } from '../config/levels';
@@ -38,8 +39,8 @@ export class ActiveItems {
         const progression = getHeroProgression(board);
         progression.sync();
         const link = [...progression.links.values()].find(link => link.left === unit || link.right === unit);
-        if (!link || link.hasteEnhanced) return false;
-        link.hasteEnhanced = true;
+        if (!link || getHasteCarrier(link).hasteEnhanced) return false;
+        getHasteCarrier(link).hasteEnhanced = true;
       } else return false;
     } else {
       if (unit.level >= MAX_LEVEL) return false;

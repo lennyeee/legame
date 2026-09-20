@@ -150,8 +150,8 @@ function pve(startImmediately = true) {
 
 test('背包详情、装卸返回、单局被动栏及连续重开保留loadout',()=>{
   const p=pve(false);assert.equal(p.text(375,885,p.ready),'道具');p.click(375,885);
-  p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,630,p.items),'农民');
-  p.click(155,630);assert.equal(p.text(375,510,p.items),'农民');assert.equal(p.text(375,565,p.items),'被动道具');
+  p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,620,p.items),'农民');
+  p.click(155,630);assert.equal(p.text(375,510,p.items),'农民');assert.equal(p.text(375,565,p.items),'类型：被动道具');
   assert.equal(p.text(375,655,p.items),'携带后，征兵时有概率出现农民。部署后的农民不会攻击，会周期性生产美金。');
   const description=p.objects.get(p.items).find(o=>o.kind==='text'&&o.y===655);
   assert.equal(description.advancedWrap,true);assert.equal(description.wrapWidth,490);
@@ -767,4 +767,14 @@ for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止
  p.click(375,765);assert.equal(farmMoney(p),100);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
  assert.equal(p.objects.get(p.game).some(o=>o.text.startsWith('Lv.')),false);
  }finally{waveConfig.enemyCounts=counts;}
+});
+
+
+test('v0.571 每张背包卡片及详情均明确区分主动/被动',()=>{
+ const p=pve(false);p.click(375,885);
+ for(const [x,y,category] of [[155,630,'被动'],[300,630,'被动'],[445,630,'主动'],[590,630,'主动'],[155,750,'主动']]){
+  assert.equal(p.text(x,y+30,p.items),category);p.click(x,y);
+  assert.ok(p.objects.get(p.items).some(o=>o.visible&&o.text==='类型：'+category+'道具'));
+  const shade=p.objects.get(p.items).findLast(o=>o.kind==='rectangle'&&o.width===750);shade.emit('pointerdown');
+ }
 });

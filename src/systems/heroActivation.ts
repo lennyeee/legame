@@ -1,4 +1,4 @@
-import { heroRecipes } from '../config/heroes';
+import { heroRecipes, getHeroDefinition } from '../config/heroes';
 import type { HeroName, HeroId } from '../config/heroes';
 import type { SkillState } from '../combat/skills';
 import type { BoardMap, MapPoint } from '../config/maps';
@@ -19,7 +19,7 @@ export interface HeroPlacement {
 }
 
 export interface HeroLink extends HeroPlacement {
-  hasteEnhanced?: boolean; // 只属于本次激活周期，不写回字。
+  hasteEnhanced?: boolean; // 从配方指定的载体字派生，不是独立持久状态。
   cycleId: number;
   level: number;
   currentExp: number;
@@ -50,4 +50,8 @@ export function getHeroLinks(map: BoardMap, board: BoardState, suspendedTile: nu
   }
   for (const link of links) if (!selected.has(link.heroId)) selected.set(link.heroId, link);
   return [...selected.values()];
+}
+
+export function getHasteCarrier(link: HeroPlacement): HeroLetter {
+  return link.left.type === getHeroDefinition(link.heroId).hasteCarrier ? link.left : link.right;
 }

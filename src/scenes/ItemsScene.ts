@@ -41,7 +41,8 @@ export class ItemsScene extends Phaser.Scene {
       if (!definition) return;
       const x = 155 + (index % 4) * 145, y = 630 + Math.floor(index / 4) * 120;
       const icon = this.add.rectangle(x, y, 116, 90, 0xe6dfc8).setInteractive({ useHandCursor: true });
-      label(this, x, y, definition.name, 28).setWordWrapWidth(104, true).setAlign('center');
+      label(this, x, y - 10, definition.name, 24).setWordWrapWidth(104, true).setAlign('center');
+      label(this, x, y + 30, definition.category === 'active' ? '主动' : '被动', 16, '#8b8272');
       icon.on('pointerdown', () => {
         if (modalOpen) return;
         modalOpen = true;
@@ -49,7 +50,7 @@ export class ItemsScene extends Phaser.Scene {
         const panel = this.add.rectangle(375, 667, 590, 440, 0xfffcf4).setDepth(21).setInteractive();
         panel.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => event.stopPropagation());
         const title = label(this, 375, 510, definition.name, 36).setDepth(22);
-        const category = label(this, 375, 565, definition.category === 'passive' ? '被动道具' : '主动道具', 24).setDepth(22);
+        const category = label(this, 375, 565, definition.category === 'passive' ? '类型：被动道具' : '类型：主动道具', 24).setDepth(22);
         const description = label(this, 375, 655, definition.description, 24)
           .setWordWrapWidth(490, true).setFixedSize(500, 110).setAlign('left').setDepth(22);
         const note = label(this, 375, 735, '装备将在开始游戏后带入本局', 19, '#8b8272').setDepth(22);
