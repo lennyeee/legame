@@ -7,7 +7,7 @@ const {itemDefinitions,equipmentLimits}=await import('../src/config/equipment.ts
 const {gameConfig}=await import('../src/config/game.ts');
 
 test('农民是已拥有未装备的Lv.1被动道具，未知/未拥有不可装备，装备卸下幂等',()=>{
- const inventory=createInventory();assert.deepEqual(inventory,itemDefinitions.map(({id})=>({id,level:1,owned:true,equipped:false})));assert.equal(inventory.length,3);
+ const inventory=createInventory();assert.deepEqual(inventory,itemDefinitions.map(({id})=>({id,level:1,owned:true,equipped:false})));assert.equal(inventory.length,5);
  assert.equal(itemDefinitions[0].category,'passive');assert.equal(itemDefinitions[0].name,'农民');
  assert.equal(setEquipped(inventory,'missing',true),false);
  inventory[0].owned=false;assert.equal(setEquipped(inventory,'farmer',true),false);inventory[0].owned=true;

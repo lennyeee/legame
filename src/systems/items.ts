@@ -2,6 +2,7 @@ import type { HeroLetterType } from '../config/heroes';
 import { MAX_LEVEL, clampLevel } from '../config/levels';
 
 export interface Unit {
+  hasteEnhanced?: boolean; // 本局一层强化，移动保留、合成 OR 继承。
   type: '刀' | '枪' | '弓' | '骑';
   level: number;
 }
@@ -26,7 +27,8 @@ export function mergeItems(a: Deployable, b: Deployable): Deployable | null {
   if (isHeroLetter(a) && isHeroLetter(b) && a.type === b.type) return { ...b, level: clampLevel(b.level + 1) };
   if (isFarmer(a) && isFarmer(b) && a.level === b.level) return { ...b, level: clampLevel(b.level + 1) };
   if (isUnit(a) && isUnit(b)) {
-    return a.type === b.type && a.level === b.level ? { type: a.type, level: clampLevel(a.level + 1) } : null;
+    return a.type === b.type && a.level === b.level ? { type: a.type, level: clampLevel(a.level + 1),
+      ...(a.hasteEnhanced || b.hasteEnhanced ? { hasteEnhanced: true } : {}) } : null;
   }
   return null;
 }

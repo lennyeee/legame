@@ -19,6 +19,7 @@ export interface HeroPlacement {
 }
 
 export interface HeroLink extends HeroPlacement {
+  hasteEnhanced?: boolean; // 只属于本次激活周期，不写回字。
   cycleId: number;
   level: number;
   currentExp: number;

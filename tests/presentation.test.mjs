@@ -691,7 +691,7 @@ test('升级符真实输入：20秒CD、暂停冻结、非法释放/移出保留
   p.game.input.emit('pointermove',{id:2,x:164.0625,y:574.0625,primaryDown:true});
   p.game.input.emit('pointerup',{id:2,x:164.0625,y:574.0625,primaryDown:false});
   p.game.input.emit('pointerup',{id:1,x:183,y:1018,primaryDown:false});
-  assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(375,1264),'升级成功');
+  assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(375,1264),'道具使用成功');
   assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
   p.run(20000);p.click(80,1018);p.click(75,55);assert.equal(p.text(80,1018),'升级符\n可用');
   p.run(1000);p.click(375,765);p.game.input.emit('pointerup',{id:1,x:279,y:1018});assert.equal(p.text(80,1018),'升级符\n可用');
@@ -733,5 +733,38 @@ for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后�
   p.click(375,765);assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1186),'招贤榜');
   p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n20s');
   assert.equal(p.game.events.listenerCount('update'),2);p.run(1000);assert.equal(farmMoney(p),101);
+ }finally{waveConfig.enemyCounts=counts;}
+});
+
+
+function equippedV57(){const p=pve(false);p.click(375,885);
+ for(const [x,y] of [[155,630],[590,630],[155,750]]){p.click(x,y);p.click(375,815);}
+ p.click(375,1200);p.click(375,765);return p;
+}
+function dragActive(p,slot,x,y){p.click(slot,1018);p.game.input.emit('pointermove',{id:1,x,y,primaryDown:true});p.game.input.emit('pointerup',{id:1,x,y,primaryDown:false});}
+test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除收益；如律令暂停冻结且失败不耗CD',()=>{
+ const speed=combatConfig.enemy.moveSpeed,random=Math.random;
+ try{combatConfig.enemy.moveSpeed=0;const p=equippedV57();
+  assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');
+  Math.random=()=>.99;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(8000);assert.equal(farmCash(p).length,1);
+  const money=farmMoney(p);dragActive(p,80,164.0625,574.0625);assert.equal(farmMoney(p),money+1);assert.equal(farmCash(p).length,0);
+  dragActive(p,80,279,1018);assert.equal(farmMoney(p),money+2);assert.equal(p.text(80,1018),'点金手\n可用');
+  p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);p.click(375,765);p.run(12000);
+  assert.equal(p.text(670,1018),'急急如\n律令\n可用');dragActive(p,670,375,1018);assert.equal(p.text(670,1018),'急急如\n律令\n可用'); // 农民非法
+  Math.random=()=>0;p.click(375,1158);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n20s');
+  p.run(20000);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
+  p.drag([183,1018],[164.0625,574.0625]);dragActive(p,670,164.0625,574.0625);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
+  p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),100);
+  p.click(75,55);p.click(375,985);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
+  p.click(375,765);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(farmMoney(p),100);
+  assert.equal(p.game.events.listenerCount('update'),2);p.run(1000);assert.equal(farmMoney(p),101);assert.equal(p.game.time._active.length,1);
+ }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
+});
+for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止两道具，重开清空单位和强化',()=>{
+ const counts=waveConfig.enemyCounts;
+ try{if(win)waveConfig.enemyCounts=[1];const p=equippedV57();p.run(60000);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+ const snapshot=p.snapshot();p.run(30000);dragActive(p,80,183,1018);assert.equal(p.snapshot(),snapshot);
+ p.click(375,765);assert.equal(farmMoney(p),100);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
+ assert.equal(p.objects.get(p.game).some(o=>o.text.startsWith('Lv.')),false);
  }finally{waveConfig.enemyCounts=counts;}
 });

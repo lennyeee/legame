@@ -25,7 +25,7 @@ export class ItemsScene extends Phaser.Scene {
       for (let index = 0; index < equipmentLimits[category]; index++) {
         const x = 375 + (index - (equipmentLimits[category] - 1) / 2) * 100;
         this.add.rectangle(x, y, 90, 72, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
-        slots.push({ category, index, text: label(this, x, y, '', 22) });
+        slots.push({ category, index, text: label(this, x, y, '', 22).setWordWrapWidth(80, true).setAlign('center') });
       }
     }
     const refresh = (): void => {
@@ -41,7 +41,7 @@ export class ItemsScene extends Phaser.Scene {
       if (!definition) return;
       const x = 155 + (index % 4) * 145, y = 630 + Math.floor(index / 4) * 120;
       const icon = this.add.rectangle(x, y, 116, 90, 0xe6dfc8).setInteractive({ useHandCursor: true });
-      label(this, x, y, definition.name, 28);
+      label(this, x, y, definition.name, 28).setWordWrapWidth(104, true).setAlign('center');
       icon.on('pointerdown', () => {
         if (modalOpen) return;
         modalOpen = true;

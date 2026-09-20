@@ -1,3 +1,4 @@
+import { itemAttackInterval } from './itemEffects';
 import type { Unit } from '../systems/items';
 import { attackRangeCells, rangePixels } from './ranges';
 
@@ -39,7 +40,7 @@ export function getCombatStats(unit: Unit): CombatStats {
   const upgrades = Math.max(0, unit.level - 1);
   return {
     damage: Math.round(base.damage * combatConfig.growth.damageMultiplier ** upgrades),
-    attackInterval: base.attackInterval / (1 + combatConfig.growth.attackSpeedPerLevel * upgrades),
+    attackInterval: itemAttackInterval(base.attackInterval / (1 + combatConfig.growth.attackSpeedPerLevel * upgrades), unit.hasteEnhanced),
     range: unit.type === '弓' && unit.level >= 2 ? rangePixels(attackRangeCells.弓进阶) : base.range,
   };
 }

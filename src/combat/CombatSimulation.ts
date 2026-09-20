@@ -1,3 +1,4 @@
+import { itemAttackInterval } from '../config/itemEffects';
 import { combatConfig, getCombatStats } from '../config/combat';
 import type { CombatConfig } from '../config/combat';
 import type { BoardMap, MapPoint } from '../config/maps';
@@ -190,7 +191,7 @@ export class CombatSimulation {
 
     for (const [tileIndex, attacker] of this.attackers) {
       const stats = getCombatStats(attacker.unit);
-      attacker.cooldown = Math.max(0, attacker.cooldown - deltaMs);
+      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, stats.attackInterval) - deltaMs);
       if (attacker.cooldown > 1e-8) continue;
       const origin = this.map.cells[tileIndex]!;
       const target = selectTarget(this.enemies, origin, stats.range);
@@ -222,7 +223,7 @@ export class CombatSimulation {
       if (attacker.link.skill?.skillId === 'xiaoliu_haste') {
         updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), () => {});
       }
-      const interval = heroAttackInterval(attacker.link, stats.attackInterval);
+      const interval = itemAttackInterval(heroAttackInterval(attacker.link, stats.attackInterval), attacker.link.hasteEnhanced);
       attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, interval) - deltaMs);
       if (attacker.cooldown > 1e-8) continue;
       const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
@@ -232,7 +233,7 @@ export class CombatSimulation {
         ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, heroCombat.splashRadius)) : [target];
       for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
       consumeEmpoweredAttack(attacker.link, event => events.push(event));
-      attacker.cooldown = heroAttackInterval(attacker.link, getHeroStats(attacker.link.level).attackInterval);
+      attacker.cooldown = itemAttackInterval(heroAttackInterval(attacker.link, getHeroStats(attacker.link.level).attackInterval), attacker.link.hasteEnhanced);
     }
     for (const link of this.heroLinks) {
       if (link.skill?.skillId === 'xiaoliu_haste') continue;

@@ -72,8 +72,8 @@ export class GameScene extends Phaser.Scene {
 
     activeController = new ActiveItemController(this, activeItems, activeSlots, board, state, deploymentView,
       () => !ended && this.input.enabled && !deployment.isDragging, success => {
-        farmers.sync(); farmerView.refresh(); deployment.refresh();
-        feedback.setText(success ? '升级成功' : '无法升级，已返回主动槽').setColor(success ? '#697e67' : '#a45e45');
+        farmers.sync(); farmerView.refresh(); deployment.refresh(); refresh();
+        feedback.setText(success ? '道具使用成功' : '无法使用，已返回主动槽').setColor(success ? '#697e67' : '#a45e45');
       });
 
     button.on('pointerdown', () => {
