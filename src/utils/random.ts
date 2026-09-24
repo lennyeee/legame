@@ -8,6 +8,10 @@ export function drawRandom<T>(
   return Array.from({ length: count }, () => pool[Math.floor(random() * pool.length)]!);
 }
 
+export function rollChance(chance: number, random: () => number = Math.random): boolean {
+  return random() < chance;
+}
+
 export function drawWeighted<T>(pool: readonly { value: T; weight: number }[], count: number,
   random: () => number = Math.random): T[] {
   const total = pool.reduce((sum, entry) => sum + entry.weight, 0);

@@ -5,9 +5,14 @@ import { isUnit, isHeroLetter } from './items';
 import { initializeHeroProgression, getHeroProgression } from './heroProgression';
 import type { Deployable, ReserveItem } from './items';
 import { MAX_LEVEL } from '../config/levels';
+import { passiveEconomy } from '../config/equipment';
+import { tileBonusConfig } from '../config/tileBonuses';
+import type { TileBonusType } from '../config/tileBonuses';
+import { drawRandom, rollChance } from '../utils/random';
 
 export interface TileState {
   unlocked: boolean;
+  bonusType: TileBonusType;
   unit: Deployable | null;
 }
 
@@ -22,7 +27,7 @@ export type DragItem = ReserveItem;
 export type DropAction = 'invalid' | 'move' | 'swap' | 'merge' | 'unlock';
 
 export function createBoardState(map: BoardMap): BoardState {
-  const board = { tiles: map.cells.map(cell => ({ unlocked: cell.unlocked, unit: null })) };
+  const board = { tiles: map.cells.map(cell => ({ unlocked: cell.unlocked, bonusType: 'none' as const, unit: null })) };
   initializeHeroProgression(board, map);
   return board;
 }
@@ -80,23 +85,32 @@ export function getDropAction(
 
 export function applyDrop(
   board: BoardState, recruitment: RecruitmentState, source: UnitPosition, target: UnitPosition | null,
+  random?: () => number,
 ): DropAction {
   const action = getDropAction(board, recruitment, source, target);
   if (action === 'invalid' || !target) return 'invalid';
   const item = getDragItem(board, recruitment, source)!;
   const displacedItem = getDragItem(board, recruitment, target);
   if (action === 'unlock') {
-    board.tiles[target.index]!.unlocked = true;
+    const tile = board.tiles[target.index]!;
+    tile.unlocked = true;
+    if (recruitment.loadout.passive.some(entry => entry.id === 'golden_shovel')
+      && rollChance(tileBonusConfig.unlockChance, random)) {
+      tile.bonusType = drawRandom(tileBonusConfig.types, 1, random)[0]!;
+    }
   } else {
     const result = action === 'merge' && item !== '铲' && displacedItem && displacedItem !== '铲'
       ? mergeItems(item, displacedItem)! : item;
     if (action === 'merge' && isHeroLetter(displacedItem)) {
-      if (isHeroLetter(result) && result.hasteEnhanced) displacedItem.hasteEnhanced = true;
       displacedItem.level = result !== '铲' ? result.level : displacedItem.level;
       setItem(board, recruitment, target, displacedItem);
     } else setItem(board, recruitment, target, result);
   }
   setItem(board, recruitment, source, action === 'swap' ? displacedItem : null);
+  if (action === 'merge' && isUnit(item) && isUnit(displacedItem)
+    && recruitment.loadout.passive.some(entry => entry.id === 'practice_pays')) {
+    recruitment.money += passiveEconomy.practicedMergeReward;
+  }
   getHeroProgression(board).sync();
   return action;
 }

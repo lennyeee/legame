@@ -4,7 +4,8 @@ import { combatConfig, getCombatStats } from '../config/combat';
 import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { label } from './text';
-import { heroCombat, heroVisuals, heroExpRequired } from '../config/heroes';
+import { getHeroStats, heroVisuals, heroExpRequired } from '../config/heroes';
+import { applyTileBonuses } from '../combat/tileBonuses';
 import { skillConfigs } from '../config/skills';
 import type { HeroLink } from '../systems/heroActivation';
 import { boardDisplayScene } from './boardDisplay';
@@ -79,7 +80,9 @@ export class CombatView {
       const link = this.battle.heroLinks.find(link => link.leftIndex === this.selectedTile || link.rightIndex === this.selectedTile);
       if (isUnit(unit) || link) {
         const point = link?.origin ?? this.battle.map.cells[this.selectedTile]!;
-        const radius = isUnit(unit) ? getCombatStats(unit).range : heroCombat.range;
+        const radius = isUnit(unit)
+          ? applyTileBonuses(getCombatStats(unit), this.battle.board, [this.selectedTile]).range
+          : applyTileBonuses(getHeroStats(link!.level), this.battle.board, [link!.leftIndex, link!.rightIndex]).range;
         const color = isUnit(unit) ? visuals.attackColors[unit.type] : heroVisuals.color;
         this.range.fillStyle(color, 0.1);
         this.range.fillCircle(point.x, point.y, radius);

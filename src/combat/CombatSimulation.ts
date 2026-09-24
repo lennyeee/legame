@@ -16,12 +16,14 @@ import { getHeroStats, heroGrowth, getHeroDefinition, heroCombat } from '../conf
 import { getHeroProgression } from '../systems/heroProgression';
 import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack } from './skills';
 import type { SkillEvent } from './skills';
+import { applyTileBonuses } from './tileBonuses';
 
 interface Attacker {
   unit: Unit;
   type: Unit['type'];
   level: number;
   cooldown: number;
+  interval: number;
 }
 
 export interface AttackEffect {
@@ -61,7 +63,7 @@ export class CombatSimulation {
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
   private readonly attackers = new Map<number, Attacker>();
-  private readonly heroAttackers = new Map<string, { link: HeroLink; cooldown: number }>();
+  private readonly heroAttackers = new Map<string, { link: HeroLink; cooldown: number; interval: number }>();
   private elapsed = 0;
   readonly progress: WaveProgress | null;
   private nextEnemyId = 1;
@@ -104,7 +106,11 @@ export class CombatSimulation {
       if (!links.some(link => link.key === key && link === state.link)) this.heroAttackers.delete(key);
     }
     for (const link of links) {
-      if (!this.heroAttackers.has(link.key)) this.heroAttackers.set(link.key, { link, cooldown: getHeroStats(link.level).attackInterval });
+      if (!this.heroAttackers.has(link.key)) {
+        const interval = applyTileBonuses(getHeroStats(link.level), this.board,
+          [link.leftIndex, link.rightIndex]).attackInterval;
+        this.heroAttackers.set(link.key, { link, cooldown: interval, interval });
+      }
     }
     for (const [index, attacker] of this.attackers) {
       if (!this.isAttackerValid(index, attacker.unit, attacker.level) || attacker.unit.type !== attacker.type) {
@@ -113,9 +119,10 @@ export class CombatSimulation {
     }
     this.board.tiles.forEach((tile, index) => {
       if (!isUnit(tile.unit) || !tile.unlocked || index === suspendedTile || this.attackers.has(index)) return;
+      const interval = applyTileBonuses(getCombatStats(tile.unit), this.board, [index]).attackInterval;
       this.attackers.set(index, {
         unit: tile.unit, type: tile.unit.type, level: tile.unit.level,
-        cooldown: getCombatStats(tile.unit).attackInterval,
+        cooldown: interval, interval,
       });
     });
     this.projectiles = this.projectiles.filter(arrow => this.isAttackerValid(arrow.tileIndex, arrow.unit, arrow.level));
@@ -190,8 +197,10 @@ export class CombatSimulation {
     });
 
     for (const [tileIndex, attacker] of this.attackers) {
-      const stats = getCombatStats(attacker.unit);
-      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, stats.attackInterval) - deltaMs);
+      const stats = applyTileBonuses(getCombatStats(attacker.unit), this.board, [tileIndex]);
+      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown * stats.attackInterval / attacker.interval,
+        stats.attackInterval) - deltaMs);
+      attacker.interval = stats.attackInterval;
       if (attacker.cooldown > 1e-8) continue;
       const origin = this.map.cells[tileIndex]!;
       const target = selectTarget(this.enemies, origin, stats.range);
@@ -218,13 +227,15 @@ export class CombatSimulation {
       }
     }
     for (const attacker of this.heroAttackers.values()) {
-      const stats = getHeroStats(attacker.link.level);
+      const stats = applyTileBonuses(getHeroStats(attacker.link.level), this.board,
+        [attacker.link.leftIndex, attacker.link.rightIndex]);
       // 强化结束的当前逻辑步不提前推进新 CD；小美原有打击时序保持不变。
       if (attacker.link.skill?.skillId === 'xiaoliu_haste') {
-        updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), () => {});
+        updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), () => {}, stats.range);
       }
       const interval = itemAttackInterval(heroAttackInterval(attacker.link, stats.attackInterval), attacker.link.hasteEnhanced);
-      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown, interval) - deltaMs);
+      attacker.cooldown = Math.max(0, Math.min(attacker.cooldown * interval / attacker.interval, interval) - deltaMs);
+      attacker.interval = interval;
       if (attacker.cooldown > 1e-8) continue;
       const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
       if (!target) continue;
@@ -233,13 +244,14 @@ export class CombatSimulation {
         ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, heroCombat.splashRadius)) : [target];
       for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
       consumeEmpoweredAttack(attacker.link, event => events.push(event));
-      attacker.cooldown = itemAttackInterval(heroAttackInterval(attacker.link, getHeroStats(attacker.link.level).attackInterval), attacker.link.hasteEnhanced);
+      attacker.cooldown = interval;
     }
     for (const link of this.heroLinks) {
       if (link.skill?.skillId === 'xiaoliu_haste') continue;
       updateHeroSkill(link, this.enemies, deltaMs,
         (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event),
-        (enemy, source) => this.hit(enemy, 0, events, source, true));
+        (enemy, source) => this.hit(enemy, 0, events, source, true),
+        applyTileBonuses(getHeroStats(link.level), this.board, [link.leftIndex, link.rightIndex]).range);
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

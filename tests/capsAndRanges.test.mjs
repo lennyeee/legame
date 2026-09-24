@@ -56,10 +56,10 @@ test('EXP溢出最多到Lv.5并归零，重复奖励不累计；同步传播上�
  progression.recordDamage(2,link,1);progression.awardKill(2,100);assert.equal(link.currentExp,0);
  board.tiles[0].unit.level=99;progression.sync();assert.equal(link.level,5);assert.equal(link.left.level,5);
 });
-test('新加入的12块锁定地皮都可用铲子解锁并部署，路径及9块开放地皮保持',()=>{
+test('新加入的12块锁定地皮都可用铲子解锁并部署，路径及6块开放地皮保持',()=>{
  assert.deepEqual(testMap.path,[{x:112.5,y:602.5},{x:112.5,y:677.5},{x:337.5,y:677.5},{x:337.5,y:902.5},{x:637.5,y:902.5}]);
  const board=createBoardState(testMap),reserve=createRecruitmentState();
- assert.equal(board.tiles.length,28);assert.equal(board.tiles.filter(t=>!t.unlocked).length,19);
+ assert.equal(board.tiles.length,28);assert.equal(board.tiles.filter(t=>!t.unlocked).length,22);
  for(let index=16;index<28;index++){
   reserve.slots[0]='铲';assert.equal(applyDrop(board,reserve,{kind:'slot',index:0},{kind:'tile',index}),'unlock');
   reserve.slots[0]={type:'刀',level:1};assert.equal(applyDrop(board,reserve,{kind:'slot',index:0},{kind:'tile',index}),'move');

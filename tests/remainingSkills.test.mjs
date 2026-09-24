@@ -49,11 +49,12 @@ for(const hero of ['abing','xiaoliu'])test(`${hero}普攻复用主目标周围AO
 });
 
 test('阿饼完整CD后按绝对HP最高、同HP最早入场处决，排除Boss并发EXP和奖励',()=>{
- const {sim,link,wallet}=setup('abing');const cd=getSkillStats('abing_execute',1).cooldown;
+ const {sim,link,wallet}=setup('abing',true);const cd=getSkillStats('abing_execute',1).cooldown;
+ const boss=enemy(sim,9999,true); // 合法普攻目标使CD累计；Boss仍不属于处决目标。
  run(sim,cd-20);assert.equal(link.skill.phase,'charging');run(sim,40);assert.equal(link.skill.phase,'ready');
- const low=enemy(sim,100),first=enemy(sim,500),second=enemy(sim,500),boss=enemy(sim,9999,true);
+ const low=enemy(sim,100),first=enemy(sim,500),second=enemy(sim,500);
  low.maxHp=100000;const before=wallet.money;
- const events=run(sim,20);assert.equal(first.hp,0);assert.equal(second.hp,500);assert.equal(boss.hp,9999);
+ const bossHp=boss.hp;const events=run(sim,20);assert.equal(first.hp,0);assert.equal(second.hp,500);assert.equal(boss.hp,bossHp);
  assert.equal(events.filter(e=>e.kind==='skillStart').length,1);assert.equal(events.filter(e=>e.kind==='kill').length,1);
  assert.equal(link.currentExp,10);assert.equal(wallet.money,before+sim.config.enemy.killReward);
  assert.equal(run(sim,100).some(e=>e.kind==='skillStart'),false);
@@ -62,32 +63,38 @@ test('阿饼完整CD后按绝对HP最高、同HP最早入场处决，排除Boss�
 });
 
 test('只有Boss时阿饼保持ready，处决能处理超过普通伤害量级的HP',()=>{
- const {sim,link}=setup('abing');const boss=enemy(sim,1,true);
- run(sim,14020);assert.equal(link.skill.phase,'ready');assert.equal(boss.hp,1);
+ const {sim,link}=setup('abing',true);const boss=enemy(sim,1e20,true);
+ run(sim,14020);assert.equal(link.skill.phase,'ready');assert.ok(boss.hp>0);
  const target=enemy(sim,1e20);run(sim,20);assert.equal(target.hp,0);assert.equal(link.currentExp,10);
 });
 
 test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次AOE各只扣一层并恢复普通攻速',()=>{
  const {sim,link}=setup('xiaoliu',true);const cd=getSkillStats('xiaoliu_haste',1).cooldown;
+ enemy(sim,1e20,true); // 普攻目标使第一次CD正常累计。
  assert.equal(run(sim,cd-20).some(e=>e.kind==='skillStart'),false);
- assert.equal(run(sim,40).filter(e=>e.kind==='skillStart').length,1);
- assert.equal(link.skill.remainingAttacks,7);run(sim,20000);
- assert.equal(link.skill.remainingAttacks,7);assert.equal(link.skill.cooldownElapsed,0);
+ const trigger=run(sim,40);
+ assert.equal(trigger.filter(e=>e.kind==='skillStart').length,1);
+ const triggerAttacks=trigger.filter(e=>e.kind==='heroAttack').length;
+ sim.enemies=[];
+ assert.equal(link.skill.remainingAttacks,7-triggerAttacks);run(sim,20000);
+ assert.equal(link.skill.remainingAttacks,7-triggerAttacks);assert.equal(link.skill.cooldownElapsed,0);
  const a=enemy(sim,1e8),b=enemy(sim,1e8);a.distance=100;b.distance=130;
- let attacks=0;
+ let attacks=triggerAttacks;
  for(let ms=0;ms<5000&&attacks<7;ms+=10){
    const events=run(sim,10);attacks+=events.filter(e=>e.kind==='heroAttack').length;
    assert.equal(link.skill.remainingAttacks,7-attacks);
  }
  assert.equal(attacks,7);assert.equal(link.skill.phase,'charging');assert.equal(link.skill.cooldownElapsed,0);
- assert.equal(a.hp,1e8-7*heroCombat.damage);assert.equal(b.hp,a.hp);
+ assert.equal(a.hp,1e8-(7-triggerAttacks)*heroCombat.damage);assert.equal(b.hp,a.hp);
  assert.equal(heroAttackInterval(link,getHeroStats(1).attackInterval),1200);
  assert.equal(run(sim,1180).filter(e=>e.kind==='heroAttack').length,0);
  assert.equal(run(sim,40).filter(e=>e.kind==='heroAttack').length,1);
  sim.enemies=[];
  const elapsed=link.skill.cooldownElapsed;
  assert.equal(run(sim,cd-elapsed-30).some(e=>e.kind==='skillStart'),false);
- assert.equal(run(sim,60).filter(e=>e.kind==='skillStart').length,1);
+ assert.equal(link.skill.cooldownElapsed,elapsed);
+ enemy(sim,1e20,true);
+ assert.equal(run(sim,cd-elapsed+30).filter(e=>e.kind==='skillStart').length,1);
 });
 
 test('新增技能成长集中配置、CD和强化攻速均有安全下限',()=>{

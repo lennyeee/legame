@@ -1,8 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_VERSION } from '../config/game';
-import { testMap } from '../config/maps';
-import { drawBoard } from '../ui/board';
 import { label } from '../ui/text';
+import { READY_BACKGROUND_COLOR } from '../config/ready';
 import { inventoryFromLoadout, createLoadout } from '../systems/equipment';
 import type { InventoryItem, Loadout } from '../systems/equipment';
 
@@ -18,13 +17,7 @@ export class ReadyScene extends Phaser.Scene {
     this.inventory = data.inventory ?? inventoryFromLoadout(data.loadout);
     this.openingItems = false;
     this.startState = 'READY';
-    drawBoard(this, testMap);
-    for (const cell of testMap.cells) {
-      this.add.rectangle(cell.x, cell.y, testMap.cellSize, testMap.cellSize,
-        cell.unlocked ? 0xfffcf4 : 0xc8c0af).setStrokeStyle(2, cell.unlocked ? 0x87937d : 0xc2bcae);
-      label(this, cell.x, cell.y, cell.unlocked ? '+' : '锁', 24);
-    }
-    this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.55).setInteractive();
+    this.add.rectangle(375, 667, 750, 1334, READY_BACKGROUND_COLOR).setInteractive();
     label(this, 375, 565, '乐 GAME', 58, '#fffaf0');
     const button = this.add.rectangle(375, 765, 330, 86, 0x697e67)
       .setInteractive({ useHandCursor: true });

@@ -25,7 +25,7 @@ test('四种普通兵从槽位部署为 Lv.1，清空来源，不扣钱', () => 
     assert.equal(applyDrop(board, recruitment, slot(0), tile(0)), 'move');
     assert.deepEqual(board.tiles[0].unit, unit(type));
     assert.equal(recruitment.slots[0], null);
-    assert.equal(recruitment.money, 100);
+    assert.equal(recruitment.money, 20);
   }
 });
 
@@ -45,7 +45,7 @@ test('铲子只解锁锁定格，消耗后可正常部署，不改地图模板',
   assert.equal(applyDrop(board, recruitment, slot(0), tile(0)), 'invalid');
   assert.equal(recruitment.slots[0], '铲');
   assert.equal(applyDrop(board, recruitment, slot(0), tile(3)), 'unlock');
-  assert.deepEqual(board.tiles[3], { unlocked: true, unit: null });
+  assert.deepEqual(board.tiles[3], { unlocked: true, bonusType: 'none', unit: null });
   assert.equal(recruitment.slots[0], null);
   assert.equal(testMap.cells[3].unlocked, false);
   recruitment.slots[0] = unit('骑');
@@ -214,7 +214,7 @@ test('铲子只可在空槽之间移动；不与单位或其他铲子交换/合�
   }
   assert.equal(applyDrop(board, recruitment, slot(1), tile(3)), 'unlock');
   assert.equal(recruitment.slots[1], null);
-  assert.deepEqual(board.tiles[3], { unlocked: true, unit: null });
+  assert.deepEqual(board.tiles[3], { unlocked: true, bonusType: 'none', unit: null });
 });
 
 test('征兵覆盖高级待放置单位为 Lv.1，棋盘保持不变；余额不足不覆盖', () => {
@@ -225,7 +225,7 @@ test('征兵覆盖高级待放置单位为 Lv.1，棋盘保持不变；余额不
   assert.equal(recruit(recruitment, () => 0), true);
   assert.deepEqual(board, before);
   assert.deepEqual(recruitment.slots, Array.from({ length: 5 }, () => unit('刀')));
-  assert.equal(recruitment.money, 90);
+  assert.equal(recruitment.money, 10);
   recruitment.money = 9;
   recruitment.slots[0] = unit('骑', 6);
   const beforeFailure = structuredClone(recruitment);

@@ -2,7 +2,7 @@ import { controlsLayout } from '../config/layout';
 import Phaser from 'phaser';
 import { GAME_VERSION, gameConfig } from '../config/game';
 import { testMap } from '../config/maps';
-import { createRecruitmentState, recruit } from '../systems/recruitment';
+import { createRecruitmentState, recruit, recruitmentPrice, hasPassive } from '../systems/recruitment';
 import { drawBoard } from '../ui/board';
 import { label } from '../ui/text';
 import { createBoardState } from '../systems/board';
@@ -17,6 +17,7 @@ import { FarmerProduction } from '../systems/FarmerProduction';
 import { ActiveItems } from '../systems/ActiveItems';
 import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
+import { passiveEconomy } from '../config/equipment';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -45,6 +46,7 @@ export class GameScene extends Phaser.Scene {
     const deployment = new DeploymentController(this, board, state, deploymentView, result => {
       farmers.sync();
       farmerView.refresh();
+      refresh();
       const messages = {
         invalid: '无法放置，已返回原位',
         move: '移动完成',
@@ -61,11 +63,12 @@ export class GameScene extends Phaser.Scene {
 
     const refresh = (): void => {
       moneyText.setText(`$ ${state.money}`);
-      const affordable = state.money >= gameConfig.recruitmentCost;
+      const price = recruitmentPrice(state);
+      const affordable = state.money >= price;
       buttonShape.clear().fillStyle(affordable ? 0x697e67 : 0xbab4a7)
         .fillRoundedRect(375 - controlsLayout.recruitWidth / 2, controlsLayout.recruitY - controlsLayout.recruitHeight / 2,
           controlsLayout.recruitWidth, controlsLayout.recruitHeight, 20);
-      buttonText.setText(`来财 $${gameConfig.recruitmentCost}`);
+      buttonText.setText(`来财 $${price}`);
     };
     const farmerView = new FarmerView(this, testMap, farmers,
       () => !ended && this.input.enabled && !deployment.isDragging && !activeController?.isDragging, refresh);
@@ -87,13 +90,16 @@ export class GameScene extends Phaser.Scene {
       deployment.refresh();
       refresh();
     });
+    let ironRiceSeconds = 0;
     const incomeTimer = this.time.addEvent({
       delay: 1000,
       loop: true,
       callback: () => {
-        const wasInsufficient = state.money < gameConfig.recruitmentCost;
-        state.money += gameConfig.incomePerSecond;
-        if (wasInsufficient && state.money >= gameConfig.recruitmentCost) {
+        if (!hasPassive(state, 'iron_rice_bowl')) return;
+        if (++ironRiceSeconds % passiveEconomy.ironRiceIntervalSeconds !== 0) return;
+        const wasInsufficient = state.money < recruitmentPrice(state);
+        state.money += passiveEconomy.ironRiceReward;
+        if (wasInsufficient && state.money >= recruitmentPrice(state)) {
           feedback.setText('美金已足够，可以再次征兵').setColor('#697e67');
         }
         refresh();

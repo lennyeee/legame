@@ -1,9 +1,9 @@
 import { attackRangeCells, rangePixels } from './ranges';
 
 export const heroRecipes = [
-  { id: 'xiaomei', hasteCarrier: '美', name: '小美', letters: ['小', '美'], attackMode: 'single', skillId: 'xiaomei_barrage' },
-  { id: 'abing', hasteCarrier: '饼', name: '阿饼', letters: ['阿', '饼'], attackMode: 'splash', skillId: 'abing_execute' },
-  { id: 'xiaoliu', hasteCarrier: '六', name: '小六', letters: ['小', '六'], attackMode: 'splash', skillId: 'xiaoliu_haste' },
+  { id: 'xiaomei', name: '小美', letters: ['小', '美'], attackMode: 'single', skillId: 'xiaomei_barrage' },
+  { id: 'abing', name: '阿饼', letters: ['阿', '饼'], attackMode: 'splash', skillId: 'abing_execute' },
+  { id: 'xiaoliu', name: '小六', letters: ['小', '六'], attackMode: 'splash', skillId: 'xiaoliu_haste' },
 ] as const;
 
 export type HeroName = (typeof heroRecipes)[number]['name'];
@@ -11,7 +11,7 @@ export type HeroId = (typeof heroRecipes)[number]['id'];
 export function getHeroDefinition(id: HeroId) { return heroRecipes.find(hero => hero.id === id)!; }
 export type HeroLetterType = (typeof heroRecipes)[number]['letters'][number];
 
-export const heroCombat = { damage: 35, range: rangePixels(attackRangeCells.hero), attackInterval: 1200, splashRadius: 70 };
+export const heroCombat = { damage: 10, range: rangePixels(attackRangeCells.hero), attackInterval: 1200, splashRadius: 70 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
 
 export const heroGrowth = { expBase: 30, expPerLevel: 20, enemyExp: 10, damagePerLevel: 0.5, speedPerLevel: 0.08 };

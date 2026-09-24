@@ -1,9 +1,9 @@
-export const GAME_VERSION = '0.571';
+export const GAME_VERSION = '0.58';
 
 export const gameConfig = {
-  initialMoney: 100,
-  incomePerSecond: 1,
+  initialMoney: 20,
   recruitmentCost: 10,
+  recruitmentPriceIncrease: 2,
   slotCount: 5,
   recruitmentPool: ['刀', '枪', '弓', '骑', '铲', '小', '美', '阿', '饼', '六'],
 } as const;

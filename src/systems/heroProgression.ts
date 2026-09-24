@@ -1,8 +1,9 @@
 import type { BoardMap } from '../config/maps';
 import type { BoardState } from './board';
-import { getHeroLinks, getHasteCarrier } from './heroActivation';
+import { getHeroLinks } from './heroActivation';
 import type { HeroLink } from './heroActivation';
 import { heroExpRequired, getHeroDefinition } from '../config/heroes';
+import type { HeroId } from '../config/heroes';
 import { createSkillState } from '../combat/skills';
 import { MAX_LEVEL, clampLevel } from '../config/levels';
 
@@ -22,6 +23,7 @@ export class HeroProgression {
   private readonly map: BoardMap;
   private nextCycle = 1;
   readonly links = new Map<string, HeroLink>();
+  private readonly hasteHeroes = new Set<HeroId>();
   private readonly participants = new Map<number, Set<HeroLink>>();
 
   constructor(board: BoardState, map: BoardMap) { this.board = board; this.map = map; }
@@ -44,7 +46,7 @@ export class HeroProgression {
         link.level = level;
         link.currentExp = 0; // 同字升级/外部等级同步，不继承旧等级EXP。
       }
-      link.hasteEnhanced = getHasteCarrier(link).hasteEnhanced;
+      link.hasteEnhanced = this.hasteHeroes.has(link.heroId) || undefined;
       if (level === MAX_LEVEL) link.currentExp = 0;
     }
     for (const [id, set] of this.participants) {
@@ -54,6 +56,12 @@ export class HeroProgression {
   }
 
   isActive(link: HeroLink): boolean { return this.links.get(link.key) === link; }
+  grantHaste(heroId: HeroId): boolean {
+    if (this.hasteHeroes.has(heroId)) return false;
+    this.hasteHeroes.add(heroId);
+    for (const link of this.links.values()) if (link.heroId === heroId) link.hasteEnhanced = true;
+    return true;
+  }
 
   recordDamage(enemyId: number, link: HeroLink, damage: number): void {
     if (!(damage > 0) || !this.isActive(link)) return;
@@ -80,5 +88,5 @@ export class HeroProgression {
   forgetEnemy(enemyId: number): void { this.participants.delete(enemyId); }
   clearParticipation(): void { this.participants.clear(); }
   clearSkills(): void { for (const link of this.links.values()) link.skill = null; }
-  clear(): void { this.clearSkills(); this.links.clear(); this.participants.clear(); }
+  clear(): void { this.clearSkills(); this.links.clear(); this.participants.clear(); this.hasteHeroes.clear(); }
 }

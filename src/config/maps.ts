@@ -30,9 +30,9 @@ const pathGrid: readonly GridPoint[] = [
 ];
 const deploymentGrid = [
   [1,0,true],[2,0,true],[4,1,true],[5,1,false],
-  [1,2,true],[2,2,false],[4,2,true],[5,2,false],
+  [1,2,false],[2,2,false],[4,2,true],[5,2,false],
   [1,4,false],[2,4,false],[3,0,true],[4,0,false],
-  [5,0,true],[6,0,false],[6,1,true],[7,1,true],
+  [5,0,true],[6,0,false],[6,1,false],[7,1,false],
 ] as const;
 const spaces: MapSpace[] = Array.from({length:battleLayout.columns * battleLayout.rows}, (_,index) => {
   const point={column:index % battleLayout.columns,row:Math.floor(index / battleLayout.columns)};

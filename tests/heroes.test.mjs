@@ -31,7 +31,7 @@ test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', (
     recruit(state, () => (offset + 0.5) / total);
     const expected = type === '铲' ? type : heroRecipes.some(r=>r.letters.includes(type)) ? letter(type) : {type,level:1};
     assert.deepEqual(state.slots, Array(5).fill(expected));
-    assert.equal(state.money, 90);
+    assert.equal(state.money, 10);
     offset += recruitmentWeights[type];
   }
 });
@@ -92,7 +92,7 @@ test('激活武将每周期只攻击一次，从双格中心索敌，正确伤�
   assert.equal(enemy.hp,1000-heroCombat.damage*2);
   assert.equal(sim.projectiles.length,0);
   enemy.hp=1;run(sim,heroCombat.attackInterval);
-  assert.equal(reserve.money,105);
+  assert.equal(reserve.money,21);
 });
 test('优先路径进度最高的范围内目标，范围外不受伤',()=>{
   const {sim,enemy}=battle();enemy.distance=20;

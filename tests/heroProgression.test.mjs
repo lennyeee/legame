@@ -86,14 +86,14 @@ test('零伤害不记录，多次命中只记录一次，重复死亡不重复�
  growth.awardKill(2,10);growth.awardKill(2,10);assert.equal(link.currentExp,10);
 });
 test('普通兵最后一击仍让实际参战武将获得完整EXP',()=>{
- const {board,sim,link}=setup();const e=enemy(sim);run(sim,2400);assert.equal(e.hp,930);
+ const {board,sim,link}=setup();const e=enemy(sim);run(sim,2400);assert.equal(e.hp,1000-2*heroCombat.damage);
  board.tiles[4].unit={type:'弓',level:20};run(sim,1100);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
 });
 test('两个武将有效参战，各得完整EXP；第三个只在范围内不得EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:690,unlocked:true},{x:247,y:690,unlocked:true},{x:195,y:610,unlocked:true},{x:247,y:610,unlocked:true},{x:195,y:650,unlocked:true}]};
  const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
- const e=enemy(sim);run(sim,1200);assert.equal(e.hp,930);
+ const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-2*heroCombat.damage);
  board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');board.tiles[6].unit={type:'刀',level:20};run(sim,300);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,10);
  assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[10,10,0]);

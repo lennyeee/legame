@@ -16,10 +16,15 @@ const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 const pos=(kind,index)=>({kind,index});
 const id='xiaomei_barrage';
 const cfg=skillConfigs[id];
-function setup(hero='xiaomei',map={...testMap,cells:[{x:2000,y:650,unlocked:true},{x:2052,y:650,unlocked:true}]}){
+function setup(hero='xiaomei',map){
+ const defaultMap=map===undefined;
+ map??={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true}]};
  const board=createBoardState(map),wallet=createRecruitmentState();const recipe=heroRecipes.find(r=>r.id===hero);
  board.tiles[0].unit=letter(recipe.letters[0]);board.tiles[1].unit=letter(recipe.letters[1]);
- const sim=new CombatSimulation(map,board,wallet);sim.update(0);return {board,wallet,sim,link:sim.heroLinks[0]};
+ const sim=new CombatSimulation(map,board,wallet);sim.update(0);
+ // Boss 可作为普攻目标，但不是小美/阿饼的合法技能目标，用于验证 Ready 等待。
+ if(defaultMap)enemy(sim,100000,true);
+ return {board,wallet,sim,link:sim.heroLinks[0]};
 }
 function run(sim,ms,suspended=null){const events=[];for(let t=0;t<ms;t+=10)events.push(...sim.update(Math.min(10,ms-t),suspended));return events;}
 function enemy(sim,hp=1000,boss=false){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=hp;e.maxHp=Math.max(hp,1000);e.isBoss=boss;return e;}
@@ -85,8 +90,10 @@ test('拆开销毁CD及未完成打击，重组重新等完整CD',()=>{
  assert.equal(run(sim,cfg.cooldown-20).some(e=>e.kind==='skillStart'),false);assert.equal(a.hp,900);
 });
 test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
- const map={...testMap,cells:[{x:2000,y:650,unlocked:true},{x:2052,y:650,unlocked:true},{x:195,y:650,unlocked:true}]};
- const {sim,board,link}=setup('xiaomei',map);run(sim,cfg.cooldown);const target=enemy(sim,500);run(sim,20);
+ const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:650,unlocked:true}]};
+ const {sim,board,link}=setup('xiaomei',map);enemy(sim,100000,true);
+ run(sim,cfg.cooldown);sim.enemies=sim.enemies.filter(e=>!e.isBoss);
+ const target=enemy(sim,500);run(sim,20);
  assert.equal(target.hp,400);board.tiles[2].unit={type:'刀',level:20};run(sim,300);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,10);
 });
@@ -106,4 +113,56 @@ test('结算中途终止后续技能打击，重开清理所有技能状态',()=
  assert.deepEqual(run(sim,5000),[]);assert.equal(b.hp,1000);
  getHeroProgression(board).clear();assert.equal(link.skill,null);assert.equal(getHeroProgression(board).links.size,0);
  const fresh=setup();assert.equal(fresh.link.skill.cooldownElapsed,0);assert.deepEqual(fresh.link.skill.targetIds,[]);
+});
+
+for(const hero of ['xiaomei','abing','xiaoliu'])
+test(`${hero} 普攻射程内充能、攻击间隔继续充能、脱战保留进度并接敌续算`,()=>{
+ const {sim,link}=setup(hero,testMap),target=enemy(sim,100000,true);
+ run(sim,500);const first=link.skill.cooldownElapsed;
+ assert.ok(first>=490&&first<=510); // 普攻初始间隔尚未结束，CD仍在累计。
+ sim.enemies=[];run(sim,2500);
+ assert.equal(link.skill.cooldownElapsed,first);
+ sim.enemies=[target];run(sim,400);
+ assert.ok(link.skill.cooldownElapsed>first+390);
+ assert.equal(link.skill.phase,'charging');
+});
+
+for(const hero of ['xiaomei','abing'])
+test(`${hero} Ready时没有合法技能目标会等待，目标出现后沿用原有选敌规则`,()=>{
+ const {sim,link}=setup(hero,testMap),boss=enemy(sim,100000,true);
+ run(sim,link.skill.cooldownDuration);
+ assert.equal(link.skill.phase,'ready');
+ sim.enemies=[];run(sim,2000);
+ assert.equal(link.skill.phase,'ready');assert.ok(Math.abs(link.skill.cooldownElapsed-link.skill.cooldownDuration)<1e-6);
+ const valid=enemy(sim,1000);
+ const events=run(sim,20);
+ assert.equal(events.filter(e=>e.kind==='skillStart').length,1);
+ assert.equal(events.filter(e=>e.kind==='skillHit').length,1);
+ assert.ok(valid.hp<1000);
+});
+
+test('小六Ready脱战保持，接敌后发动七次强化且不提前重开CD',()=>{
+ const {sim,link}=setup('xiaoliu',testMap);
+ link.skill.phase='ready';link.skill.cooldownElapsed=link.skill.cooldownDuration;
+ run(sim,2000);assert.equal(link.skill.phase,'ready');
+ const target=enemy(sim,100000,true);const events=run(sim,20);
+ assert.equal(events.filter(e=>e.kind==='skillStart').length,1);
+ assert.equal(link.skill.phase,'empowered');
+ const attacks=events.filter(e=>e.kind==='heroAttack').length;
+ assert.equal(link.skill.remainingAttacks,7-attacks);
+ sim.enemies=[];run(sim,2000);
+ assert.equal(link.skill.remainingAttacks,7-attacks);assert.equal(link.skill.cooldownElapsed,0);
+});
+
+test('充能中拆散 HeroLink 后进度销毁，重组从0开始；暂停不补算时间',()=>{
+ const {sim,board,wallet,link}=setup('xiaomei',testMap),target=enemy(sim,100000,true);
+ run(sim,1800);assert.ok(link.skill.cooldownElapsed>=1790);
+ const paused=link.skill.cooldownElapsed;
+ // PVE暂停时场景不调用战斗update；恢复时仅计算恢复后的增量。
+ assert.equal(link.skill.cooldownElapsed,paused);
+ run(sim,100);assert.ok(link.skill.cooldownElapsed>paused);
+ applyDrop(board,wallet,pos('tile',1),pos('slot',0));assert.equal(link.skill,null);
+ run(sim,5000);applyDrop(board,wallet,pos('slot',0),pos('tile',1));sim.update(0);
+ const next=sim.heroLinks[0];assert.notEqual(next,link);assert.equal(next.skill.cooldownElapsed,0);
+ sim.enemies=[];run(sim,1000);assert.equal(next.skill.cooldownElapsed,0);
 });

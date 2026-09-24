@@ -1,7 +1,9 @@
 import { getSkillStats, hasteConfig } from '../config/skills';
+import { getHeroStats } from '../config/heroes';
 import type { SkillId } from '../config/skills';
 import type { Enemy } from './enemies';
 import type { HeroLink } from '../systems/heroActivation';
+import { selectTarget } from './targeting';
 
 export interface SkillState {
   skillId: SkillId;
@@ -53,15 +55,22 @@ export function consumeEmpoweredAttack(link: HeroLink, emit: (event: SkillEvent)
 // 仅推进逻辑时间并产生事件；不使用动画回调、音效或 Phaser Timer 结算伤害。
 export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], deltaMs: number,
   hit: (enemy: Enemy, damage: number, link: HeroLink) => void, emit: (event: SkillEvent) => void,
-  execute: (enemy: Enemy, link: HeroLink) => void): void {
+  execute: (enemy: Enemy, link: HeroLink) => void,
+  ordinaryAttackRange = getHeroStats(link.level).range): void {
   const state = link.skill;
   if (!state) return;
   const stats = getSkillStats(state.skillId, link.level);
   state.cooldownDuration = stats.cooldown;
   if (state.phase === 'empowered') return;
-  state.cooldownElapsed = Math.min(state.cooldownDuration, state.cooldownElapsed + deltaMs);
+  // 普攻射程内存在存活目标才积累CD；与普攻自身的出手间隔无关。
+  const hasAttackTarget = selectTarget(enemies, link.origin, ordinaryAttackRange) !== null;
+  if (state.phase === 'charging' && hasAttackTarget) {
+    state.cooldownElapsed = Math.min(state.cooldownDuration, state.cooldownElapsed + deltaMs);
+  }
   if (state.skillId === 'xiaoliu_haste') {
     if (state.cooldownElapsed + 1e-8 < state.cooldownDuration) return;
+    state.phase = 'ready';
+    if (!hasAttackTarget) return;
     state.phase = 'empowered';
     state.remainingAttacks = hasteConfig.attacks;
     state.cooldownElapsed = 0;

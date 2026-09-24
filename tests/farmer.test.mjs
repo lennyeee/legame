@@ -45,9 +45,9 @@ for(let level=1;level<=MAX_LEVEL;level++)test(`Lv.${level}部署8秒产$${level*
 test('超时不发钱、不后台累积，新的8秒从超时瞬间开始；旧奖励ID不可领取',()=>{
  const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(8000);
  const state=production.states.get(item),oldId=state.reward.id;
- production.update(5000);assert.equal(wallet.money,100);assert.equal(state.reward,null);assert.equal(state.elapsedMs,0);
+ production.update(5000);assert.equal(wallet.money,20);assert.equal(state.reward,null);assert.equal(state.elapsedMs,0);
  production.update(7999);assert.equal(state.reward,null);production.update(1);
- assert.equal(production.collect(item,oldId),false);assert.equal(wallet.money,100);
+ assert.equal(production.collect(item,oldId),false);assert.equal(wallet.money,20);
 });
 test('棋盘移动/交换保留生产进度和收益剩余时间，回栏后立即清除并防幽灵领取',()=>{
  const {board,wallet,production,drop}=setup();const item=farmer(2);board.tiles[0].unit=item;production.update(3000);
@@ -88,12 +88,12 @@ test('农民与兵/武将字只交换，不参与攻击、技能、EXP或武将�
  const sim=new CombatSimulation(testMap,board,wallet);const enemy=sim.spawnEnemy();enemy.moveSpeed=0;
  let events=[];for(let i=0;i<2000;i++)events.push(...sim.update(10));
  assert.deepEqual(events,[]);assert.equal(enemy.hp,enemy.maxHp);assert.equal(getHeroProgression(board).links.size,0);
- assert.equal(wallet.money,100);assert.equal(production.states.get(item).reward,null);
+ assert.equal(wallet.money,20);assert.equal(production.states.get(item).reward,null);
 });
 test('停止后生产/收益期限冻结且不能领取，销毁和新局不保留旧收益',()=>{
  const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(8000);
  const id=production.states.get(item).reward.id;production.stop();production.update(30000);
  assert.equal(production.states.get(item).reward.remainingMs,5000);assert.equal(production.collect(item,id),false);
  production.destroy();assert.equal(production.states.size,0);assert.equal(production.collect(item,id),false);
- const fresh=setup();assert.equal(fresh.production.states.size,0);assert.equal(wallet.money,100);
+ const fresh=setup();assert.equal(fresh.production.states.size,0);assert.equal(wallet.money,20);
 });

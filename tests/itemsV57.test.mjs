@@ -32,7 +32,7 @@ test('点金手拒绝铲子/空位/道路/锁定地皮，不增加钱、不删�
  const {board,wallet,active}=setup();wallet.slots[0]='铲';const locked=board.tiles.findIndex(t=>!t.unlocked);
  board.tiles[locked].unit={type:'刀',level:1};
  for(const p of [null,pos('slot',0),pos('slot',1),pos('tile',locked),pos('tile',999)])assert.equal(active.use(0,board,wallet,p),false);
- assert.equal(wallet.money,100);assert.equal(wallet.slots[0],'铲');assert.ok(board.tiles[locked].unit);
+ assert.equal(wallet.money,20);assert.equal(wallet.slots[0],'铲');assert.ok(board.tiles[locked].unit);
 });
 test('卖掉武将字解除Link、技能和参战；搭档休眠且等级保留',()=>{
  const {board,wallet,active,progression}=setup();board.tiles[0].unit=letter('小',3);board.tiles[1].unit=letter('美');progression.sync();
@@ -86,7 +86,7 @@ test('农民、铲子、休眠字和备战字不是如律令目标，失败保�
 for(const index of [0,1])test('武将任一字强化整个Link，另一字重复不可叠加，拆解重组恢复、共享字不继承 '+index,()=>{
  const {board,wallet,active,progression}=setup();board.tiles[0].unit=letter('小');board.tiles[1].unit=letter('美');progression.sync();
  const old=[...progression.links.values()][0];active.update(20000);assert.ok(active.use(1,board,wallet,pos('tile',index)));assert.equal(old.hasteEnhanced,true);
- assert.equal(old.left.hasteEnhanced,undefined);assert.equal(old.right.hasteEnhanced,true);active.update(20000);
+ assert.equal(old.left.hasteEnhanced,undefined);assert.equal(old.right.hasteEnhanced,undefined);active.update(20000);
  assert.equal(active.use(1,board,wallet,pos('tile',1-index)),false);assert.ok(active.ready(1));
  applyDrop(board,wallet,pos('tile',1),pos('slot',0));assert.equal(progression.links.size,0);
  applyDrop(board,wallet,pos('slot',0),pos('tile',1));const fresh=[...progression.links.values()][0];assert.notEqual(fresh,old);assert.equal(fresh.hasteEnhanced,true);assert.equal(active.use(1,board,wallet,pos('tile',0)),false);
@@ -105,39 +105,58 @@ test('强化实际提高普通兵和武将普攻次数，不改变武将技能CD
 });
 test('停止/销毁禁止两种道具生效，新局没有强化且CD重新初始化',()=>{
  const {board,wallet,active,gear}=setup();wallet.slots[0]={type:'刀',level:1};active.update(20000);active.stop();
- for(const index of [0,1])assert.equal(active.use(index,board,wallet,pos('slot',0)),false);assert.equal(wallet.money,100);
+ for(const index of [0,1])assert.equal(active.use(index,board,wallet,pos('slot',0)),false);assert.equal(wallet.money,20);
  active.destroy();active.update(50000);assert.equal(active.slots.length,0);const next=new ActiveItems(gear);assert.ok(next.ready(0));assert.equal(next.ready(1),false);
  assert.equal(createRecruitmentState(gear).slots.every(x=>x===null),true);
 });
 
-for(const [first,carrier,id] of [['小','美','xiaomei'],['阿','饼','abing'],['小','六','xiaoliu']])test('v0.571 '+id+'载体换搭档/交换/回栏保留，重新激活拒绝重复；新局清空',()=>{
- const {board,wallet,active,progression,gear}=setup();const host=letter(carrier,2);board.tiles[0].unit=letter(first);board.tiles[1].unit=host;progression.sync();
- active.update(20000);assert.ok(active.use(1,board,wallet,pos('tile',0)));assert.equal(host.hasteEnhanced,true);
- applyDrop(board,wallet,pos('tile',1),pos('slot',0));assert.equal(progression.links.size,0);assert.equal(host.hasteEnhanced,true);
- active.update(20000);assert.equal(active.use(1,board,wallet,pos('slot',0)),false);
- applyDrop(board,wallet,pos('tile',0),pos('slot',3));const other=letter(first);wallet.slots[1]=other;applyDrop(board,wallet,pos('slot',1),pos('tile',0));
- applyDrop(board,wallet,pos('slot',0),pos('tile',1));const link=[...progression.links.values()][0];assert.equal(link.left,other);assert.equal(link.hasteEnhanced,true);
- assert.equal(active.use(1,board,wallet,pos('tile',1)),false);assert.ok(active.ready(1));
- wallet.slots[2]={type:'刀',level:1};applyDrop(board,wallet,pos('tile',1),pos('slot',2));assert.equal(host.hasteEnhanced,true);assert.equal(progression.links.size,0);
- applyDrop(board,wallet,pos('slot',2),pos('tile',1));assert.equal([...progression.links.values()][0].hasteEnhanced,true);
- active.destroy();progression.clear();const freshBoard=createBoardState(testMap),freshWallet=createRecruitmentState(gear);
- freshBoard.tiles[0].unit=letter(first);freshBoard.tiles[1].unit=letter(carrier);getHeroProgression(freshBoard).sync();
- assert.equal([...getHeroProgression(freshBoard).links.values()][0].hasteEnhanced,undefined);assert.ok(freshWallet.slots.every(x=>x===null));
- const freshItems=new ActiveItems(gear);freshItems.update(20000);assert.ok(freshItems.use(1,freshBoard,freshWallet,pos('tile',1)));
+
+for(const [first,second,id] of [['小','美','xiaomei'],['阿','饼','abing'],['小','六','xiaoliu']])
+test('同一 '+id+' 换另一枚同字后仍强化、拒绝第二次使用；新棋盘清空',()=>{
+ const {board,wallet,active,progression,gear}=setup();
+ const original=letter(second,2);board.tiles[0].unit=letter(first);board.tiles[1].unit=original;progression.sync();
+ active.update(20000);assert.equal(active.use(1,board,wallet,pos('tile',0)),true);
+ const old=[...progression.links.values()][0];assert.equal(old.heroId,id);assert.equal(old.hasteEnhanced,true);
+ assert.equal(original.hasteEnhanced,undefined);
+ assert.equal(applyDrop(board,wallet,pos('tile',1),pos('slot',0)),'move');
+ assert.equal(progression.links.size,0);assert.equal(original.hasteEnhanced,undefined);
+ wallet.slots[1]=letter(second);
+ assert.equal(applyDrop(board,wallet,pos('slot',1),pos('tile',1)),'move');
+ const replacement=[...progression.links.values()][0];assert.notEqual(replacement,old);
+ assert.notEqual(replacement.right,original);assert.equal(replacement.hasteEnhanced,true);
+ active.update(20000);assert.equal(active.use(1,board,wallet,pos('tile',0)),false);
+ assert.equal(active.use(1,board,wallet,pos('tile',1)),false);assert.equal(active.ready(1),true);
+ const newBoard=createBoardState(testMap),newWallet=createRecruitmentState(gear),newActive=new ActiveItems(gear);
+ newBoard.tiles[0].unit=letter(first);newBoard.tiles[1].unit=letter(second);
+ const newProgression=getHeroProgression(newBoard);newProgression.sync();
+ assert.equal([...newProgression.links.values()][0].hasteEnhanced,undefined);
+ newActive.update(20000);assert.equal(newActive.use(1,newBoard,newWallet,pos('tile',0)),true);
 });
-for(const from of ['slot','tile'])for(const to of ['slot','tile'])test('v0.571 HeroLetter同字升级 '+from+'→'+to+' OR继承且封顶不吞材料',()=>{
- for(const type of ['美','饼','六'])for(const a of [false,true])for(const b of [false,true])for(const level of [2,5]){
- const {board,wallet}=setup(),source={...letter(type),...(a?{hasteEnhanced:true}:{})},target={...letter(type,level),...(b?{hasteEnhanced:true}:{})};
- if(from==='slot')wallet.slots[0]=source;else board.tiles[0].unit=source;
- if(to==='slot')wallet.slots[1]=target;else board.tiles[1].unit=target;
- assert.equal(applyDrop(board,wallet,pos(from,0),pos(to,1)),level===5?'invalid':'merge');
- assert.equal(target.level,level===5?5:3);assert.equal(!!target.hasteEnhanced,level===5?b:a||b);
- assert.equal(from==='slot'?wallet.slots[0]:board.tiles[0].unit,level===5?source:null);
- }
+
+test('小美已强化时共享的小组成小六不继承；不同 heroId 可各自使用',()=>{
+ const {board,wallet,active,progression}=setup();
+ const shared=letter('小');board.tiles[0].unit=shared;board.tiles[1].unit=letter('美');progression.sync();
+ active.update(20000);assert.equal(active.use(1,board,wallet,pos('tile',0)),true);
+ assert.equal(applyDrop(board,wallet,pos('tile',1),pos('slot',0)),'move');
+ wallet.slots[1]=letter('六');assert.equal(applyDrop(board,wallet,pos('slot',1),pos('tile',1)),'move');
+ let link=[...progression.links.values()][0];assert.equal(link.heroId,'xiaoliu');assert.equal(link.hasteEnhanced,undefined);
+ active.update(20000);assert.equal(active.use(1,board,wallet,pos('tile',1)),true);
+ assert.equal(applyDrop(board,wallet,pos('tile',0),pos('slot',2)),'move');
+ assert.equal(applyDrop(board,wallet,pos('tile',1),pos('slot',3)),'move');
+ board.tiles[0].unit=letter('阿');board.tiles[1].unit=letter('饼');progression.sync();
+ link=[...progression.links.values()][0];assert.equal(link.heroId,'abing');assert.equal(link.hasteEnhanced,undefined);
+ active.update(20000);assert.equal(active.use(1,board,wallet,pos('tile',0)),true);
+ assert.equal(applyDrop(board,wallet,pos('tile',0),pos('slot',4)),'move');
+ assert.equal(applyDrop(board,wallet,pos('tile',1),pos('slot',1)),'move');
+ assert.equal(applyDrop(board,wallet,pos('slot',2),pos('tile',0)),'move');
+ board.tiles[1].unit=letter('美');progression.sync();
+ link=[...progression.links.values()][0];assert.equal(link.heroId,'xiaomei');assert.equal(link.hasteEnhanced,true);
 });
-test('v0.571 已激活组合接受带强化同字材料立即获得Buff且EXP按原规则清零',()=>{
- const {board,wallet,progression}=setup();board.tiles[0].unit=letter('小');board.tiles[1].unit=letter('美');progression.sync();
- const link=[...progression.links.values()][0];link.currentExp=15;wallet.slots[0]={...letter('美'),hasteEnhanced:true};
- assert.equal(applyDrop(board,wallet,pos('slot',0),pos('tile',1)),'merge');assert.equal(link.hasteEnhanced,true);assert.equal(link.level,2);assert.equal(link.currentExp,0);
- assert.equal(link.left.hasteEnhanced,undefined);
+
+test('普通兵移动、同类合成的强化 OR 继承保持不变',()=>{
+ const {board,wallet,active}=setup();wallet.slots[0]={type:'刀',level:1};active.update(20000);
+ assert.equal(active.use(1,board,wallet,pos('slot',0)),true);
+ assert.equal(applyDrop(board,wallet,pos('slot',0),pos('tile',0)),'move');
+ wallet.slots[1]={type:'刀',level:1};assert.equal(applyDrop(board,wallet,pos('slot',1),pos('tile',0)),'merge');
+ assert.equal(board.tiles[0].unit.level,2);assert.equal(board.tiles[0].unit.hasteEnhanced,true);
 });

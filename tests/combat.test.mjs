@@ -66,7 +66,7 @@ test('到达乐正确移除，只发出一次漏怪事件且不奖励', () => {
   assert.equal(events.filter(event => event.kind === 'escape').length, 1);
   assert.equal(events.filter(event => event.kind === 'kill').length, 0);
   assert.equal(sim.enemies.length, 0);
-  assert.equal(wallet.money, 100);
+  assert.equal(wallet.money, 20);
 });
 
 test('未启用波次的独立战斗不会无限自动刷怪', () => {
@@ -164,10 +164,11 @@ test('伤害归零、死亡移除、多个攻击者同帧击杀只奖励一次',
   assert.equal(enemy.hp, 0);
   assert.equal(sim.enemies.length, 0);
   assert.equal(events.filter(event => event.kind === 'kill').length, 1);
-  assert.equal(wallet.money, 105);
+  assert.equal(events.find(event => event.kind === 'kill').reward, 1);
+  assert.equal(wallet.money, 21);
   assert.deepEqual(damageEnemy(enemy, 100), { applied: 0, killed: false });
   run(sim, 1000);
-  assert.equal(wallet.money, 105);
+  assert.equal(wallet.money, 21);
 });
 
 test('升级提高伤害和攻速，仅弓在Lv.2增加射程', () => {
@@ -271,6 +272,7 @@ test('战斗中征兵、交换、合成和铲子解锁可共同运行', () => {
   recruit(wallet, () => 0.65);
   assert.equal(applyDrop(board, wallet, slot(0), tile(3)), 'unlock');
   run(sim, 100);
+  wallet.money = 12; // 本用例验证战斗中交互，单独提供第二次来财所需资金。
   recruit(wallet, () => 0);
   assert.equal(board.tiles[0].unit, deployed);
   applyDrop(board, wallet, slot(0), tile(0));

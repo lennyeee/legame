@@ -10,6 +10,7 @@ import { getHeroLinks } from '../systems/heroActivation';
 import { getHeroProgression } from '../systems/heroProgression';
 import { isHeroLetter } from '../systems/items';
 import { heroVisuals } from '../config/heroes';
+import { tileBonusVisuals } from '../config/tileBonuses';
 
 // 只负责下半区和待放置栏；上半场没有可命中的交互格。
 export class DeploymentView {
@@ -31,6 +32,7 @@ export class DeploymentView {
       unit.root.setScale(boardDisplay.scale);
       return {
         box, text, unit,
+        bonus: label(scene, point.x, point.y - 25 * boardDisplay.scale, '', 15 * boardDisplay.scale),
         sleep: label(scene, point.x, point.y - 19 * boardDisplay.scale, '', 12 * boardDisplay.scale, heroVisuals.sleepColor),
       };
     });
@@ -61,9 +63,10 @@ export class DeploymentView {
     }
     this.tiles.forEach((view, index) => {
       const tile = board.tiles[index]!;
-      view.box.setFillStyle(tile.unlocked ? 0xfffcf4 : 0xc8c0af)
+      view.box.setFillStyle(tile.unlocked ? tileBonusVisuals[tile.bonusType].fill : 0xc8c0af)
         .setStrokeStyle(2, tile.unlocked ? 0x87937d : 0xc2bcae);
       view.box.setVisible(!linked.has(index));
+      view.bonus.setText(tileBonusVisuals[tile.bonusType].label);
       view.text.setText(tile.unit ? '' : tile.unlocked ? '+' : '锁')
         .setColor(tile.unlocked ? '#798970' : '#999284');
       const sleeping = isHeroLetter(tile.unit) && !linked.has(index)
