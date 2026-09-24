@@ -1,19 +1,17 @@
 import { itemDefinitions } from '../config/equipment';
 import Phaser from 'phaser';
 import { label } from '../ui/text';
-import type { ActiveItems } from '../systems/ActiveItems';
-import type { BoardState } from '../systems/board';
-import type { RecruitmentState } from '../systems/recruitment';
+import type { PlayerSide } from '../systems/PlayerSide';
 import type { DeploymentView } from '../ui/deployment';
 import type { ActiveSlotView } from '../ui/loadout';
 
 export class ActiveItemController {
   private drag: { index: number; pointerId: number } | null = null;
   private readonly ghost: Phaser.GameObjects.Text;
-  constructor(private readonly scene: Phaser.Scene, private readonly model: ActiveItems,
-    private readonly slots: ActiveSlotView[], private readonly board: BoardState,
-    private readonly state: RecruitmentState, private readonly view: DeploymentView,
+  constructor(private readonly scene: Phaser.Scene, private readonly side: PlayerSide,
+    private readonly slots: ActiveSlotView[], private readonly view: DeploymentView,
     private readonly canInteract: () => boolean, private readonly onUse: (success: boolean) => void) {
+    const model = side.activeItems;
     this.ghost = label(scene, 0, 0, '', 22, '#697e67').setDepth(100).setVisible(false);
     slots.forEach((slot, index) => {
       if (!model.slots[index]) return;
@@ -21,7 +19,7 @@ export class ActiveItemController {
       slot.box.setInteractive({ useHandCursor: true });
       slot.box.on('pointerdown', (p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
         event.stopPropagation();
-        if (this.drag || !p.primaryDown || !canInteract() || !model.ready(index)) return;
+        if (this.drag || !p.primaryDown || !side.running || !canInteract() || !model.ready(index)) return;
         this.drag = { index, pointerId: p.id };
         this.ghost.setText(this.itemName(index)).setPosition(p.x, p.y).setVisible(true);
         this.refresh();
@@ -34,6 +32,7 @@ export class ActiveItemController {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy);
     this.refresh();
   }
+  private get model() { return this.side.activeItems; }
   private itemName(index: number): string {
     return itemDefinitions.find(item => item.id === this.model.slots[index]?.id)?.name ?? '';
   }
@@ -53,7 +52,7 @@ export class ActiveItemController {
   private finish = (p: Phaser.Input.Pointer): void => {
     if (!this.drag || p.id !== this.drag.pointerId) return;
     const success = p.event?.type !== 'touchcancel' && this.canInteract()
-      && this.model.use(this.drag.index, this.board, this.state, this.view.positionAt(p.x, p.y));
+      && this.side.useActiveItem(this.drag.index, this.view.positionAt(p.x, p.y));
     this.cancel();
     this.onUse(success);
   };

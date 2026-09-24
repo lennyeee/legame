@@ -1,14 +1,11 @@
+import type { PlayerSide } from '../systems/PlayerSide';
 import Phaser from 'phaser';
 import { isUnit } from '../systems/items';
-import { getHeroProgression } from '../systems/heroProgression';
-import { waveConfig } from '../config/waves';
-import { WaveProgress } from './WaveProgress';
-import type { BoardMap } from '../config/maps';
-import type { BoardState } from '../systems/board';
+import type { WaveProgress } from './WaveProgress';
 import type { DeploymentController } from '../input/DeploymentController';
 import type { DeploymentView } from '../ui/deployment';
 import { CombatView } from '../ui/combat';
-import { CombatSimulation } from './CombatSimulation';
+import type { CombatSimulation } from './CombatSimulation';
 
 // 仅此适配层连接 Phaser 输入/帧循环、规则和画面。
 export class BattleController {
@@ -19,15 +16,13 @@ export class BattleController {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    map: BoardMap,
-    board: BoardState,
-    private readonly wallet: { money: number },
+    private readonly side: PlayerSide,
     private readonly deployment: DeploymentController,
     private readonly deploymentView: DeploymentView,
     private readonly refreshMoney: () => void,
     private readonly refreshProgress: (progress: WaveProgress) => void = () => {},
   ) {
-    this.battle = new CombatSimulation(map, board, wallet, undefined, new WaveProgress(waveConfig));
+    this.battle = side.combat;
     this.view = new CombatView(scene, this.battle);
     this.refreshProgress(this.battle.progress!);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.update);
@@ -66,17 +61,16 @@ export class BattleController {
   private update = (_time: number, delta: number): void => {
     // 场景暂停时不累计视觉时间，恢复后弹道/闪光不会跳过暂停时长。
     this.visualTime += delta;
-    const before = this.wallet.money;
-    const events = this.battle.update(delta, this.deployment.draggedTile);
+    const before = this.side.recruitment.money;
+    const events = this.side.updateCombat(delta, this.deployment.draggedTile);
     if (events.some(event => event.kind === 'kill')) this.deployment.refresh();
     if (this.battle.progress!.status !== 'playing') this.hideRange();
     this.view.render(events, this.visualTime);
     this.refreshProgress(this.battle.progress!);
-    if (this.wallet.money !== before) this.refreshMoney();
+    if (this.side.recruitment.money !== before) this.refreshMoney();
   };
 
   private destroy = (): void => {
-    getHeroProgression(this.battle.board).clear();
     this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.update);
     this.scene.input.off('pointerdown', this.select);
     this.scene.input.off('pointermove', this.hideWhenDragging);

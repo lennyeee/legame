@@ -93,6 +93,16 @@ export class CombatSimulation {
     return enemy;
   }
 
+  // 由运行时所有者在退出本局时释放，不承担重开/波次规则。
+  destroy(): void {
+    this.enemies.length = 0;
+    this.projectiles.length = 0;
+    this.attackers.clear();
+    this.heroAttackers.clear();
+    this.elapsed = 0;
+    this.suspendedTile = null;
+  }
+
   isAttackerValid(tileIndex: number, unit: Unit, level: number): boolean {
     const tile = this.board.tiles[tileIndex];
     return tileIndex !== this.suspendedTile && !!tile?.unlocked && tile.unit === unit && unit.level === level;

@@ -1,15 +1,17 @@
 import type Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
 import type { Farmer } from '../systems/items';
-import { FarmerProduction } from '../systems/FarmerProduction';
+import type { PlayerSide } from '../systems/PlayerSide';
 import { boardToScreen } from '../config/layout';
 import { label } from './text';
 
 export class FarmerView {
   private readonly badges = new Map<Farmer, { id: number; box: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }>();
   constructor(private readonly scene: Phaser.Scene, private readonly map: BoardMap,
-    private readonly production: FarmerProduction, private readonly canCollect: () => boolean,
+    private readonly side: PlayerSide, private readonly canCollect: () => boolean,
     private readonly onCollect: () => void) {}
+
+  private get production() { return this.side.farmers; }
 
   refresh(): void {
     for (const [farmer, badge] of this.badges) {
@@ -29,7 +31,7 @@ export class FarmerView {
         const text = label(this.scene, point.x, point.y, `$${state.reward.amount}`, 21, '#514a40').setDepth(41);
         box.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
           event.stopPropagation(); // 不将领取同一次按下交给单位拖拽。
-          if (this.canCollect() && this.production.collect(farmer, id)) { this.refresh();this.onCollect(); }
+          if (this.canCollect() && this.side.collectFarmerReward(farmer, id)) { this.refresh();this.onCollect(); }
         });
         badge = { id, box, text };this.badges.set(farmer, badge);
       }

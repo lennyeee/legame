@@ -52,10 +52,10 @@ test('升级符复用HeroLetter同步：双方升一级、EXP归零、保持激�
 });
 test('农民升级清除旧收益、按新等级重新生产，无幽灵收益',()=>{
  const {board,wallet,active}=setup();const farmer={kind:'farmer',type:'农',level:1};board.tiles[0].unit=farmer;
- const production=new FarmerProduction(board,wallet);production.update(8000);const old=production.states.get(farmer).reward.id;
+ const production=new FarmerProduction(board,wallet);production.update(12000);const old=production.states.get(farmer).reward.id;
  active.update(20000);active.use(0,board,wallet,{kind:'tile',index:0});production.sync();
  assert.equal(production.collect(farmer,old),false);assert.equal(production.states.get(farmer).elapsedMs,0);
- production.update(8000);assert.equal(production.states.get(farmer).reward.amount,10);
+ production.update(12000);assert.equal(production.states.get(farmer).reward.amount,2);
 });
 test('主动状态停止/销毁拒绝升级及CD推进；新实例完整CD',()=>{
  const {board,wallet,active,gear}=setup();wallet.slots[0]={type:'刀',level:1};active.update(20000);active.stop();

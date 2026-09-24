@@ -1,8 +1,7 @@
 import Phaser from 'phaser';
-import { getHeroProgression } from '../systems/heroProgression';
-import { applyDrop, getDragItem } from '../systems/board';
-import type { BoardState, UnitPosition, DropAction } from '../systems/board';
-import type { RecruitmentState } from '../systems/recruitment';
+import type { PlayerSide } from '../systems/PlayerSide';
+import { getDragItem } from '../systems/board';
+import type { UnitPosition, DropAction } from '../systems/board';
 import type { DeploymentView } from '../ui/deployment';
 
 // 鼠标与触摸共享 Phaser Pointer；松手前不改数据，取消即恢复原位。
@@ -11,8 +10,7 @@ export class DeploymentController {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly board: BoardState,
-    private readonly recruitment: RecruitmentState,
+    private readonly side: PlayerSide,
     private readonly view: DeploymentView,
     private readonly onDrop: (result: DropAction) => void,
     private readonly canInteract: () => boolean = () => true,
@@ -25,6 +23,9 @@ export class DeploymentController {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy);
   }
 
+  private get board() { return this.side.board; }
+  private get recruitment() { return this.side.recruitment; }
+
   get isDragging(): boolean { return this.active !== null; }
 
   get draggedTile(): number | null {
@@ -32,12 +33,12 @@ export class DeploymentController {
   }
 
   refresh(): void {
-    getHeroProgression(this.board).sync(this.draggedTile);
+    this.side.syncDeployment(this.draggedTile);
     this.view.refresh(this.board, this.recruitment, this.active?.moved ? this.active.source : undefined);
   }
 
   private start = (pointer: Phaser.Input.Pointer): void => {
-    if (!this.canInteract() || this.active || !pointer.primaryDown) return;
+    if (!this.side.running || !this.canInteract() || this.active || !pointer.primaryDown) return;
     const source = this.view.positionAt(pointer.x, pointer.y);
     if (!source) return;
     const item = getDragItem(this.board, this.recruitment, source);
@@ -62,8 +63,8 @@ export class DeploymentController {
     // 单击只用于查看射程，不能被当成原位拖放失败，也不暂停战斗。
     if (!this.active.moved) { this.cancel(); return; }
     const cancelled = pointer.event?.type === 'touchcancel';
-    const result = cancelled ? 'invalid' : applyDrop(
-      this.board, this.recruitment, this.active.source, this.view.positionAt(pointer.x, pointer.y),
+    const result = cancelled ? 'invalid' : this.side.drop(
+      this.active.source, this.view.positionAt(pointer.x, pointer.y),
     );
     this.cancel();
     this.onDrop(result);

@@ -42,7 +42,7 @@ test('卖掉武将字解除Link、技能和参战；搭档休眠且等级保留'
 });
 test('出售农民清除生产与待领取钱；出售普通兵清除旧攻击和弹道',()=>{
  const {board,wallet,active}=setup();const farmer={kind:'farmer',type:'农',level:2};board.tiles[0].unit=farmer;
- const farm=new FarmerProduction(board,wallet);farm.update(8000);const reward=farm.states.get(farmer).reward.id;
+ const farm=new FarmerProduction(board,wallet);farm.update(12000);const reward=farm.states.get(farmer).reward.id;
  active.use(0,board,wallet,pos('tile',0));farm.sync();assert.equal(farm.states.size,0);assert.equal(farm.collect(farmer,reward),false);
  const sim=new CombatSimulation(testMap,board,wallet);const unit={type:'弓',level:1};board.tiles[0].unit=unit;sim.syncBoard();
  sim.projectiles.push({id:1,tileIndex:0,unit,level:1,targetId:1,damage:30,range:200,x:0,y:0});

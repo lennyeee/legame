@@ -30,30 +30,30 @@ test('未装备池绝无农民；装备后按集中权重加入，开局快照�
  }
  assert.equal(hits,farmerConfig.recruitmentWeight);assert.equal(equipped.loadout.passive[0].id,'farmer');
 });
-for(let level=1;level<=MAX_LEVEL;level++)test(`Lv.${level}部署8秒产$${level*5}、领取一次后重新计时`,()=>{
+for(let level=1;level<=MAX_LEVEL;level++)test(`Lv.${level}部署12秒产${level}、领取一次后重新计时`,()=>{
  const {board,wallet,production,drop}=setup();const item=farmer(level);wallet.slots[0]=item;
  production.update(30000);assert.equal(production.states.size,0);
  assert.equal(drop(pos('slot',0),pos('tile',0)),'move');
- production.update(7999);assert.equal(production.states.get(item).reward,null);
+ production.update(11999);assert.equal(production.states.get(item).reward,null);
  production.update(1);const state=production.states.get(item),id=state.reward.id;
- assert.equal(state.reward.amount,level*5);assert.equal(state.reward.remainingMs,5000);
+ assert.equal(state.reward.amount,level);assert.equal(state.reward.remainingMs,5000);
  production.update(4999);assert.equal(state.reward.id,id);assert.equal(state.elapsedMs,0);
- const money=wallet.money;assert.equal(production.collect(item,id),true);assert.equal(wallet.money,money+level*5);
- assert.equal(production.collect(item,id),false);production.update(7999);assert.equal(state.reward,null);
- production.update(1);assert.notEqual(state.reward.id,id);assert.equal(state.reward.amount,level*5);
+ const money=wallet.money;assert.equal(production.collect(item,id),true);assert.equal(wallet.money,money+level);
+ assert.equal(production.collect(item,id),false);production.update(11999);assert.equal(state.reward,null);
+ production.update(1);assert.notEqual(state.reward.id,id);assert.equal(state.reward.amount,level);
 });
-test('超时不发钱、不后台累积，新的8秒从超时瞬间开始；旧奖励ID不可领取',()=>{
- const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(8000);
+test('超时不发钱、不后台累积，新的12秒从超时瞬间开始；旧奖励ID不可领取',()=>{
+ const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(12000);
  const state=production.states.get(item),oldId=state.reward.id;
  production.update(5000);assert.equal(wallet.money,20);assert.equal(state.reward,null);assert.equal(state.elapsedMs,0);
- production.update(7999);assert.equal(state.reward,null);production.update(1);
+ production.update(11999);assert.equal(state.reward,null);production.update(1);
  assert.equal(production.collect(item,oldId),false);assert.equal(wallet.money,20);
 });
 test('棋盘移动/交换保留生产进度和收益剩余时间，回栏后立即清除并防幽灵领取',()=>{
  const {board,wallet,production,drop}=setup();const item=farmer(2);board.tiles[0].unit=item;production.update(3000);
  drop(pos('tile',0),pos('tile',1));assert.equal(production.states.get(item).elapsedMs,3000);
  board.tiles[0].unit={type:'刀',level:1};drop(pos('tile',1),pos('tile',0));assert.equal(production.states.get(item).elapsedMs,3000);
- production.update(5000);production.update(2000);const id=production.states.get(item).reward.id;
+ production.update(5000);production.update(4000);production.update(2000);const id=production.states.get(item).reward.id;
  drop(pos('tile',0),pos('tile',1));assert.equal(production.states.get(item).reward.remainingMs,3000);
  drop(pos('tile',1),pos('slot',0));assert.equal(production.states.size,0);assert.equal(production.collect(item,id),false);
  drop(pos('slot',0),pos('tile',1));assert.equal(production.states.get(item).elapsedMs,0);assert.equal(production.states.get(item).reward,null);
@@ -74,10 +74,10 @@ for(const a of ['slot','tile'])for(const b of ['slot','tile'])test(`${a}→${b}�
 });
 test('两个生产中农民合并清除双方美元，新农民从0计时；锁定地皮不可部署',()=>{
  const {board,wallet,production,drop}=setup();const a=farmer(),b=farmer();board.tiles[0].unit=a;board.tiles[1].unit=b;
- production.update(8000);const oldId=production.states.get(a).reward.id;
+ production.update(12000);const oldId=production.states.get(a).reward.id;
  assert.equal(drop(pos('tile',0),pos('tile',1)),'merge');assert.equal(production.states.size,1);
  const merged=board.tiles[1].unit;assert.equal(production.states.get(merged).elapsedMs,0);assert.equal(production.states.get(merged).reward,null);
- assert.equal(production.collect(a,oldId),false);production.update(8000);assert.equal(production.states.get(merged).reward.amount,10);
+ assert.equal(production.collect(a,oldId),false);production.update(12000);assert.equal(production.states.get(merged).reward.amount,2);
  wallet.slots[0]=farmer();assert.equal(drop(pos('slot',0),pos('tile',3)),'invalid');assert.ok(wallet.slots[0]);
 });
 test('农民与兵/武将字只交换，不参与攻击、技能、EXP或武将关系',()=>{
@@ -91,7 +91,7 @@ test('农民与兵/武将字只交换，不参与攻击、技能、EXP或武将�
  assert.equal(wallet.money,20);assert.equal(production.states.get(item).reward,null);
 });
 test('停止后生产/收益期限冻结且不能领取，销毁和新局不保留旧收益',()=>{
- const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(8000);
+ const {board,wallet,production}=setup();const item=farmer();board.tiles[0].unit=item;production.update(12000);
  const id=production.states.get(item).reward.id;production.stop();production.update(30000);
  assert.equal(production.states.get(item).reward.remainingMs,5000);assert.equal(production.collect(item,id),false);
  production.destroy();assert.equal(production.states.size,0);assert.equal(production.collect(item,id),false);
