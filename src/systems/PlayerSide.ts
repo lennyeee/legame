@@ -13,7 +13,7 @@ import { FarmerProduction } from './FarmerProduction';
 import { ActiveItems } from './ActiveItems';
 
 // 单方实例的组装边界；地图/配置可以共享，所有运行状态在这里独立创建。
-// 暂时保留单边 WaveProgress（含 HP/结算），不引入双边 Match 时间轴。
+// WaveProgress仅用于旧单边兼容测试；正式Match不创建单方波次或HP。
 export class PlayerSide {
   readonly id: string;
   readonly recruitment;
@@ -31,14 +31,14 @@ export class PlayerSide {
     this.recruitment = createRecruitmentState(loadout);
     this.board = createBoardState(map);
     this.heroes = getHeroProgression(this.board);
-    this.progress = new WaveProgress(waveConfig);
+    this.progress = options.automaticWaves === false ? null : new WaveProgress(waveConfig);
     this.combat = new CombatSimulation(map, this.board, this.recruitment, undefined,
-      options.automaticWaves === false ? null : this.progress);
+      this.progress);
     this.farmers = new FarmerProduction(this.board, this.recruitment);
     this.activeItems = new ActiveItems(this.recruitment.loadout);
   }
 
-  get running(): boolean { return this.lifecycle === 'running' && this.progress.status === 'playing'; }
+  get running(): boolean { return this.lifecycle === 'running' && (!this.progress || this.progress.status === 'playing'); }
   pause(): void { if (this.running) this.lifecycle = 'paused'; }
   resume(): void { if (this.lifecycle === 'paused') this.lifecycle = 'running'; }
 
@@ -79,7 +79,7 @@ export class PlayerSide {
     this.farmers.update(delta);
   }
 
-  // 调度仍由 Phaser 的原有 1 秒定时器提供，暂停不改变原来的余数/节奏。
+  // Match统一提供每秒调度；单方只拥有自己的计数和收益。
   tickPassiveSecond(): boolean {
     if (!this.running || !hasPassive(this.recruitment, 'iron_rice_bowl')) return false;
     if (++this.passives.ironRiceSeconds % passiveEconomy.ironRiceIntervalSeconds !== 0) return false;

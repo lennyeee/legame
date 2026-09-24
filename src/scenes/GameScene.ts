@@ -5,7 +5,7 @@ import { testMap } from '../config/maps';
 import { recruitmentPrice } from '../systems/recruitment';
 import { drawBoard } from '../ui/board';
 import { label } from '../ui/text';
-import { PlayerSide } from '../systems/PlayerSide';
+import { Match } from '../match/Match';
 import { DeploymentView } from '../ui/deployment';
 import { DeploymentController } from '../input/DeploymentController';
 import { BattleController } from '../combat/BattleController';
@@ -17,17 +17,18 @@ import { FarmerView } from '../ui/FarmerView';
 import { setupDevTopSide } from '../dev/topSetup';
 
 export class GameScene extends Phaser.Scene {
-  sides: { bottom: PlayerSide; top: PlayerSide } | null = null;
+  match: Match | null = null;
+  get sides() { return this.match?.sides ?? null; }
   constructor() {
     super('GameScene');
   }
 
   create(data: { loadout?: Loadout } = {}): void {
     this.input.enabled = true;
-    const bottomSide = new PlayerSide('bottom', testMap, data.loadout);
-    const topSide = new PlayerSide('top', testMap, undefined, { automaticWaves: false });
-    this.sides = { bottom: bottomSide, top: topSide };
-    const topDev = setupDevTopSide(topSide);
+    const match = new Match(testMap, data.loadout);
+    this.match = match;
+    const { bottomSide, topSide } = match;
+    setupDevTopSide(topSide);
     const state = bottomSide.recruitment;
     const loadout = state.loadout;
     const moneyText = label(this, 170, 55, '', 32);
@@ -36,6 +37,7 @@ export class GameScene extends Phaser.Scene {
     const boardScene = boardDisplayScene(this, testMap, 'bottom');
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(boardScene, goal.x, goal.y + 24, '', 24, '#a85c4d');
+    const topHealthText = label(boardDisplayScene(this, testMap, 'top'), goal.x, goal.y - 24, '', 24, '#a85c4d');
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
     const activeSlots = drawLoadout(this, loadout);
     let activeController: ActiveItemController | undefined;
@@ -91,58 +93,53 @@ export class GameScene extends Phaser.Scene {
       deployment.refresh();
       refresh();
     });
-    const incomeTimer = this.time.addEvent({
-      delay: 1000,
-      loop: true,
-      callback: () => {
-        const wasInsufficient = state.money < recruitmentPrice(state);
-        if (!bottomSide.tickPassiveSecond()) return;
+    deployment.refresh();
+    refresh();
+    const battle = new BattleController(this, bottomSide, deployment, deploymentView);
+    const topBattle = new BattleController(this, topSide);
+    const refreshProgress = (): void => {
+      waveText.setText(`第 ${match.timeline.wave} 波`);
+      healthText.setText('♥'.repeat(match.health.bottom));
+      topHealthText.setText('♥'.repeat(match.health.top));
+      if (!ended && match.result !== null) {
+        ended = true;
+        activeController?.cancel();
+        deployment.cancel();
+        this.input.enabled = false;
+        this.scene.pause();
+        const mode = match.result === 'draw' ? 'draw' : match.result === 'bottom' ? 'victory' : 'defeat';
+        this.scene.launch('PveOverlayScene', { mode, health: match.health.bottom, loadout });
+      }
+    };
+    refreshProgress();
+    const updateMatch = (_time: number, delta: number): void => {
+      if (!match.running) return;
+      const before = state.money;
+      const wasInsufficient = before < recruitmentPrice(state);
+      const events = match.update(delta, deployment.draggedTile);
+      battle.render(events.bottom, match.timeline.elapsedMs);
+      topBattle.render(events.top, match.timeline.elapsedMs);
+      if (state.money !== before) {
         if (wasInsufficient && state.money >= recruitmentPrice(state)) {
           feedback.setText('美金已足够，可以再次征兵').setColor('#697e67');
         }
         refresh();
-      },
-    });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => incomeTimer.remove());
-    deployment.refresh();
-    refresh();
-    const battle = new BattleController(this, bottomSide, deployment, deploymentView, refresh, progress => {
-      waveText.setText(`第 ${progress.wave} 波`);
-      healthText.setText('♥'.repeat(progress.health));
-      if (!ended && progress.status !== 'playing') {
-        ended = true;
-        bottomSide.stop();
-        topSide.stop();
-        activeController?.cancel();
-        incomeTimer.remove();
-        deployment.cancel();
-        this.input.enabled = false;
-        this.scene.pause();
-        this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health, loadout });
       }
-    });
-    new BattleController(this, topSide);
-    // 排在战斗帧更新之后：本帧若已结算，不再推进生产或过期。
-    const updateItemSystems = (_time: number, delta: number): void => {
-      if (ended) return;
-      bottomSide.updateItems(delta);
-      topDev.update(delta);
-      topSide.updateItems(delta);
       activeController?.refresh();
       farmerView.refresh();
       topFarmerView.refresh();
       topDeploymentView.refresh(topSide.board, topSide.recruitment);
+      refreshProgress();
     };
-    this.events.on(Phaser.Scenes.Events.UPDATE, updateItemSystems);
+    this.events.on(Phaser.Scenes.Events.UPDATE, updateMatch);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.events.off(Phaser.Scenes.Events.UPDATE, updateItemSystems);
-      bottomSide.destroy();
-      topSide.destroy();
+      this.events.off(Phaser.Scenes.Events.UPDATE, updateMatch);
+      match.destroy();
       farmerView.destroy();
       topFarmerView.destroy();
-      this.sides = null;
+      this.match = null;
     });
-    const resumeInput = (): void => { bottomSide.resume(); topSide.resume(); this.input.enabled = true; };
+    const resumeInput = (): void => { match.resume(); this.input.enabled = match.running; };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));
     const pauseButton = this.add.rectangle(75, 55, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });
@@ -153,8 +150,7 @@ export class GameScene extends Phaser.Scene {
       deployment.cancel();
       activeController?.cancel();
       battle.hideRange();
-      bottomSide.pause();
-      topSide.pause();
+      match.pause();
       this.input.enabled = false;
       this.events.once(Phaser.Scenes.Events.RESUME, resumeInput);
       this.scene.pause();

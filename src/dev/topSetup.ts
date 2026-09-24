@@ -1,8 +1,7 @@
 import type { ReserveItem } from '../systems/items';
 import type { PlayerSide } from '../systems/PlayerSide';
-import { advanceEnemy } from '../combat/enemies';
 
-// v0.60-B 开发场景脚本：只准备可观察的对手棋盘和测试敌人；后续由 AIController 替换。
+// 开发场景脚本只准备对手防守棋盘；刷怪完全由MatchTimeline驱动。
 export function setupDevTopSide(side: PlayerSide) {
   const place = (item: ReserveItem, index: number): void => {
     side.recruitment.slots[0] = item;
@@ -20,19 +19,4 @@ export function setupDevTopSide(side: PlayerSide) {
   side.drop({ kind: 'slot', index: 0 }, { kind: 'tile', index: 3 });
   side.board.tiles[3]!.bonusType = 'attack';
 
-  const first = side.combat.spawnEnemy();
-  const second = side.combat.spawnEnemy();
-  advanceEnemy(second, side.combat.path, 2.5);
-  let elapsed = 0;
-  return {
-    update(delta: number): void {
-      if (!side.running) return;
-      elapsed += delta;
-      while (elapsed >= 8_000) {
-        elapsed -= 8_000;
-        side.combat.spawnEnemy();
-      }
-    },
-    initialEnemyIds: [first.id, second.id],
-  };
 }

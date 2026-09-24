@@ -3,12 +3,12 @@ import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
 
 export interface PveOverlayData {
-  mode: 'paused' | 'victory' | 'defeat';
+  mode: 'paused' | 'victory' | 'defeat' | 'draw';
   health: number;
   loadout?: Loadout;
 }
 
-// PVE 专用界面：暂停整个游戏场景，战斗规则本身不依赖暂停状态。
+// 开发期暂停/结算界面；Match已在逻辑层统一冻结双方，场景暂停只负责表现。
 export class PveOverlayScene extends Phaser.Scene {
   constructor() {
     super('PveOverlayScene');
@@ -17,7 +17,7 @@ export class PveOverlayScene extends Phaser.Scene {
   create(data: PveOverlayData): void {
     this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.65).setInteractive();
     const paused = data.mode === 'paused';
-    const title = label(this, 375, 565, paused ? '已暂停' : data.mode === 'victory' ? '胜利' : '失败', 58, '#fffaf0');
+    const title = label(this, 375, 565, paused ? '已暂停' : data.mode === 'victory' ? '胜利' : data.mode === 'draw' ? '平局' : '失败', 58, '#fffaf0');
     if (data.mode === 'victory') {
       label(this, 375, 655, `乐：${'♥'.repeat(data.health)}`, 30, '#fffaf0');
     }

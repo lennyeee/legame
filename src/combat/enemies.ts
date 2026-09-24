@@ -9,6 +9,7 @@ export interface Enemy extends MapPoint {
   moveSpeed: number;
   distance: number;
   isBoss?: boolean;
+  spawnEventId?: number; // Match共享出题事件；id本身仍只在所属Side内唯一。
 }
 
 export function createEnemy(id: number, path: BattlePath, stats: { maxHp: number; moveSpeed: number }): Enemy {
