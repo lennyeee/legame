@@ -1,4 +1,4 @@
-import { controlsLayout, boardToScreen, boardDisplay } from '../config/layout';
+import { controlsLayout, boardDisplay } from '../config/layout';
 import Phaser from 'phaser';
 import type { BoardMap } from '../config/maps';
 import type { BoardState, UnitPosition } from '../systems/board';
@@ -11,8 +11,10 @@ import { getHeroProgression } from '../systems/heroProgression';
 import { isHeroLetter } from '../systems/items';
 import { heroVisuals } from '../config/heroes';
 import { tileBonusVisuals } from '../config/tileBonuses';
+import { boardGraphics, boardProjection } from './boardDisplay';
+import type { DisplaySide } from './boardDisplay';
 
-// 只负责下半区和待放置栏；上半场没有可命中的交互格。
+// 同一套棋盘显示服务两方；只有 bottom 会创建待放置栏和绑定输入控制器。
 export class DeploymentView {
   private readonly tiles;
   private readonly slots;
@@ -21,11 +23,12 @@ export class DeploymentView {
   private readonly map: BoardMap;
   readonly ghost: UnitView;
 
-  constructor(scene: Phaser.Scene, map: BoardMap, slotCount: number) {
+  constructor(scene: Phaser.Scene, map: BoardMap, slotCount: number, side: DisplaySide = 'bottom') {
     this.map = map;
-    this.links = scene.add.graphics().setPosition(boardDisplay.x, boardDisplay.y).setScale(boardDisplay.scale);
+    const projection = boardProjection(map, scene.scale.width, side);
+    this.links = boardGraphics(scene, map, side);
     this.tiles = map.cells.map(cell => {
-      const point = boardToScreen(cell.x, cell.y);
+      const point = projection.point(cell);
       const box = scene.add.rectangle(point.x, point.y, map.cellSize * boardDisplay.scale, map.cellSize * boardDisplay.scale);
       const text = label(scene, point.x, point.y, '', 24 * boardDisplay.scale);
       const unit = new UnitView(scene, point.x, point.y, map.cellSize - 4);

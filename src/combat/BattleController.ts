@@ -17,25 +17,28 @@ export class BattleController {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly side: PlayerSide,
-    private readonly deployment: DeploymentController,
-    private readonly deploymentView: DeploymentView,
-    private readonly refreshMoney: () => void,
+    private readonly deployment?: DeploymentController,
+    private readonly deploymentView?: DeploymentView,
+    private readonly refreshMoney: () => void = () => {},
     private readonly refreshProgress: (progress: WaveProgress) => void = () => {},
   ) {
     this.battle = side.combat;
-    this.view = new CombatView(scene, this.battle);
-    this.refreshProgress(this.battle.progress!);
+    this.view = new CombatView(scene, this.battle, side.id === 'top' ? 'top' : 'bottom');
+    this.refreshProgress(side.progress);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.update);
-    scene.input.on('pointerdown', this.select);
-    scene.input.on('pointermove', this.hideWhenDragging);
-    scene.input.on('pointerup', this.release);
-    scene.input.on('pointerupoutside', this.release);
-    scene.game.events.on(Phaser.Core.Events.BLUR, this.hideRange);
+    if (deployment && deploymentView) {
+      scene.input.on('pointerdown', this.select);
+      scene.input.on('pointermove', this.hideWhenDragging);
+      scene.input.on('pointerup', this.release);
+      scene.input.on('pointerupoutside', this.release);
+      scene.game.events.on(Phaser.Core.Events.BLUR, this.hideRange);
+    }
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy);
   }
 
   private select = (pointer: Phaser.Input.Pointer): void => {
-    if (!pointer.primaryDown || this.previewPointerId !== null || this.deployment.draggedTile !== null) return;
+    if (!this.deployment || !this.deploymentView || !pointer.primaryDown || this.previewPointerId !== null
+      || this.deployment.draggedTile !== null) return;
     const position = this.deploymentView.positionAt(pointer.x, pointer.y);
     const index = position?.kind === 'tile' ? position.index : null;
     const selected = index !== null && (isUnit(this.battle.board.tiles[index]?.unit)
@@ -54,6 +57,7 @@ export class BattleController {
   };
 
   private hideWhenDragging = (pointer: Phaser.Input.Pointer): void => {
+    if (!this.deployment) return;
     this.battle.syncBoard(this.deployment.draggedTile);
     if (pointer.id === this.previewPointerId && this.deployment.draggedTile !== null) this.hideRange();
   };
@@ -62,11 +66,11 @@ export class BattleController {
     // 场景暂停时不累计视觉时间，恢复后弹道/闪光不会跳过暂停时长。
     this.visualTime += delta;
     const before = this.side.recruitment.money;
-    const events = this.side.updateCombat(delta, this.deployment.draggedTile);
-    if (events.some(event => event.kind === 'kill')) this.deployment.refresh();
-    if (this.battle.progress!.status !== 'playing') this.hideRange();
+    const events = this.side.updateCombat(delta, this.deployment?.draggedTile ?? null);
+    if (events.some(event => event.kind === 'kill')) this.deployment?.refresh();
+    if (this.side.progress.status !== 'playing') this.hideRange();
     this.view.render(events, this.visualTime);
-    this.refreshProgress(this.battle.progress!);
+    this.refreshProgress(this.side.progress);
     if (this.side.recruitment.money !== before) this.refreshMoney();
   };
 

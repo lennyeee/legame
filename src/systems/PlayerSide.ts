@@ -26,13 +26,14 @@ export class PlayerSide {
   readonly passives = { ironRiceSeconds: 0 };
   private lifecycle: 'running' | 'paused' | 'stopped' | 'destroyed' = 'running';
 
-  constructor(id: string, map: BoardMap, loadout?: Loadout) {
+  constructor(id: string, map: BoardMap, loadout?: Loadout, options: { automaticWaves?: boolean } = {}) {
     this.id = id;
     this.recruitment = createRecruitmentState(loadout);
     this.board = createBoardState(map);
     this.heroes = getHeroProgression(this.board);
     this.progress = new WaveProgress(waveConfig);
-    this.combat = new CombatSimulation(map, this.board, this.recruitment, undefined, this.progress);
+    this.combat = new CombatSimulation(map, this.board, this.recruitment, undefined,
+      options.automaticWaves === false ? null : this.progress);
     this.farmers = new FarmerProduction(this.board, this.recruitment);
     this.activeItems = new ActiveItems(this.recruitment.loadout);
   }

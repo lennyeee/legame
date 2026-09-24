@@ -24,6 +24,7 @@ registerHooks({
   },
 });
 const { getBattlefieldLayout } = await import('../src/ui/boardLayout.ts');
+const { boardProjection, BATTLEFIELD_DIVIDER_PX } = await import('../src/ui/boardDisplay.ts');
 const { testMap } = await import('../src/config/maps.ts');
 const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
@@ -179,7 +180,7 @@ test('背包详情、装卸返回、单局被动栏及连续重开保留loadout'
     for(const x of [80,670])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1018).interactive,true);
     p.run(1000);assert.equal(p.text(170, 55),'$ 20');
     p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
-    assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.text(625, 55),'第 1 波');
+    assert.equal(p.game.events.listenerCount('update'),3);assert.equal(p.text(625, 55),'第 1 波');
   }
   const counts=waveConfig.enemyCounts;
   try {
@@ -221,11 +222,11 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   assert.equal(p.startCount(), 1);
   assert.equal(p.text(170, 55), '$ 20');
   assert.equal(p.text(625, 55), '第 1 波');
-  assert.equal(p.game.events.listenerCount('update'),2);
+  assert.equal(p.game.events.listenerCount('update'),3);
   p.run(990);assert.equal(p.text(170, 55), '$ 20');
   p.run(10);assert.equal(p.text(170, 55), '$ 20');
   assert.equal(p.game.time._active.length, 1);
-  const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics')
+  const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
     .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===15);
   p.run(990);assert.equal(enemyCircles().length, 0);
   p.run(20);assert.equal(enemyCircles().length, 1);
@@ -233,7 +234,7 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   try { Math.random=()=>0;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]); }
   finally { Math.random=random; }
   assert.equal(p.text(170, 55), '$ 10');
-  assert.equal(p.text(164.0625,574.0625), '');
+  assert.equal(p.text(164.0625,577.0625), '');
   p.click(75, 55);assert.equal(p.text(375,565,p.overlay),'已暂停');
   p.click(375,765);assert.equal(p.isActive(),true);
 });
@@ -252,28 +253,28 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       Math.random = () => 15.5 / 20;
       p.click(375, 1158);
       p.drag([183,1018], [164.0625,574.0625]);
-      assert.equal(p.text(164.0625,552.6875), 'Zz');
-      assert.equal(p.objects.get(p.game).filter(o => o.text === 'Zz').length, 1);
+      assert.equal(p.text(164.0625,555.6875), 'Zz');
+      assert.equal(p.objects.get(p.game).filter(o => o.text === 'Zz' && o.y > 532).length, 1);
       Math.random = () => 16.5 / 20;
       p.click(375, 1158);
       p.drag([183,1018], [248.4375,574.0625]);
-      assert.equal(p.text(164.0625,552.6875), '');
-      assert.equal(p.text(248.4375,552.6875), '');
+      assert.equal(p.text(164.0625,555.6875), '');
+      assert.equal(p.text(248.4375,555.6875), '');
       assert.equal(p.objects.get(p.game).some(o => o.text === '小美'), false);
-      const boxes = p.objects.get(p.game).filter(o => o.kind === 'rectangle' && o.y === 574.0625 && [164.0625,248.4375].includes(o.x));
+      const boxes = p.objects.get(p.game).filter(o => o.kind === 'rectangle' && o.y === 577.0625 && [164.0625,248.4375].includes(o.x));
       assert.equal(boxes.length,4);
       assert.ok(boxes.slice(-2).every(o => !o.visible));
-      const linkedBorder = () => p.objects.get(p.game).some(o => o.kind === 'graphics'
+      const linkedBorder = () => p.objects.get(p.game).some(o => o.kind === 'graphics' && o.scale > 0
         && o.draws.some(d => d[0] === 'strokeRect' && d[3] === 150 && d[4] === 75));
       assert.equal(linkedBorder(), true);
       const pointer = { id: 1, x: 248.4375, y: 574.0625, primaryDown: true };
       p.game.input.emit('pointerdown', pointer);
       p.run(10);
-      const range = p.objects.get(p.game).filter(o => o.kind === 'graphics').at(-2);
+      const range = p.objects.get(p.game).filter(o => o.kind === 'graphics' && o.scale > 0).at(-2);
       assert.ok(range.draws.some(d => d[0] === 'fillCircle' && d[1] === 225));
       p.game.input.emit('pointermove', { ...pointer, x: 290 });
       assert.equal(linkedBorder(), false);
-      assert.equal(p.text(164.0625,552.6875), 'Zz');
+      assert.equal(p.text(164.0625,555.6875), 'Zz');
       assert.equal(range.draws.length, 0);
       p.game.input.emit('pointerup', { ...pointer, x: 0, y: 0, primaryDown: false });
       assert.equal(linkedBorder(), true);
@@ -296,10 +297,10 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       assert.equal(p.snapshot(),ended);
       p.click(375,765);
       assert.equal(linkedBorder(),false);
-      assert.equal(p.objects.get(p.game).some(o => ['小','美','Zz'].includes(o.text)),false);
-      assert.equal(p.game.events.listenerCount('update'),2);
+      assert.equal(p.objects.get(p.game).some(o => o.y > 532 && ['小','美','Zz'].includes(o.text)),false);
+      assert.equal(p.game.events.listenerCount('update'),3);
       p.run(2000);
-      assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='lineBetween')),false);
+      assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.scale>0&&o.draws.some(d=>d[0]==='lineBetween')),false);
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
       p.run(30000);p.click(375,765);
     }
@@ -315,20 +316,20 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
     Math.random = () => 16.5 / 20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
     p.run(4500);
-    assert.equal(p.text(206.25,590.9375),'Lv.1');
-    const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics')
+    assert.equal(p.text(206.25,593.9375),'Lv.1');
+    const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
       .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===156&&d[2]===635&&d[4]===3);
     assert.ok(expBars().some(d=>d[3]>0));
     p.click(75, 55);const paused=p.snapshot();p.run(10000);p.drag([279,1018],[248.4375,574.0625]);
     assert.equal(p.snapshot(),paused);p.click(375,765);
     Math.random = () => 15.5 / 20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(10);
-    assert.equal(p.text(206.25,590.9375),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
+    assert.equal(p.text(206.25,593.9375),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
     p.drag([248.4375,574.0625],[183,1018]);p.run(10);
-    assert.equal(expBars().length,0);assert.equal(p.text(164.0625,552.6875),'Zz');
+    assert.equal(expBars().length,0);assert.equal(p.text(164.0625,555.6875),'Zz');
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
     p.run(30000);const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
     p.click(375,765);assert.equal(expBars().length,0);
-    assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'),false);
+    assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'&&o.y>532),false);
     Math.random=()=>15.5/20;p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
   } finally { Math.random=random; combatConfig.enemy.maxHp = enemyHp; }
 });
@@ -340,7 +341,7 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
     const p=pve(true, 100);
     Math.random=()=>15.5/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
     Math.random=()=>16.5/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
-    const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible);
+    const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible&&o.y>532);
     p.run(9500);assert.equal(flashes().length,0);
     p.click(75, 55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
     p.click(375,765);
@@ -364,7 +365,7 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       const p=pve(true, 100);
       Math.random=()=>left/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
       Math.random=()=>right/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
-      const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text===name&&o.visible);
+      const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text===name&&o.visible&&o.y>532);
       // 观察真实成长后的首次发动，不假定击杀升级前后的CD完全相同。
       p.run(1000);p.click(75, 55);const paused=p.snapshot();
       p.run(30000);p.drag([248.4375,574.0625],[183,1018]);assert.equal(p.snapshot(),paused);
@@ -378,8 +379,8 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');
       const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
       p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
-      assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.game.time._active.length,1);
-      assert.equal(p.objects.get(p.game).some(o=>o.text===name||o.text==='Zz'),false);
+      assert.equal(p.game.events.listenerCount('update'),3);assert.equal(p.game.time._active.length,1);
+      assert.equal(p.objects.get(p.game).some(o=>o.y>532&&(o.text===name||o.text==='Zz')),false);
     } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
   });
 }
@@ -417,7 +418,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
     p.run(5000);
     p.click(375, 765);
     assert.equal(p.game.time._active.length, 1);
-    assert.equal(p.game.events.listenerCount('update'),2);
+    assert.equal(p.game.events.listenerCount('update'),3);
   }
 });
 
@@ -429,11 +430,11 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
     for (let round = 0; round < 4; round++) {
       assert.equal(p.text(170, 55), '$ 100');
       assert.equal(p.text(625, 55), '第 1 波');
-      assert.equal(p.text(670.3125,938.5625), '♥♥♥');
+      assert.equal(p.text(670.3125,941.5625), '♥♥♥');
       assert.equal(p.text(730, 1314), 'v' + GAME_VERSION);
-      assert.equal(p.text(501.5625,658.4375), '锁');
-      assert.equal(p.objects.get(p.game).filter(o => o.kind === 'text' && o.text.startsWith('Lv.')).length, 0);
-      assert.equal(p.game.events.listenerCount('update'),2);
+      assert.equal(p.text(501.5625,661.4375), '锁');
+      assert.equal(p.objects.get(p.game).filter(o => o.kind === 'text' && o.y > 532 && o.text.startsWith('Lv.')).length, 0);
+      assert.equal(p.game.events.listenerCount('update'),3);
       assert.equal(p.globalEvents.listenerCount('blur'), 3);
       assert.equal(p.game.input.listenerCount('pointerdown'), 2);
       p.run(10);
@@ -443,11 +444,11 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       waveConfig.enemyCounts = win ? [1] : counts;
       Math.random = () => 0.65;
       p.click(375, 1158);
-      p.drag([183,1018], [501.5625,658.4375]);
-      assert.equal(p.text(501.5625,658.4375), '+');
+      p.drag([183,1018], [501.5625,661.4375]);
+      assert.equal(p.text(501.5625,661.4375), '+');
       Math.random = () => 0;
       p.click(375, 1158);
-      p.drag([183,1018], [501.5625,658.4375]);
+      p.drag([183,1018], [501.5625,661.4375]);
       p.run(30000);
       assert.equal(p.isActive(), false);
       assert.equal(p.text(375, 565, p.overlay), win ? '胜利' : '失败');
@@ -586,7 +587,7 @@ test('其他手指松开不影响当前按住；失焦会清除，退出场景�
 });
 
 
-test('上下静态棋盘使用同一正常透明度、填色与网格，中央分界线为克制的3px中性线',()=>{
+test('上下动态棋盘使用同一正常填色与网格，中央分界带宽6px',()=>{
  const p=pve(),objects=p.objects.get(p.game);
  const boardTiles=objects.filter(o=>o.kind==='rectangle'&&o.width===testMap.cellSize&&o.height===testMap.cellSize
    &&(o.color===0xd1b98f||o.color===0xe7e2d6));
@@ -596,7 +597,7 @@ test('上下静态棋盘使用同一正常透明度、填色与网格，中央�
   assert.equal(upper.color,lower.color);assert.deepEqual(upper.stroke,lower.stroke);
   assert.equal(upper.alpha,undefined);assert.equal(lower.alpha,undefined);
  }
- const dividers=objects.filter(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='lineStyle'&&d[1]===3&&d[2]===0x899184));
+ const dividers=objects.filter(o=>o.kind==='rectangle'&&o.color===0x899184&&o.height===6);
  assert.equal(dividers.length,1);
 });
 
@@ -632,9 +633,9 @@ test('暂停重开取消保持冻结，确认复用完整重开并保留loadout�
    p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');p.run(10000);assert.equal(p.snapshot(),snapshot);
    p.click(375,875);p.click(530,765);assert.equal(p.isActive(),true);
    assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
-   assert.equal(p.text(170,55),'$ 100');assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,938.5625),'♥♥♥');
-   assert.equal(p.text(120,1110),'农民');assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.1'||o.text==='Zz'||o.text==='小美'),false);
-   assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.game.input.listenerCount('pointerdown'),2);
+   assert.equal(p.text(170,55),'$ 100');assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,941.5625),'♥♥♥');
+   assert.equal(p.text(120,1110),'农民');assert.equal(p.objects.get(p.game).some(o=>o.y>532&&(o.text==='Lv.1'||o.text==='Zz'||o.text==='小美')),false);
+   assert.equal(p.game.events.listenerCount('update'),3);assert.equal(p.game.input.listenerCount('pointerdown'),2);
    p.run(1000);assert.equal(p.text(170,55),'$ 100');assert.equal(p.game.time._active.length,1);
   }
  }finally{Math.random=random;}
@@ -654,7 +655,7 @@ function farmerGame(){
  const p=pve(false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
  return p;
 }
-const farmCash=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&/^\$[0-9]+$/.test(o.text)&&o.visible);
+const farmCash=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&/^\$[0-9]+$/.test(o.text)&&o.visible&&o.y>532);
 const farmMoney=p=>Number(p.text(170,55).slice(2));
 
 test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点击/过期旧对象不加钱',()=>{
@@ -662,7 +663,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
  try{
   combatConfig.enemy.moveSpeed=0;Math.random=()=>0.9;const p=farmerGame();
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-  assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,552.6875),'');
+  assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,555.6875),'');
   p.run(11990);p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
   p.click(375,765);p.run(10);assert.equal(farmCash(p).length,1);
   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28);
@@ -679,7 +680,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
   p.drag([248.4375,574.0625],[183,1018]);assert.equal(farmCash(p).length,0);
   p.drag([183,1018],[248.4375,574.0625]);p.run(11990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
   p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);
-  emit();assert.equal(farmMoney(p),20);assert.equal(p.game.events.listenerCount('update'),2);assert.equal(p.text(120,1110),'农民');
+  emit();assert.equal(farmMoney(p),20);assert.equal(p.game.events.listenerCount('update'),3);assert.equal(p.text(120,1110),'农民');
   p.run(12000);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,1);
  }finally{Math.random=random;combatConfig.enemy.moveSpeed=speed;}
 });
@@ -695,7 +696,7 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
   assert.equal(p.snapshot(),ended);assert.equal(farmMoney(p),money);
    p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.text(120,1110),'农民');
   p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));
-  assert.equal(p.game.events.listenerCount('update'),2);
+  assert.equal(p.game.events.listenerCount('update'),3);
  }finally{Math.random=random;waveConfig.enemyCounts=counts;}
 });
 
@@ -754,8 +755,8 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
    p.click(375,885);assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,765);
    assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
    assert.equal(farmMoney(p),100);badge.emit('pointerdown',{},0,0,{stopPropagation(){}});assert.equal(farmMoney(p),100);
-   assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,938.5625),'♥♥♥');
-   assert.equal(p.objects.get(p.game).some(o=>o.text.startsWith('Lv.')),false);assert.equal(p.game.events.listenerCount('update'),2);
+   assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,941.5625),'♥♥♥');
+   assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);assert.equal(p.game.events.listenerCount('update'),3);
    p.run(1000);assert.equal(farmMoney(p),100);assert.equal(p.game.time._active.length,1);
   }
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
@@ -767,7 +768,7 @@ for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后�
   assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
   p.click(375,765);assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1186),'招贤榜');
   p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n20s');
-  assert.equal(p.game.events.listenerCount('update'),2);p.run(1000);assert.equal(farmMoney(p),100);
+  assert.equal(p.game.events.listenerCount('update'),3);p.run(1000);assert.equal(farmMoney(p),100);
  }finally{waveConfig.enemyCounts=counts;}
 });
 
@@ -792,7 +793,7 @@ test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除�
    p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),20);
   p.click(75,55);p.click(375,985);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
    p.click(375,765);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(farmMoney(p),20);
-   assert.equal(p.game.events.listenerCount('update'),2);p.run(1000);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,1);
+   assert.equal(p.game.events.listenerCount('update'),3);p.run(1000);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,1);
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止两道具，重开清空单位和强化',()=>{
@@ -800,7 +801,7 @@ for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止
  try{if(win)waveConfig.enemyCounts=[1];const p=equippedV57();p.run(60000);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
  const snapshot=p.snapshot();p.run(30000);dragActive(p,80,183,1018);assert.equal(p.snapshot(),snapshot);
  p.click(375,765);assert.equal(farmMoney(p),20);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
- assert.equal(p.objects.get(p.game).some(o=>o.text.startsWith('Lv.')),false);
+ assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);
  }finally{waveConfig.enemyCounts=counts;}
 });
 
@@ -840,4 +841,91 @@ test('准备页使用单一灰色背景，保留开始和道具按钮',()=>{
  assert.equal(p.text(375,765,p.ready),'开始游戏');
  assert.equal(p.text(375,885,p.ready),'道具');
  p.click(375,885);assert.equal(p.objects.has(p.items),true);
+});
+
+test('v0.60-B 两个真实Side独立创建，开发对手棋盘由自身状态动态渲染',()=>{
+ const p=pve(),{bottom,top}=p.game.sides;
+ assert.notEqual(bottom,top);assert.notEqual(bottom.board,top.board);
+ assert.notEqual(bottom.recruitment,top.recruitment);
+ assert.notEqual(bottom.combat,top.combat);assert.notEqual(bottom.farmers,top.farmers);
+ assert.notEqual(bottom.activeItems,top.activeItems);
+ assert.equal(bottom.board.tiles[0].unit,null);
+ assert.equal(top.board.tiles[0].unit.type,'小');assert.equal(top.board.tiles[1].unit.type,'美');
+ assert.equal(top.combat.heroLinks.length,1);assert.equal(top.combat.heroLinks[0].heroId,'xiaomei');
+ assert.equal(top.board.tiles[10].unit.type,'六');assert.equal(top.board.tiles[3].bonusType,'attack');
+ const objects=p.objects.get(p.game),point=boardProjection(testMap,750,'top').point(testMap.cells[10]);
+ assert.ok(objects.some(o=>o.kind==='text'&&o.text==='Zz'&&o.x===point.x&&o.y===point.y-19*1.125));
+ assert.ok(objects.some(o=>o.kind==='graphics'&&o.scale<0&&o.draws.some(d=>d[0]==='strokeRect'&&d[3]===150)));
+ const bonusPoint=boardProjection(testMap,750,'top').point(testMap.cells[3]);
+ assert.ok(objects.some(o=>o.kind==='text'&&o.text==='⚔️'&&o.x===bonusPoint.x));
+ assert.equal(objects.filter(o=>o.kind==='rectangle'&&o.y===1018&&o.width===90).length,5);
+ assert.equal(objects.some(o=>o.interactive===true&&o.y>100&&o.y<532),false);
+ const topMoney=top.recruitment.money;
+ top.board.tiles[3].bonusType='range';top.board.tiles[10].unit=null;p.run(10);
+ assert.equal(bottom.board.tiles[3].bonusType,'none');assert.equal(top.recruitment.money,topMoney);
+ assert.ok(objects.some(o=>o.kind==='text'&&o.text==='🎯'&&o.x===bonusPoint.x));
+ assert.equal(objects.some(o=>o.kind==='text'&&o.text==='Zz'&&o.x===point.x),false);
+ p.run(12000);
+ const topReward=objects.find(o=>o.kind==='text'&&o.text==='$2'&&o.y<532&&o.visible);
+ assert.ok(topReward);
+ assert.equal(objects.some(o=>o.kind==='rectangle'&&o.x===topReward.x&&o.y===topReward.y&&o.interactive===true),false);
+});
+
+test('v0.60-B 180°仅用于显示：格心、连续路径和文字方向正确，逻辑配方不反转',()=>{
+ const top=boardProjection(testMap,750,'top'),bottom=boardProjection(testMap,750,'bottom');
+ const first=testMap.cells[0],topPoint=top.point(first),bottomPoint=bottom.point(first);
+ assert.deepEqual(topPoint,{x:750-bottomPoint.x,y:2*(testMap.mirrorY*1.125-103.75)-bottomPoint.y});
+ assert.equal(BATTLEFIELD_DIVIDER_PX,6);
+ const pathPoint={x:(testMap.path[0].x+testMap.path[1].x)/2,y:(testMap.path[0].y+testMap.path[1].y)/2};
+ const upperPath=top.point(pathPoint),lowerPath=bottom.point(pathPoint);
+ assert.equal(upperPath.x,750-lowerPath.x);
+ assert.equal(upperPath.y+lowerPath.y,2*(testMap.mirrorY*1.125-103.75));
+ assert.equal(top.graphicsTransform().scale,-bottom.graphicsTransform().scale);
+ const p=pve();assert.equal(p.game.sides.top.combat.heroLinks[0].heroId,'xiaomei');
+ assert.equal(p.game.sides.top.board.tiles[0].unit.type,'小');
+ assert.equal(p.game.sides.top.board.tiles[1].unit.type,'美');
+ const objects=p.objects.get(p.game);
+ assert.ok(objects.some(o=>o.kind==='text'&&o.text==='乐'&&o.y<532&&o.scale>0));
+ assert.ok(objects.some(o=>o.kind==='rectangle'&&o.color===0x899184&&o.height===6));
+ assert.equal(testMap.cellSize,75);assert.equal(testMap.cells.length,28);
+});
+
+test('v0.60-B 两边同号敌人各归其战斗实例，top没有玩家输入和操作HUD',()=>{
+ const p=pve(),{bottom,top}=p.game.sides;
+ const bottomEnemy=bottom.combat.spawnEnemy(),topEnemy=top.combat.enemies.find(enemy=>enemy.id===bottomEnemy.id);
+ assert.ok(topEnemy);assert.notEqual(topEnemy,bottomEnemy);
+ bottom.recruitment.slots[0]={type:'刀',level:1};
+ assert.equal(bottom.drop({kind:'slot',index:0},{kind:'tile',index:0}),'move');
+ bottomEnemy.moveSpeed=0;bottomEnemy.maxHp=100000;bottomEnemy.hp=100000;
+ bottomEnemy.distance=600;
+ topEnemy.moveSpeed=0;topEnemy.maxHp=100000;topEnemy.hp=100000;
+ topEnemy.distance=187.5;topEnemy.x=225;topEnemy.y=677.5;
+ top.combat.enemies.splice(1);
+ const bottomMoney=bottom.recruitment.money;
+ p.run(1500);
+ assert.equal(bottomEnemy.hp,100000);assert.equal(bottom.recruitment.money,bottomMoney);
+ assert.ok(topEnemy.hp<100000);
+ const uprightBar=p.objects.get(p.game).find(o=>o.kind==='graphics'&&o.draws.some(d=>d[0]==='fillRect'&&d[3]===45&&d[4]===6.75));
+ assert.ok(uprightBar);assert.notEqual(uprightBar.scale,-1.125);
+ assert.equal(p.game.input.listenerCount('pointerdown'),2);
+ assert.equal(p.game.input.listenerCount('pointermove'),3);
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text.startsWith('来财')).length,1);
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='rectangle'&&o.y===1018&&o.width===90).length,5);
+ const topUnit=top.board.tiles[0].unit;
+ const target=boardProjection(testMap,750,'top').point(testMap.cells[0]);
+ p.drag([target.x,target.y],[183,1018]);
+ assert.equal(top.board.tiles[0].unit,topUnit);
+});
+
+test('v0.60-B 暂停冻结两个Side，重开只留下新Side与新棋盘对象',()=>{
+ const p=pve(),old=p.game.sides;
+ p.run(500);const oldDistance=old.top.combat.enemies[0].distance;
+ p.click(75,55);p.run(5000);assert.equal(old.top.combat.enemies[0].distance,oldDistance);
+ p.click(375,875);p.click(530,765);
+ assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
+ assert.equal(old.top.combat.enemies.length,0);assert.equal(old.bottom.combat.enemies.length,0);
+ assert.equal(p.game.sides.top.board.tiles[0].unit.type,'小');
+ assert.equal(p.game.sides.bottom.board.tiles[0].unit,null);
+ assert.equal(p.game.events.listenerCount('update'),3);
+ p.run(10);assert.equal(p.game.time._active.length,1);
 });

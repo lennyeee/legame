@@ -14,8 +14,10 @@ import { drawLoadout } from '../ui/loadout';
 import { boardDisplayScene } from '../ui/boardDisplay';
 import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
+import { setupDevTopSide } from '../dev/topSetup';
 
 export class GameScene extends Phaser.Scene {
+  sides: { bottom: PlayerSide; top: PlayerSide } | null = null;
   constructor() {
     super('GameScene');
   }
@@ -23,12 +25,15 @@ export class GameScene extends Phaser.Scene {
   create(data: { loadout?: Loadout } = {}): void {
     this.input.enabled = true;
     const bottomSide = new PlayerSide('bottom', testMap, data.loadout);
+    const topSide = new PlayerSide('top', testMap, undefined, { automaticWaves: false });
+    this.sides = { bottom: bottomSide, top: topSide };
+    const topDev = setupDevTopSide(topSide);
     const state = bottomSide.recruitment;
     const loadout = state.loadout;
     const moneyText = label(this, 170, 55, '', 32);
     const waveText = label(this, 625, 55, '', 28);
-    const boardScene = boardDisplayScene(this);
-    drawBoard(boardScene, testMap);
+    drawBoard(this, testMap);
+    const boardScene = boardDisplayScene(this, testMap, 'bottom');
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(boardScene, goal.x, goal.y + 24, '', 24, '#a85c4d');
     label(this, 730, 1314, `v${GAME_VERSION}`, 16).setOrigin(1, 1).setAlpha(0.4);
@@ -36,6 +41,8 @@ export class GameScene extends Phaser.Scene {
     let activeController: ActiveItemController | undefined;
     let ended = false;
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
+    const topDeploymentView = new DeploymentView(this, testMap, 0, 'top');
+    topDeploymentView.refresh(topSide.board, topSide.recruitment);
     const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
     const deployment = new DeploymentController(this, bottomSide, deploymentView, result => {
       farmerView.refresh();
@@ -65,6 +72,7 @@ export class GameScene extends Phaser.Scene {
     };
     const farmerView = new FarmerView(this, testMap, bottomSide,
       () => !ended && this.input.enabled && !deployment.isDragging && !activeController?.isDragging, refresh);
+    const topFarmerView = new FarmerView(this, testMap, topSide, () => false, () => {}, 'top', false);
 
     activeController = new ActiveItemController(this, bottomSide, activeSlots, deploymentView,
       () => !ended && this.input.enabled && !deployment.isDragging, success => {
@@ -104,6 +112,7 @@ export class GameScene extends Phaser.Scene {
       if (!ended && progress.status !== 'playing') {
         ended = true;
         bottomSide.stop();
+        topSide.stop();
         activeController?.cancel();
         incomeTimer.remove();
         deployment.cancel();
@@ -112,20 +121,28 @@ export class GameScene extends Phaser.Scene {
         this.scene.launch('PveOverlayScene', { mode: progress.status, health: progress.health, loadout });
       }
     });
+    new BattleController(this, topSide);
     // 排在战斗帧更新之后：本帧若已结算，不再推进生产或过期。
     const updateItemSystems = (_time: number, delta: number): void => {
       if (ended) return;
       bottomSide.updateItems(delta);
+      topDev.update(delta);
+      topSide.updateItems(delta);
       activeController?.refresh();
       farmerView.refresh();
+      topFarmerView.refresh();
+      topDeploymentView.refresh(topSide.board, topSide.recruitment);
     };
     this.events.on(Phaser.Scenes.Events.UPDATE, updateItemSystems);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.off(Phaser.Scenes.Events.UPDATE, updateItemSystems);
       bottomSide.destroy();
+      topSide.destroy();
       farmerView.destroy();
+      topFarmerView.destroy();
+      this.sides = null;
     });
-    const resumeInput = (): void => { bottomSide.resume(); this.input.enabled = true; };
+    const resumeInput = (): void => { bottomSide.resume(); topSide.resume(); this.input.enabled = true; };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));
     const pauseButton = this.add.rectangle(75, 55, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });
@@ -137,6 +154,7 @@ export class GameScene extends Phaser.Scene {
       activeController?.cancel();
       battle.hideRange();
       bottomSide.pause();
+      topSide.pause();
       this.input.enabled = false;
       this.events.once(Phaser.Scenes.Events.RESUME, resumeInput);
       this.scene.pause();

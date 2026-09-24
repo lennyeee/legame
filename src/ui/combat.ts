@@ -8,12 +8,14 @@ import { getHeroStats, heroVisuals, heroExpRequired } from '../config/heroes';
 import { applyTileBonuses } from '../combat/tileBonuses';
 import { skillConfigs } from '../config/skills';
 import type { HeroLink } from '../systems/heroActivation';
-import { boardDisplayScene } from './boardDisplay';
-import { boardToScreen } from '../config/layout';
+import { boardDisplayScene, boardProjection } from './boardDisplay';
+import type { DisplaySide } from './boardDisplay';
+import { boardDisplay } from '../config/layout';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly range: Phaser.GameObjects.Graphics;
+  private readonly uprightBars: Phaser.GameObjects.Graphics | null;
   private readonly flashes = new Map<number, number>();
   private effects: { event: AttackEffect; expires: number }[] = [];
   private heroEffects: { event: Extract<CombatEvent, { kind: 'heroAttack' }>; expires: number }[] = [];
@@ -21,9 +23,14 @@ export class CombatView {
   private selectedTile: number | null = null;
   private readonly heroLevels = new Map<string, Phaser.GameObjects.Text>();
   private skillFlashes: { link: HeroLink; text: Phaser.GameObjects.Text; expires: number }[] = [];
+  private readonly projection;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation) {
-    this.scene = boardDisplayScene(scene);
+  constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation,
+    side: DisplaySide = 'bottom') {
+    this.projection = boardProjection(battle.map, scene.scale?.width ?? 750, side);
+    // 血条是阅读方向固定的 HUD，不能随上半场的几何图形一起翻转。
+    this.uprightBars = side === 'top' ? scene.add.graphics().setDepth(11) : null;
+    this.scene = boardDisplayScene(scene, battle.map, side);
     scene = this.scene;
     this.range = scene.add.graphics().setDepth(1);
     this.graphics = scene.add.graphics().setDepth(10);
@@ -50,6 +57,7 @@ export class CombatView {
       }
     }
     this.graphics.clear();
+    this.uprightBars?.clear();
     this.skillFlashes = this.skillFlashes.filter(flash => {
       if (flash.expires <= now || !this.battle.isHeroLinkValid(flash.link)) { flash.text.destroy(); return false; }
       flash.text.setAlpha(0.4 + 0.6 * Math.abs(Math.cos((flash.expires - now) / 55)));
@@ -99,11 +107,21 @@ export class CombatView {
       this.graphics.lineStyle(2, 0x784139);
       this.graphics.strokeCircle(enemy.x, enemy.y, visuals.enemyRadius);
       const barWidth = 40;
-      const barY = enemy.y - visuals.enemyRadius - 12;
-      this.graphics.fillStyle(0x714d43);
-      this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth, 6);
-      this.graphics.fillStyle(0x83b06f);
-      this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth * enemy.hp / enemy.maxHp, 6);
+      if (this.uprightBars) {
+        const point = this.projection.point(enemy);
+        const width = barWidth * boardDisplay.scale;
+        const height = 6 * boardDisplay.scale;
+        const y = point.y - (visuals.enemyRadius + 12) * boardDisplay.scale;
+        this.uprightBars.fillStyle(0x714d43).fillRect(point.x - width / 2, y, width, height);
+        this.uprightBars.fillStyle(0x83b06f).fillRect(point.x - width / 2, y,
+          width * enemy.hp / enemy.maxHp, height);
+      } else {
+        const barY = this.projection.aboveRectY(enemy.y, visuals.enemyRadius, 6, 6);
+        this.graphics.fillStyle(0x714d43);
+        this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth, 6);
+        this.graphics.fillStyle(0x83b06f);
+        this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth * enemy.hp / enemy.maxHp, 6);
+      }
     }
     this.effects = this.effects.filter(({ event, expires }) =>
       expires > now && this.battle.isAttackerValid(event.tileIndex, event.unit, event.level));
@@ -134,7 +152,8 @@ export class CombatView {
     this.rewards = this.rewards.filter(reward => {
       if (reward.expires <= now) { reward.text.destroy(); return false; }
       const remaining = (reward.expires - now) / visuals.rewardMs;
-      reward.text.setY(boardToScreen(0, reward.y - (1 - remaining) * 30).y).setAlpha(remaining);
+      reward.text.setY(this.projection.point({ x: 0, y: reward.y }).y
+        - (1 - remaining) * 30 * boardDisplay.scale).setAlpha(remaining);
       return true;
     });
   }
