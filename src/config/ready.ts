@@ -1,1 +1,1 @@
-export const READY_BACKGROUND_COLOR = 0x62676b;
+export const READY_BACKGROUND_COLOR = 0xf7f3e8;

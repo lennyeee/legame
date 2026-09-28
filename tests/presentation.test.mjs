@@ -29,6 +29,9 @@ const { testMap } = await import('../src/config/maps.ts');
 const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
 const { GameScene } = await import('../src/scenes/GameScene.ts');
+const { MatchingScene } = await import('../src/scenes/MatchingScene.ts');
+const { createBattleSetup, matchingDuration, flowConfig } = await import('../src/flow/battleSetup.ts');
+const { createLoadout, createInventory } = await import('../src/systems/equipment.ts');
 const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
 const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
@@ -45,10 +48,44 @@ const { FarmerView } = await import('../src/ui/FarmerView.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
+test('匹配时间使用独立可注入表现随机，范围为2000～3000ms',()=>{
+ assert.equal(matchingDuration(()=>0),2000);
+ assert.equal(matchingDuration(()=>0.5),2500);
+ assert.ok(matchingDuration(()=>0.999999)<3000);
+ assert.equal(flowConfig.vsMs,1800);
+});
+
+test('对手资料安全池、头像和装备快照确定生成，不消费gameplay RNG',()=>{
+ const random=Math.random;let calls=0,created=0;
+ const inventory=createInventory();inventory.find(i=>i.id==='farmer').equipped=true;
+ const loadout=createLoadout(inventory),top=createLoadout([]);
+ try{
+  Math.random=()=>{throw new Error('表现不应调用gameplay RNG');};
+  const setup=createBattleSetup(loadout,()=>{calls++;return 0.5;},()=>{created++;return top;});
+  assert.equal(calls,2);assert.equal(created,1);
+  assert.equal(setup.opponentProfile.nickname,flowConfig.nicknames[3]);
+  assert.equal(setup.opponentProfile.avatarVariant,2);
+  assert.equal(setup.opponentLoadout,top);assert.deepEqual(setup.playerLoadout,loadout);
+  assert.notEqual(setup.playerLoadout,loadout);assert.ok(Object.isFrozen(setup.playerLoadout));
+  assert.ok(Object.isFrozen(setup.opponentProfile));
+ }finally{Math.random=random;}
+});
+
+test('每个新的匹配创建独立profile及match-local id，允许昵称重复',()=>{
+ const factory=()=>createLoadout([]);
+ const a=createBattleSetup(undefined,()=>0,factory),b=createBattleSetup(undefined,()=>0,factory);
+ assert.notEqual(a.opponentProfile,b.opponentProfile);
+ assert.notEqual(a.opponentProfile.id,b.opponentProfile.id);
+ assert.equal(a.opponentProfile.nickname,b.opponentProfile.nickname);
+});
+
 // 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
-function pve(startImmediately = true, startingMoney = gameConfig.initialMoney) {
+function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, autoFlow = true, matchingOptions = {}) {
   const game = new GameScene();
   const ready = new ReadyScene();
+  const matching = new MatchingScene();
+  let matchingActive = false;
+  const setupHistory = [];
   const items = new ItemsScene();
   let itemsActive = false;
   const overlay = new PveOverlayScene();
@@ -116,12 +153,9 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney) {
       if (key === 'ItemsScene') {
         shutdown(ready);readyActive=false;itemsActive=true;prepare(items);items.create(data);return;
       }
-      assert.equal(key, 'GameScene');
-      startCount++;
-      shutdown(ready);
-      readyActive = false;
-      prepare(game);
-      createGame(data);
+      assert.equal(key, 'MatchingScene');
+      shutdown(ready);readyActive=false;
+      startMatching(data);
     },
   };
   items.scene = { start: (key,data) => {
@@ -130,19 +164,38 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney) {
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
     stop: key => { if (key === 'GameScene') shutdown(game); else { shutdown(overlay); overlayActive = false; } },
-    start: (key,data) => { if(key==='ReadyScene'){shutdown(overlay);overlayActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);return;} assert.equal(key, 'GameScene'); shutdown(overlay); overlayActive = false; prepare(game); active = true; createGame(data); },
+    start: (key,data) => { if(key==='ReadyScene'){shutdown(overlay);overlayActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);return;} assert.equal(key, 'MatchingScene'); shutdown(overlay);overlayActive=false;startMatching(data); },
   };
+  function startMatching(data) {
+    active=true;matchingActive=true;prepare(matching);
+    matching.create({...data,presentationRandom:()=>0,...matchingOptions});
+    setupHistory.push(matching.setup);
+    if(autoFlow) finishFlow();
+  }
+  function finishFlow() {
+    while(matchingActive) tick();
+  }
+  matching.scene={start:(key,data)=>{
+    assert.equal(key,'GameScene');startCount++;shutdown(matching);matchingActive=false;
+    prepare(game);active=true;createGame(data);
+  }};
+  function tick() {
+    now+=10;
+    if(!active)return;
+    const scene=matchingActive?matching:itemsActive?items:readyActive?ready:game;
+    scene.time.preUpdate();scene.time.update(now,10);scene.events.emit('update',now,10);
+  }
   prepare(ready);
   ready.create();
   if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    const scene = itemsActive ? items : readyActive ? ready : overlayActive ? overlay : game;
+    const scene = matchingActive ? matching : itemsActive ? items : readyActive ? ready : overlayActive ? overlay : game;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
     target?.emit('pointerdown', { id: 1, x, y, primaryDown: true }, 0, 0, { stopPropagation() {} });
   };
   const drag = (from, to) => {
-    if (!active || overlayActive || readyActive || itemsActive) return;
+    if (!active || matchingActive || overlayActive || readyActive || itemsActive) return;
     const p = { id: 1, primaryDown: true, x: from[0], y: from[1] };
     game.input.emit('pointerdown', p);
     game.input.emit('pointermove', { ...p, x: to[0], y: to[1] });
@@ -150,20 +203,96 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney) {
   };
   const run = ms => {
     for (let i = 0; i < ms; i += 10) {
-      now += 10;
-      if (!active) continue;
-      const scene = itemsActive ? items : readyActive ? ready : game;
-      scene.time.preUpdate();
-      scene.time.update(now, 10);
-      scene.events.emit('update', now, 10);
+      tick();
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { game, ready, items, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !readyActive && !itemsActive,
+  return { game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !matchingActive && !readyActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
 
 // 使用真实漏怪进入指定结算，避免再依赖已退役的单边清场胜利条件。
+test('HOME到匹配及VS均无Match，VS完成才创建战斗且重复开始安全',()=>{
+ const p=pve(false,20,false);
+ assert.equal(p.game.match,null);p.click(375,765);
+ for(let i=0;i<10;i++)p.ready.requestStartGame();
+ assert.equal(p.matching.phase,'MATCHING');assert.equal(p.startCount(),0);
+ assert.equal(p.text(375,620,p.matching),'正在寻找对手…');
+ const setup=p.matching.setup;
+ p.run(1990);assert.equal(p.matching.phase,'MATCHING');assert.equal(p.game.match,null);
+ p.run(10);assert.equal(p.matching.phase,'VS');assert.equal(p.game.match,null);
+ assert.equal(p.matching.setup,setup);
+ assert.equal(p.text(375,445,p.matching),setup.opponentProfile.nickname);
+ assert.equal(p.text(375,985,p.matching),setup.playerProfile.nickname);
+ p.run(1790);assert.equal(p.game.match,null);
+ p.run(10);assert.equal(p.startCount(),1);assert.equal(p.game.battleSetup,setup);
+ assert.equal(p.game.match.timeline.elapsedMs,0);assert.equal(p.game.match.timeline.config.firstEnemyDelay,9500);
+ assert.equal(p.game.sides.bottom.recruitment.money,20);
+ assert.deepEqual(p.game.sides.bottom.recruitment.slots,Array(5).fill(null));
+ p.run(9490);assert.equal(p.game.sides.bottom.combat.enemies.length,0);
+ p.run(20);assert.equal(p.game.sides.bottom.combat.enemies.length,1);
+});
+
+test('MatchingScene只生成一次AI装备，GameScene消费原setup而不再次生成',()=>{
+ let created=0;const top=createLoadout([]);
+ const p=pve(false,20,false,{createOpponentLoadout:()=>{created++;return top;}});
+ p.click(375,765);const setup=p.matching.setup;
+ assert.equal(created,1);
+ p.run(2000);assert.equal(created,1);
+ const random=Math.random;
+ try{Math.random=()=>{throw new Error('进入GameScene不可再次生成AI装备');};p.run(1800);}
+ finally{Math.random=random;}
+ assert.equal(created,1);assert.equal(p.game.battleSetup,setup);
+ assert.deepEqual(p.game.sides.top.recruitment.loadout,top);
+});
+
+test('MATCHING shutdown清除timer且旧匹配回调无法启动VS或GameScene',()=>{
+ const p=pve(false,20,false);p.click(375,765);
+ const callback=p.matching.time._pendingInsertion[0].callback;
+ p.shutdown(p.matching);callback();
+ assert.equal(p.matching.setup,null);assert.equal(p.startCount(),0);assert.equal(p.game.match,null);
+ assert.equal(p.matching.time._active.length,0);assert.equal(p.matching.time._pendingInsertion.length,0);
+});
+
+test('VS shutdown后过期/重复回调不能创建旧局或重复启动新局',()=>{
+ const p=pve(false,20,false);p.click(375,765);p.run(2000);
+ const old=p.matching.time._pendingInsertion[0].callback;
+ p.shutdown(p.matching);old();assert.equal(p.startCount(),0);
+ p.matching.create({presentationRandom:()=>0});
+ p.finishFlow();const match=p.game.match;
+ old();old();assert.equal(p.startCount(),1);assert.equal(p.game.match,match);
+});
+
+test('玩家装备跨HOME/匹配/VS/战斗保留，道具往返不创建Match',()=>{
+ const p=pve(false,20,false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);
+ assert.equal(p.game.match,null);p.click(375,765);
+ const setup=p.matching.setup;assert.equal(setup.playerLoadout.passive[0].id,'farmer');
+ p.finishFlow();assert.deepEqual(p.game.sides.bottom.recruitment.loadout,setup.playerLoadout);
+});
+
+test('连续三次result再匹配创建全新对手/Match/Side/Timeline并清理旧AI输入',()=>{
+ const p=pve(true,20,false);p.finishFlow();
+ for(let i=0;i<3;i++){
+  const old=p.game.match,setup=p.game.battleSetup,clock=p.game.time;
+  finishMatch(p,false);
+  const oldResult=p.objects.get(p.overlay).find(o=>o.interactive&&o.x===375&&o.y===765)
+    .listeners('pointerdown')[0];
+  p.click(375,765);p.click(375,765);
+  assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
+  assert.equal(p.startCount(),i+1);assert.equal(p.matching.phase,'MATCHING');
+  assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.globalEvents.listenerCount('blur'),0);
+  assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
+  p.finishFlow();assert.equal(p.startCount(),i+2);
+  const fresh=p.game.match;assert.notEqual(fresh,old);assert.notEqual(fresh.timeline,old.timeline);
+  assert.notEqual(fresh.topSide,old.topSide);assert.notEqual(fresh.bottomSide,old.bottomSide);
+  assert.notEqual(p.game.battleSetup.opponentProfile.id,setup.opponentProfile.id);
+  assert.deepEqual(fresh.bottomSide.recruitment.loadout,setup.playerLoadout);
+  old.update(10000);assert.equal(fresh.timeline.elapsedMs,0);
+  oldResult({},0,0,{stopPropagation(){}});assert.equal(p.game.match,fresh);assert.equal(p.startCount(),i+2);
+  assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.globalEvents.listenerCount('blur'),3);
+ }
+});
+
 function finishMatch(p, win, survivorLeaks=0) {
  const losing=win?'top':'bottom', surviving=win?'bottom':'top';
  for(const [id,count]of [[losing,3],[surviving,survivorLeaks]])for(let n=0;n<count;n++){
@@ -216,8 +345,8 @@ test('初始READY无对局控制器和计时器，长时间等待无敌人/资�
   const p = pve(false);
   assert.equal(p.ready.startState, 'READY');
   assert.equal(p.isActive(), false);
-  assert.equal(p.text(375,565,p.ready), '乐 GAME');
-  assert.equal(p.text(375,765,p.ready), '开始游戏');
+  assert.equal(p.text(375,440,p.ready), '乐 GAME');
+  assert.equal(p.text(375,765,p.ready), '开始对战');
   assert.equal(p.text(730,1314,p.ready), 'v' + GAME_VERSION);
   const before = p.snapshot();
   p.run(120000);
@@ -236,7 +365,7 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   p.run(60000);
   p.click(375,765);
   for (let i=0;i<10;i++) p.ready.requestStartGame();
-  assert.equal(p.ready.startState, 'RUNNING');
+  assert.equal(p.ready.startState, 'MATCHING');
   assert.equal(p.isActive(), true);
   assert.equal(p.startCount(), 1);
   assert.equal(p.text(170, 55), '$ 20');
@@ -479,7 +608,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       const oldClock = p.game.time;
       p.click(375, 765);
       assert.equal(p.isActive(), true);
-      assert.equal(p.startCount(), 1); // 重开直接走GameScene，未再次经过准备页。
+      assert.equal(p.startCount(), round + 2); // 每次重新匹配后才创建新战斗。
       assert.equal(oldClock._active.length, 0);
       assert.equal(oldClock._pendingInsertion.length, 0);
     assert.ok(p.objects.get(p.game).filter(o => o.kind === 'graphics' && o.draws.some(d=>d[0]==='fillRoundedRect'))
@@ -637,28 +766,16 @@ test('v0.541保持顶部、放大紧凑七槽、竖向椭圆被动栏和上移�
 });
 
 
-test('暂停重开取消保持冻结，确认复用完整重开并保留loadout，无重复循环',()=>{
- const random=Math.random;
- try {
-  const p=pve(false, 100);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
-  for(let round=0;round<3;round++){
-   Math.random=()=>15.5/24;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-   Math.random=()=>16.5/24;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
-   p.run(12000);p.click(75,55);const snapshot=p.snapshot(),clock=p.game.time;
-   assert.equal(p.text(375,875,p.overlay),'重新开始');p.click(375,875);
-   assert.equal(p.text(375,565,p.overlay),'确定重新开始？');assert.equal(p.text(375,655,p.overlay),'当前进度将丢失。');
-   p.run(10000);p.click(375,765);assert.equal(p.isActive(),false);assert.equal(p.snapshot(),snapshot);
-   p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');p.run(10000);assert.equal(p.snapshot(),snapshot);
-   p.click(375,875);p.click(530,765);assert.equal(p.isActive(),true);
-   assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
-   assert.equal(p.text(170,55),'$ 100');assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,941.5625),'♥♥♥');
-   assert.equal(p.text(120,1110),'农民');assert.equal(p.objects.get(p.game).some(o=>o.y>532&&(o.text==='Lv.1'||o.text==='Zz'||o.text==='小美')),false);
-   assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.input.listenerCount('pointerdown'),2);
-   p.run(1000);assert.equal(p.text(170,55),'$ 100');assert.equal(p.game.time._active.length,0);
-  }
- }finally{Math.random=random;}
+test('暂停只提供继续和返回主页，取消保持冻结，确认清理旧局并保留loadout',()=>{
+ const p=pve();p.run(1000);p.click(75,55);
+ assert.equal(p.objects.get(p.overlay).some(o=>o.text==='重新开始'),false);
+ const old=p.game.match;const frozen=p.snapshot();
+ p.click(375,875);assert.equal(p.text(375,565,p.overlay),'确定返回主页？');
+ p.click(220,765);p.run(1000);assert.equal(p.snapshot(),frozen);assert.equal(old.status,'paused');
+ p.click(375,875);p.click(530,765);assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
+ assert.equal(p.ready.startState,'READY');assert.equal(p.game.events.listenerCount('update'),0);
+ p.click(375,765);assert.notEqual(p.game.match,old);assert.equal(p.game.match.timeline.elapsedMs,0);
 });
-
 
 test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',()=>{
  for(const [type,level,expected]of [['枪',1,150],['枪',5,150],['弓',1,187.5],['弓',2,225],['弓',5,225]]){
@@ -731,7 +848,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
   p.run(11990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
   p.drag([248.4375,574.0625],[183,1018]);assert.equal(farmCash(p).length,0);
   p.drag([183,1018],[248.4375,574.0625]);p.run(11990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
-  p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);
+  p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);
   emit();assert.equal(farmMoney(p),20);assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(120,1110),'农民');
   p.run(12000);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,0);
  }finally{Math.random=random;combatConfig.enemy.moveSpeed=speed;}
@@ -796,11 +913,11 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
    }
    p.run(12000);assert.equal(farmCash(p).length,1);
    const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height),clock=p.game.time;
-   p.click(75,55);assert.equal(p.text(375,985,p.overlay),'回到主页');p.click(375,985);
-   assert.equal(p.text(375,565,p.overlay),'确定回到主页？');assert.equal(p.text(375,655,p.overlay),'当前对局进度将丢失。');
+   p.click(75,55);assert.equal(p.text(375,875,p.overlay),'返回主页');p.click(375,875);
+   assert.equal(p.text(375,565,p.overlay),'确定返回主页？');assert.equal(p.text(375,655,p.overlay),'当前对局进度将丢失。');
    const frozen=p.snapshot();p.run(30000);p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');assert.equal(p.isActive(),false);
-   p.run(10000);assert.equal(p.snapshot(),frozen);p.click(375,985);p.click(530,765);
-   assert.equal(p.ready.startState,'READY');assert.equal(p.text(375,765,p.ready),'开始游戏');
+   p.run(10000);assert.equal(p.snapshot(),frozen);p.click(375,875);p.click(530,765);
+   assert.equal(p.ready.startState,'READY');assert.equal(p.text(375,765,p.ready),'开始对战');
    assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
    assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.events.listenerCount('resume'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);assert.equal(p.globalEvents.listenerCount('blur'),0);
    assert.equal(farmCash(p).length,0);const homepage=p.snapshot();p.run(60000);assert.equal(p.snapshot(),homepage);
@@ -817,7 +934,7 @@ for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后�
  const p=equippedV56();p.run(5000);finishMatch(p,win);
   assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
   p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1186),'招贤榜');
-  p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n50s');
+  p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');
   assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),100);
 });
 
@@ -839,8 +956,8 @@ test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除�
   Math.random=()=>0;p.click(375,1158);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n20s');
   p.run(20000);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
   p.drag([183,1018],[164.0625,574.0625]);dragActive(p,670,164.0625,574.0625);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
-   p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),20);
-  p.click(75,55);p.click(375,985);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
+   p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),20);
+  p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
    p.click(375,765);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(farmMoney(p),20);
    assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,0);
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
@@ -868,7 +985,7 @@ test('没有被动不自动涨钱；铁饭碗只在装备局内每10秒发$2，�
  assert.equal(p.text(170,55),'$ 20');p.run(9990);assert.equal(p.text(170,55),'$ 20');
  p.click(75,55);p.run(30000);assert.equal(p.text(170,55),'$ 20');
  p.click(375,765);p.run(10);assert.equal(p.text(170,55),'$ 22');
- p.run(4000);p.click(75,55);p.click(375,875);p.click(530,765);
+ p.run(4000);p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);
  assert.equal(p.text(170,55),'$ 20');p.run(9990);assert.equal(p.text(170,55),'$ 20');
  p.run(10);assert.equal(p.text(170,55),'$ 22');
 });
@@ -880,12 +997,15 @@ test('来财按钮展示当局实际价格，余额不足时不改变招募次�
  p.run(2000);p.click(375,1158);assert.equal(p.text(170,55),'$ 10');assert.equal(p.text(375,1158),'来财 $12');
 });
 
-test('准备页使用单一灰色背景，保留开始和道具按钮',()=>{
+test('大厅使用米白背景、头像和主体占位，开始对战为主入口',()=>{
  const p=pve(false),objects=p.objects.get(p.ready);
  const background=objects.find(o=>o.kind==='rectangle'&&o.width===750&&o.height===1334);
  assert.equal(background?.color,READY_BACKGROUND_COLOR);
+ assert.equal(background.color,0xf7f3e8);
+ assert.ok(objects.some(o=>o.kind==='rectangle'&&o.width===600&&o.height===450));
+ assert.equal(p.text(245,110,p.ready),'乐玩家');
  assert.equal(objects.filter(o=>o.kind==='graphics').length,0);
- assert.equal(p.text(375,765,p.ready),'开始游戏');
+ assert.equal(p.text(375,765,p.ready),'开始对战');
  assert.equal(p.text(375,885,p.ready),'道具');
  p.click(375,885);assert.equal(p.objects.has(p.items),true);
 });
@@ -964,11 +1084,11 @@ test('v0.60-B 两边同号敌人各归其战斗实例，top没有玩家输入和
  assert.equal(top.board.tiles[0].unit,topUnit);
 });
 
-test('v0.60-B 暂停冻结两个Side，重开只留下新Side与新棋盘对象',()=>{
+test('v0.60-B 暂停冻结两个Side，返回主页后新匹配只留下新Side与新棋盘对象',()=>{
  const p=pve(),old=p.game.sides;
  p.run(pressureConfig.firstEnemyDelay+100);const oldDistance=old.top.combat.enemies[0].distance;
  p.click(75,55);p.run(5000);assert.equal(old.top.combat.enemies[0].distance,oldDistance);
- p.click(375,875);p.click(530,765);
+ p.click(375,875);p.click(530,765);p.click(375,765);
  assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
  assert.equal(old.top.combat.enemies.length,0);assert.equal(old.bottom.combat.enemies.length,0);
  assert.equal(p.game.sides.top.board.tiles[0].unit,null);

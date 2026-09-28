@@ -9,24 +9,25 @@ import { Match } from '../match/Match';
 import { DeploymentView } from '../ui/deployment';
 import { DeploymentController } from '../input/DeploymentController';
 import { BattleController } from '../combat/BattleController';
-import type { Loadout } from '../systems/equipment';
 import { drawLoadout } from '../ui/loadout';
 import { boardDisplayScene } from '../ui/boardDisplay';
 import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
 import { AIController } from '../controllers/AIController';
-import { createDevelopmentAILoadout } from '../controllers/developmentLoadout';
+import type { BattleSetup } from '../flow/battleSetup';
 
 export class GameScene extends Phaser.Scene {
   match: Match | null = null;
+  battleSetup: BattleSetup | null = null;
   get sides() { return this.match?.sides ?? null; }
   constructor() {
     super('GameScene');
   }
 
-  create(data: { loadout?: Loadout } = {}): void {
+  create(data: { setup: BattleSetup }): void {
     this.input.enabled = true;
-    const match = new Match(testMap, data.loadout, createDevelopmentAILoadout());
+    this.battleSetup = data.setup;
+    const match = new Match(testMap, data.setup.playerLoadout, data.setup.opponentLoadout);
     this.match = match;
     const { bottomSide, topSide } = match;
     match.bindController('top', new AIController(topSide));
@@ -139,6 +140,7 @@ export class GameScene extends Phaser.Scene {
       farmerView.destroy();
       topFarmerView.destroy();
       this.match = null;
+      this.battleSetup = null;
     });
     const resumeInput = (): void => { match.resume(); this.input.enabled = match.running; };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));
