@@ -14,7 +14,8 @@ export type HeroLetterType = (typeof heroRecipes)[number]['letters'][number];
 export const heroCombat = { damage: 10, range: rangePixels(attackRangeCells.hero), attackInterval: 1200, splashRadius: 70 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
 
-export const heroGrowth = { expBase: 30, expPerLevel: 20, enemyExp: 10, damagePerLevel: 0.5, speedPerLevel: 0.08 };
+// v0.62-B：固定阵容测得旧10EXP约66秒满级；降低单敌奖励，不改变参战/溢出/拆组规则。
+export const heroGrowth = { expBase: 30, expPerLevel: 20, enemyExp: 5, damagePerLevel: 0.5, speedPerLevel: 0.08 };
 export function heroExpRequired(level: number): number {
   return heroGrowth.expBase + (level - 1) * heroGrowth.expPerLevel;
 }

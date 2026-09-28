@@ -13,6 +13,7 @@ const { aiConfig }=await import('../src/config/ai.ts');
 const { PlayerSide }=await import('../src/systems/PlayerSide.ts');
 const { Match }=await import('../src/match/Match.ts');
 const { testMap }=await import('../src/config/maps.ts');
+const { activeItemCooldown }=await import('../src/config/itemEffects.ts');
 const { pressureConfig }=await import('../src/config/pressure.ts');
 const { createInventory,setEquipped,createLoadout }=await import('../src/systems/equipment.ts');
 const { recruitmentPool }=await import('../src/systems/recruitment.ts');
@@ -126,15 +127,15 @@ for(const id of ['upgrade_talisman','haste_edict','golden_hand'])test('AI uses e
   s.board.tiles.forEach(t=>{t.unlocked=true;if(!t.unit)t.unit={type:'刀',level:5};});
   s.recruitment.slots=Array.from({length:5},()=>({kind:'heroLetter',type:'美',level:5}));
  }
- const calls=spy(s);if(id!=='golden_hand'){ai.update(1);assert.equal(calls.some(c=>c.name==='useActiveItem'),false);s.activeItems.update(20000);}
+ const calls=spy(s);if(id!=='golden_hand'){ai.update(1);assert.equal(calls.some(c=>c.name==='useActiveItem'),false);s.activeItems.update(50000);}
  run(ai,aiConfig.timing.initialReactionMs.min);assert.ok(calls.some(c=>c.name==='useActiveItem'&&c.result));
  if(id==='upgrade_talisman')assert.equal(s.board.tiles[0].unit.level,2);
  if(id==='haste_edict')assert.equal(s.board.tiles[0].unit.hasteEnhanced,true);
  if(id==='golden_hand')assert.equal(s.recruitment.money,1);
- assert.equal(s.activeItems.slots[0].remainingMs,id==='golden_hand'?0:20000);
+ assert.equal(s.activeItems.slots[0].remainingMs,activeItemCooldown(id));
 });
 test('canUse is side-effect-free including HeroLink, skill, EXP, participation, haste and cooldown',()=>{
- const s=side('haste_edict','upgrade_talisman'),link=hero(s);link.currentExp=10;s.heroes.recordDamage(1,link,1);s.activeItems.update(20000);
+ const s=side('haste_edict','upgrade_talisman'),link=hero(s);link.currentExp=10;s.heroes.recordDamage(1,link,1);s.activeItems.update(50000);
  const before=JSON.stringify({board:s.board,state:s.recruitment,slots:s.activeItems.slots,link}),skill=link.skill;
  for(let i=0;i<10;i++){assert.equal(s.canUseActiveItem(0,tile(0)),true);assert.equal(s.canUseActiveItem(1,tile(1)),true);}
  assert.equal(JSON.stringify({board:s.board,state:s.recruitment,slots:s.activeItems.slots,link}),before);
@@ -154,7 +155,7 @@ test('delayed source replacement cancels rather than moving the new occupant',()
 });
 test('delayed target becoming level five cancels item without consuming ready',()=>{
  const s=side('upgrade_talisman'),ai=aiFor(s);s.recruitment.money=0;
- s.recruitment.slots[0]={type:'刀',level:4};s.drop(slot(0),tile(0));s.activeItems.update(20000);ai.update(1);
+ s.recruitment.slots[0]={type:'刀',level:4};s.drop(slot(0),tile(0));s.activeItems.update(50000);ai.update(1);
  s.board.tiles[0].unit.level=5;run(ai,aiConfig.timing.initialReactionMs.min);assert.equal(s.board.tiles[0].unit.level,5);assert.equal(s.activeItems.slots[0].remainingMs,0);
 });
 test('Match logical delay is frame-independent and pause/resume preserves remaining delay',()=>{

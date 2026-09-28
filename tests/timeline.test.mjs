@@ -12,11 +12,11 @@ const overlap={...pressureConfig,firstEnemyDelay:100,waveStartInterval:200,
 
 test('first enemy at exactly 9500ms, within-wave interval and cadence are independent',()=>{
  const t=new MatchTimeline();assert.deepEqual(t.advance(9499),[]);assert.equal(t.elapsedMs,9499);
- assert.deepEqual(t.advance(1),[{id:1,atMs:9500,wave:1,hpMultiplier:1}]);
- assert.deepEqual(t.advance(1999),[]);assert.equal(t.advance(1)[0].atMs,11500);
+ assert.deepEqual(t.advance(1),[{id:1,atMs:9500,wave:1,hpMultiplier:enemyHpForWave(1)/combatConfig.enemy.maxHp}]);
+ assert.deepEqual(t.advance(pressureConfig.initialSpawnInterval-1),[]);assert.equal(t.advance(1)[0].atMs,9500+pressureConfig.initialSpawnInterval);
  const c={...pressureConfig,initialSpawnInterval:321,minimumSpawnInterval:321};const other=new MatchTimeline(c);
  assert.equal(other.advance(9500)[0].atMs,9500);assert.equal(other.advance(321)[0].atMs,9821);
- assert.equal(waveStartForWave(2,c),29500);
+ assert.equal(waveStartForWave(2,c),9500+c.waveStartInterval);
 });
 
 test('new wave starts while previous wave still spawning; chronological ties stable',()=>{
@@ -39,19 +39,19 @@ test('large delta emits every due spawn once, identical to fine and uneven incre
  assert.equal(a.elapsedMs,10000);
 });
 
-test('temporary stage growth and deterministic count-only pulse are explicit',()=>{
- assert.deepEqual([1,2,3,4,5,6].map(w=>enemyHpForWave(w)),[90,95,99,103,108,122]);
- assert.deepEqual([1,2,3,4,5,6].map(w=>enemyCountForWave(w)),[5,5,6,6,9,7]);
- assert.equal(spawnIntervalForWave(1),2000);assert.equal(spawnIntervalForWave(6),1850);
+test('calibrated stage growth and deterministic count-only pulse are explicit',()=>{
+ assert.deepEqual([1,2,3,4,5,6].map(w=>enemyHpForWave(w)),[120,168,216,282,330,378]);
+ assert.deepEqual([1,2,3,4,5,6].map(w=>enemyCountForWave(w)),[5,5,5,5,5,6]);
+ assert.equal(spawnIntervalForWave(1),1800);assert.equal(spawnIntervalForWave(6),1765);
  const noPulse={...pressureConfig,pulseExtraCount:0};
- for(const w of [5,10,15]){
-  assert.equal(enemyCountForWave(w)-enemyCountForWave(w,noPulse),2);
+ for(const w of [6,12,18]){
+  assert.equal(enemyCountForWave(w)-enemyCountForWave(w,noPulse),1);
   assert.equal(enemyHpForWave(w),enemyHpForWave(w,noPulse));
   assert.equal(spawnIntervalForWave(w),spawnIntervalForWave(w,noPulse));
  }
- const t=new MatchTimeline(),end=waveStartForWave(16),events=t.advance(end);
- assert.equal(t.wave,16);assert.ok(events.some(e=>e.wave===16));
- assert.ok(t.advance(400).some(e=>e.wave===15));
+ const t=new MatchTimeline(),end=waveStartForWave(109),events=t.advance(end);
+ assert.equal(t.wave,109);assert.ok(events.some(e=>e.wave===109));
+ assert.ok(t.advance(800).some(e=>e.wave===108));
 });
 
 test('wave100 generates normally, no finite completion or accumulated history',()=>{
@@ -96,7 +96,7 @@ test('timeline owns a configuration snapshot and returns no shared event objects
  const config={...pressureConfig},a=new MatchTimeline(config),b=new MatchTimeline(config);
  config.firstEnemyDelay=1;config.initialHp=1;
  const ea=a.advance(9500)[0],eb=b.advance(9500)[0];assert.deepEqual(ea,eb);assert.notEqual(ea,eb);
- ea.hpMultiplier=100;assert.equal(eb.hpMultiplier,1);
- assert.equal(Math.round(eb.hpMultiplier*combatConfig.enemy.maxHp),90);
+ ea.hpMultiplier=100;assert.equal(eb.hpMultiplier,enemyHpForWave(1)/combatConfig.enemy.maxHp);
+ assert.equal(Math.round(eb.hpMultiplier*combatConfig.enemy.maxHp),enemyHpForWave(1));
  validatePressureConfig(pressureConfig);
 });

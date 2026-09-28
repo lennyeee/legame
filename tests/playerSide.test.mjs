@@ -119,11 +119,11 @@ test('same numeric enemy id stays simulation-local; real kill rewards and EXP re
 test('active cooldown and upgrade operate on bound board/reserve only',()=>{
  const [a,b]=pair('upgrade_talisman');
  a.recruitment.slots[0]={type:'刀',level:1};b.recruitment.slots[0]={type:'刀',level:1};
- a.updateItems(20_000);
+ a.updateItems(50_000);
  assert.equal(a.activeItems.ready(0),true);assert.equal(b.activeItems.ready(0),false);
  assert.equal(a.useActiveItem(0,slot(0)),true);
  assert.equal(a.recruitment.slots[0].level,2);assert.equal(b.recruitment.slots[0].level,1);
- assert.equal(a.activeItems.slots[0].remainingMs,20_000);
+ assert.equal(a.activeItems.slots[0].remainingMs,50_000);
 });
 
 test('farmers, pending rewards and wallet are local, even when reward ids match',()=>{

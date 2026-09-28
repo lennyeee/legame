@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {registerHooks} from 'node:module';
 registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
-const {heroRecipes,getHeroStats,heroCombat}=await import('../src/config/heroes.ts');
+const {heroRecipes,getHeroStats,heroCombat,heroGrowth}=await import('../src/config/heroes.ts');
 const {getSkillStats,hasteConfig}=await import('../src/config/skills.ts');
 const {heroAttackInterval}=await import('../src/combat/skills.ts');
 const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
@@ -56,7 +56,7 @@ test('阿饼完整CD后按绝对HP最高、同HP最早入场处决，排除Boss�
  low.maxHp=100000;const before=wallet.money;
  const bossHp=boss.hp;const events=run(sim,20);assert.equal(first.hp,0);assert.equal(second.hp,500);assert.equal(boss.hp,bossHp);
  assert.equal(events.filter(e=>e.kind==='skillStart').length,1);assert.equal(events.filter(e=>e.kind==='kill').length,1);
- assert.equal(link.currentExp,10);assert.equal(wallet.money,before+sim.config.enemy.killReward);
+ assert.equal(link.currentExp,heroGrowth.enemyExp);assert.equal(wallet.money,before+sim.config.enemy.killReward);
  assert.equal(run(sim,100).some(e=>e.kind==='skillStart'),false);
  assert.deepEqual(executeEnemy(boss),{applied:0,killed:false});
  assert.deepEqual(executeEnemy(first),{applied:0,killed:false});
@@ -65,7 +65,7 @@ test('阿饼完整CD后按绝对HP最高、同HP最早入场处决，排除Boss�
 test('只有Boss时阿饼保持ready，处决能处理超过普通伤害量级的HP',()=>{
  const {sim,link}=setup('abing',true);const boss=enemy(sim,1e20,true);
  run(sim,14020);assert.equal(link.skill.phase,'ready');assert.ok(boss.hp>0);
- const target=enemy(sim,1e20);run(sim,20);assert.equal(target.hp,0);assert.equal(link.currentExp,10);
+ const target=enemy(sim,1e20);run(sim,20);assert.equal(target.hp,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
 });
 
 test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次AOE各只扣一层并恢复普通攻速',()=>{

@@ -19,7 +19,7 @@ test('射程以75逻辑格为基准，枪固定2格、弓仅1到2增距、其他
  for(let level=1;level<=MAX_LEVEL;level++){
    assert.equal(getCombatStats({type:'枪',level}).range,2*CELL_SIZE);
    assert.equal(getCombatStats({type:'弓',level}).range,(level===1?2.5:3)*CELL_SIZE);
-   assert.equal(getCombatStats({type:'刀',level}).range,115);
+   assert.equal(getCombatStats({type:'刀',level}).range,90);
    assert.equal(getCombatStats({type:'骑',level}).range,145);
    for(const hero of heroRecipes)assert.equal(getHeroStats(level).range,230,hero.id);
  }

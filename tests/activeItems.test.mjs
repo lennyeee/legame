@@ -19,8 +19,8 @@ const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 
 test('升级符开局等待完整集中CD；未装备没有使用机会',()=>{
  const {board,wallet,active}=setup();wallet.slots[0]={type:'刀',level:1};const target={kind:'slot',index:0};
- assert.equal(itemEffects.upgradeCooldownMs,20000);assert.equal(active.use(0,board,wallet,target),false);
- active.update(19999);assert.equal(active.ready(0),false);active.update(1);assert.equal(active.ready(0),true);
+ assert.equal(itemEffects.upgradeCooldownMs,50000);assert.equal(active.use(0,board,wallet,target),false);
+ active.update(49999);assert.equal(active.ready(0),false);active.update(1);assert.equal(active.ready(0),true);
  assert.equal(new ActiveItems(loadout()).use(0,board,wallet,target),false);
 });
 for(const unit of [{type:'刀'},{type:'枪'},{type:'弓'},{type:'骑'},{kind:'farmer',type:'农'},...['小','美','阿','饼','六'].map(type=>({kind:'heroLetter',type}))]) {
@@ -28,13 +28,13 @@ for(const unit of [{type:'刀'},{type:'枪'},{type:'弓'},{type:'骑'},{kind:'fa
   for(const kind of ['slot','tile'])for(let level=1;level<=5;level++){
    const {board,wallet,active}=setup(),target={kind,index:0},item={...unit,level};
    if(kind==='slot')wallet.slots[0]=item;else board.tiles[0].unit=item;
-   active.update(20000);assert.equal(active.use(0,board,wallet,target),level<5);
-   assert.equal(item.level,Math.min(5,level+1));assert.equal(active.slots[0].remainingMs,level<5?20000:0);
+   active.update(50000);assert.equal(active.use(0,board,wallet,target),level<5);
+   assert.equal(item.level,Math.min(5,level+1));assert.equal(active.slots[0].remainingMs,level<5?50000:0);
   }
  });
 }
 test('空地、道路、锁定格、铲子及不存在的位置不消耗ready；成功才重新CD',()=>{
- const {board,wallet,active}=setup();active.update(20000);wallet.slots[0]='铲';
+ const {board,wallet,active}=setup();active.update(50000);wallet.slots[0]='铲';
  const locked=board.tiles.findIndex(t=>!t.unlocked);board.tiles[locked].unit={type:'刀',level:1};
  for(const target of [null,{kind:'slot',index:0},{kind:'slot',index:1},{kind:'tile',index:locked},{kind:'tile',index:999}]){
   assert.equal(active.use(0,board,wallet,target),false);assert.equal(active.ready(0),true);
@@ -45,22 +45,22 @@ test('空地、道路、锁定格、铲子及不存在的位置不消耗ready；
 test('升级符复用HeroLetter同步：双方升一级、EXP归零、保持激活周期并封顶',()=>{
  const {board,wallet,active}=setup();board.tiles[0].unit=letter('小',3);board.tiles[1].unit=letter('美',3);
  const progression=getHeroProgression(board);progression.sync();const link=[...progression.links.values()][0];assert.ok(link);
- link.currentExp=12;active.update(20000);assert.equal(active.use(0,board,wallet,{kind:'tile',index:0}),true);
+ link.currentExp=12;active.update(50000);assert.equal(active.use(0,board,wallet,{kind:'tile',index:0}),true);
  assert.equal(board.tiles[1].unit.level,4);assert.equal(link.currentExp,0);assert.equal(link.level,4);
- active.update(20000);active.use(0,board,wallet,{kind:'tile',index:1});assert.equal(link.level,5);
- active.update(20000);assert.equal(active.use(0,board,wallet,{kind:'tile',index:0}),false);assert.equal(link.level,5);
+ active.update(50000);active.use(0,board,wallet,{kind:'tile',index:1});assert.equal(link.level,5);
+ active.update(50000);assert.equal(active.use(0,board,wallet,{kind:'tile',index:0}),false);assert.equal(link.level,5);
 });
 test('农民升级清除旧收益、按新等级重新生产，无幽灵收益',()=>{
  const {board,wallet,active}=setup();const farmer={kind:'farmer',type:'农',level:1};board.tiles[0].unit=farmer;
  const production=new FarmerProduction(board,wallet);production.update(12000);const old=production.states.get(farmer).reward.id;
- active.update(20000);active.use(0,board,wallet,{kind:'tile',index:0});production.sync();
+ active.update(50000);active.use(0,board,wallet,{kind:'tile',index:0});production.sync();
  assert.equal(production.collect(farmer,old),false);assert.equal(production.states.get(farmer).elapsedMs,0);
  production.update(12000);assert.equal(production.states.get(farmer).reward.amount,2);
 });
 test('主动状态停止/销毁拒绝升级及CD推进；新实例完整CD',()=>{
- const {board,wallet,active,gear}=setup();wallet.slots[0]={type:'刀',level:1};active.update(20000);active.stop();
+ const {board,wallet,active,gear}=setup();wallet.slots[0]={type:'刀',level:1};active.update(50000);active.stop();
  assert.equal(active.use(0,board,wallet,{kind:'slot',index:0}),false);active.destroy();active.update(99999);
- assert.equal(active.slots.length,0);assert.equal(new ActiveItems(gear).slots[0].remainingMs,20000);
+ assert.equal(active.slots.length,0);assert.equal(new ActiveItems(gear).slots[0].remainingMs,50000);
 });
 test('招贤榜按武将字类别统一乘2，保持相对权重、不改变普通池、不加入农民',()=>{
  const plain=recruitmentPool(loadout()),boosted=recruitmentPool(loadout('hero_recruitment'));

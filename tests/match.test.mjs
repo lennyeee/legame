@@ -35,7 +35,7 @@ test('同一spawn在9.5秒同时产生双方独立实体，参数相同且带相
  const m=new Match(testMap);advance(m,9499);assert.equal(m.bottomSide.combat.enemies.length,0);
  advance(m,1);const a=m.bottomSide.combat.enemies[0],b=m.topSide.combat.enemies[0];
  assert.notEqual(a,b);assert.deepEqual(a,b);assert.equal(a.spawnEventId,1);assert.equal(a.id,1);
- assert.equal(a.maxHp,combatConfig.enemy.maxHp);assert.equal(a.moveSpeed,combatConfig.enemy.moveSpeed);
+ assert.equal(a.maxHp,enemyHpForWave(1));assert.equal(a.moveSpeed,combatConfig.enemy.moveSpeed);
 });
 for(const fast of ['bottom','top'])test(`${fast}清场不改变另一方的出怪时间，积怪不阻止wave2`,()=>{
  const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:250,initialCount:2,countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100};
@@ -98,7 +98,7 @@ test('pause冻结timeline、双边战斗/HP/EXP/生产/CD/铁饭碗；resume续�
  advance(m,9000);m.pause();const before=snapshot(m);advance(m,10000);assert.equal(snapshot(m),before);
  for(const side of Object.values(m.sides)){assert.equal(side.recruit(),false);assert.equal(side.drop(tile(0),slot(0)),'invalid');}
  m.resume();advance(m,1000);assert.equal(m.bottomSide.recruitment.money,22);assert.equal(m.topSide.recruitment.money,22);
- assert.ok(m.timeline.elapsedMs>9900);assert.equal(m.bottomSide.activeItems.slots[0].remainingMs,10000);
+ assert.ok(m.timeline.elapsedMs>9900);assert.equal(m.bottomSide.activeItems.slots[0].remainingMs,40000);
  advance(m,2000);assert.ok([...m.topSide.farmers.states.values()][0].reward);
 });
 test('出怪/漏怪截止点附近pause不越过截止点，恢复后双方各执行一次',()=>{
@@ -192,7 +192,7 @@ test('9.5-second preparation runs recruitment, Farmer, passive and item clocks w
  const s=m.bottomSide,f=put(s,{kind:'farmer',type:'农',level:1},6);
  assert.equal(s.recruit(()=>0),true);assert.equal(s.recruitment.money,10);
  advance(m,9499);assert.equal(s.combat.enemies.length,0);assert.equal(m.topSide.combat.enemies.length,0);
- assert.ok(m.timeline.elapsedMs>9400);assert.equal(s.activeItems.slots[0].remainingMs,10517);
+ assert.ok(m.timeline.elapsedMs>9400);assert.equal(s.activeItems.slots[0].remainingMs,40517);
  assert.equal(s.passives.ironRiceSeconds,9);assert.equal(s.farmers.states.get(f).reward,null);
  const clock=m.timeline.elapsedMs;m.pause();advance(m,5000);assert.equal(m.timeline.elapsedMs,clock);
  m.resume();advance(m,1);assert.equal(s.combat.enemies.length,1);

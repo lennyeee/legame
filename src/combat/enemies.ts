@@ -8,11 +8,12 @@ export interface Enemy extends MapPoint {
   hp: number;
   moveSpeed: number;
   distance: number;
+  hitRadius?: number; // 受击圆，独立于显示尺寸；无体积的规则fixture默认0。
   isBoss?: boolean;
   spawnEventId?: number; // Match共享出题事件；id本身仍只在所属Side内唯一。
 }
 
-export function createEnemy(id: number, path: BattlePath, stats: { maxHp: number; moveSpeed: number }): Enemy {
+export function createEnemy(id: number, path: BattlePath, stats: { maxHp: number; moveSpeed: number; hitRadius?: number }): Enemy {
   return { id, ...pointOnPath(path, 0), ...stats, hp: stats.maxHp, distance: 0 };
 }
 

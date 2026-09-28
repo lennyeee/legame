@@ -1,8 +1,8 @@
 import type { MapPoint } from '../config/maps';
 import type { Enemy } from './enemies';
 
-export function inRange(origin: MapPoint, target: MapPoint, range: number): boolean {
-  return Math.hypot(origin.x - target.x, origin.y - target.y) <= range;
+export function inRange(origin: MapPoint, target: MapPoint & { hitRadius?: number }, range: number): boolean {
+  return Math.hypot(origin.x - target.x, origin.y - target.y) <= range + (target.hitRadius ?? 0);
 }
 
 export function selectTarget(enemies: readonly Enemy[], origin: MapPoint, range: number): Enemy | null {
@@ -31,6 +31,8 @@ export function piercingTargets(
     const y = enemy.y - origin.y;
     const forward = x * dx + y * dy;
     const perpendicular = Math.abs(x * dy - y * dx);
-    return forward >= 0 && forward <= range && perpendicular <= width / 2;
+    // 保留32px线宽，使用线段胶囊与目标受击圆的相交；端点同样有体积语义。
+    const beyondEnd = forward < 0 ? -forward : Math.max(0, forward - range);
+    return Math.hypot(beyondEnd, perpendicular) <= width / 2 + (enemy.hitRadius ?? 0);
   });
 }

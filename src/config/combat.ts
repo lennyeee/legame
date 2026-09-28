@@ -5,7 +5,7 @@ import { attackRangeCells, rangePixels } from './ranges';
 export interface CombatStats {
   damage: number;
   attackInterval: number; // 毫秒
-  range: number; // 750×1334 逻辑像素，以敌人中心判定
+  range: number; // 圆形攻击半径；索敌判断与敌人的受击圆相交。
 }
 
 export const unitCombatStats: Record<Unit['type'], CombatStats> = {
@@ -16,14 +16,14 @@ export const unitCombatStats: Record<Unit['type'], CombatStats> = {
 };
 
 export const combatConfig = {
-  enemy: { maxHp: 90, moveSpeed: 55, killReward: 1 },
+  enemy: { maxHp: 90, moveSpeed: 55, killReward: 1, hitRadius: 20 },
   stepMs: 1000 / 60,
   maxFrameMs: 250, // 切回页面时不瞬间补发大量敌人和攻击
   growth: { damageMultiplier: 1.55, attackSpeedPerLevel: 0.08 },
   spearWidth: 32,
   arrowSpeed: 560,
   visuals: {
-    enemyRadius: 15,
+    enemyRadius: 21,
     enemyColor: 0xa85c4d,
     hitColor: 0xffffff,
     hitFlashMs: 140,

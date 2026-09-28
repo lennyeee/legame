@@ -38,7 +38,7 @@ const { GAME_VERSION } = await import('../src/config/game.ts');
 const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
 const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
 const { aiConfig } = await import('../src/config/ai.ts');
-const { heroCombat } = await import('../src/config/heroes.ts');
+const { heroCombat, heroGrowth } = await import('../src/config/heroes.ts');
 const { combatConfig } = await import('../src/config/combat.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
@@ -244,7 +244,7 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   p.run(10);assert.equal(p.text(170, 55), '$ 20');
   assert.equal(p.game.time._active.length, 0);
   const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
-    .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===15);
+    .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===combatConfig.visuals.enemyRadius);
   p.run(pressureConfig.firstEnemyDelay-1010);assert.equal(enemyCircles().length, 0);
   p.run(20);assert.equal(enemyCircles().length, 1);
   const random = Math.random;
@@ -331,7 +331,7 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
     Math.random = () => 16.5 / 20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
     const expEnemy=p.game.sides.bottom.combat.spawnEnemy();expEnemy.moveSpeed=0;
-    p.run(4500);assert.equal([...p.game.sides.bottom.heroes.links.values()][0].currentExp,10);
+    p.run(4500);assert.equal([...p.game.sides.bottom.heroes.links.values()][0].currentExp,heroGrowth.enemyExp);
     assert.equal(p.text(206.25,593.9375),'Lv.1');
     const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
       .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===156&&d[2]===635&&d[4]===3);
@@ -727,14 +727,14 @@ function dropUpgrade(p,x,y,eventType='pointerup') {
  p.game.input.emit('pointermove',{id:1,x,y,primaryDown:true});
  p.game.input.emit(eventType,{id:1,x,y,primaryDown:false});
 }
-test('升级符真实输入：20秒CD、暂停冻结、非法释放/移出保留ready、合法拖放升级与互斥',()=>{
+test('升级符真实输入：50秒CD、暂停冻结、非法释放/移出保留ready、合法拖放升级与互斥',()=>{
  const speed=combatConfig.enemy.moveSpeed,random=Math.random;
  try{
   combatConfig.enemy.moveSpeed=0;Math.random=()=>0;const p=equippedV56();
-  assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
-  p.click(375,1158);dropUpgrade(p,183,1018);assert.equal(p.text(80,1018),'升级符\n20s');
-  p.run(7000);assert.equal(p.text(80,1018),'升级符\n13s');p.click(75,55);const frozen=p.snapshot();p.run(30000);
-  assert.equal(p.snapshot(),frozen);p.click(375,765);p.run(12990);assert.equal(p.text(80,1018),'升级符\n1s');p.run(10);
+  assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
+  p.click(375,1158);dropUpgrade(p,183,1018);assert.equal(p.text(80,1018),'升级符\n50s');
+  p.run(7000);assert.equal(p.text(80,1018),'升级符\n43s');p.click(75,55);const frozen=p.snapshot();p.run(30000);
+  assert.equal(p.snapshot(),frozen);p.click(375,765);p.run(42990);assert.equal(p.text(80,1018),'升级符\n1s');p.run(10);
   assert.equal(p.text(80,1018),'升级符\n可用');dropUpgrade(p,375,50);assert.equal(p.text(80,1018),'升级符\n可用');
   dropUpgrade(p,183,1018,'pointerupoutside');assert.equal(p.text(80,1018),'升级符\n可用');
   p.click(80,1018);assert.equal(p.text(80,1018),'升级符\n拖动中');const money=farmMoney(p);p.click(375,1158);assert.equal(farmMoney(p),money);
@@ -743,9 +743,9 @@ test('升级符真实输入：20秒CD、暂停冻结、非法释放/移出保留
   p.game.input.emit('pointermove',{id:2,x:164.0625,y:574.0625,primaryDown:true});
   p.game.input.emit('pointerup',{id:2,x:164.0625,y:574.0625,primaryDown:false});
   p.game.input.emit('pointerup',{id:1,x:183,y:1018,primaryDown:false});
-  assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(375,1264),'道具使用成功');
+  assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(375,1264),'道具使用成功');
   assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
-  p.run(20000);p.click(80,1018);p.click(75,55);assert.equal(p.text(80,1018),'升级符\n可用');
+  p.run(50000);p.click(80,1018);p.click(75,55);assert.equal(p.text(80,1018),'升级符\n可用');
   p.run(1000);p.click(375,765);p.game.input.emit('pointerup',{id:1,x:279,y:1018});assert.equal(p.text(80,1018),'升级符\n可用');
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
@@ -769,7 +769,7 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
    assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.events.listenerCount('resume'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);assert.equal(p.globalEvents.listenerCount('blur'),0);
    assert.equal(farmCash(p).length,0);const homepage=p.snapshot();p.run(60000);assert.equal(p.snapshot(),homepage);
    p.click(375,885);assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,765);
-   assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
+   assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
    assert.equal(farmMoney(p),100);badge.emit('pointerdown',{},0,0,{stopPropagation(){}});assert.equal(farmMoney(p),100);
    assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,941.5625),'♥♥♥');
    assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);assert.equal(p.game.events.listenerCount('update'),1);
@@ -780,8 +780,8 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
 for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后停止CD且重开重新充能',()=>{
  const p=equippedV56();p.run(5000);finishMatch(p,win);
   assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
-  p.click(375,765);assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1186),'招贤榜');
-  p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n20s');
+  p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1186),'招贤榜');
+  p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n50s');
   assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),100);
 });
 

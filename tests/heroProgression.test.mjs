@@ -95,8 +95,8 @@ test('两个武将有效参战，各得完整EXP；第三个只在范围内不�
  const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
  const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-2*heroCombat.damage);
  board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');board.tiles[6].unit={type:'刀',level:20};run(sim,300);
- assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,10);
- assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[10,10,0]);
+ assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+ assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[heroGrowth.enemyExp,heroGrowth.enemyExp,0]);
 });
 test('拆开后原敌人被普通兵击杀不发旧EXP，漏怪也无EXP',()=>{
  const {board,reserve,sim,growth}=setup();const e=enemy(sim);run(sim,1200);
@@ -105,7 +105,7 @@ test('拆开后原敌人被普通兵击杀不发旧EXP，漏怪也无EXP',()=>{
  const escape=enemy(sim);growth.recordDamage(escape.id,fresh,1);escape.distance=sim.path.totalLength;run(sim,20);growth.awardKill(escape.id,100);assert.equal(fresh.currentExp,0);
 });
 test('参战武将自己击杀也能得EXP，休眠字不得EXP',()=>{
- const {sim,link}=setup();enemy(sim,1);run(sim,1200);assert.equal(link.currentExp,10);
+ const {sim,link}=setup();enemy(sim,1);run(sim,1200);assert.equal(link.currentExp,heroGrowth.enemyExp);
 });
 test('等级提升增加伤害和攻速但不改变射程',()=>{
  for(const level of [2,5,50]){const stats=getHeroStats(level);assert.ok(stats.damage>heroCombat.damage);assert.ok(stats.attackInterval<heroCombat.attackInterval);assert.equal(stats.range,heroCombat.range);}

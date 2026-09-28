@@ -2,7 +2,7 @@ export const itemEffects = {
   saleReward: 1,
   hasteCooldownMs: 20_000,
   hasteAttackSpeedMultiplier: 1.5,
-  upgradeCooldownMs: 20_000,
+  upgradeCooldownMs: 50_000,
   heroRecruitmentMultiplier: 2,
 } as const;
 

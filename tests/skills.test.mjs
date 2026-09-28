@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {registerHooks} from 'node:module';
 registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
-const {heroRecipes,heroCombat}=await import('../src/config/heroes.ts');
+const {heroRecipes,heroCombat,heroGrowth}=await import('../src/config/heroes.ts');
 const {getSkillStats,skillConfigs}=await import('../src/config/skills.ts');
 const {gameConfig}=await import('../src/config/game.ts');
 const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
@@ -95,7 +95,7 @@ test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
  run(sim,cfg.cooldown);sim.enemies=sim.enemies.filter(e=>!e.isBoss);
  const target=enemy(sim,500);run(sim,20);
  assert.equal(target.hp,400);board.tiles[2].unit={type:'刀',level:20};run(sim,300);
- assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,10);
+ assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
 });
 test('技能伤害随等级升高、CD缩短且不低于最小值',()=>{
  for(const level of [2,10,100000]){const stats=getSkillStats(id,level);assert.ok(stats.damage>cfg.damage);assert.ok(stats.cooldown<cfg.cooldown);assert.ok(stats.cooldown>=cfg.minCooldown);}
