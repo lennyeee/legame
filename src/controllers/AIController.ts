@@ -20,11 +20,24 @@ interface Pending {
   recruitCount: number;
 }
 
+export type TimingRandom = () => number;
+
+// 计时使用 Web Crypto 独立取样，不消耗招募/金铲铲使用的 Math.random 序列。
+function createTimingRandom(): TimingRandom {
+  return () => {
+    const sample = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(sample);
+    return sample[0]! / 0x1_0000_0000;
+  };
+}
+
 // 只持有本方状态；无Match/timeline/bottom、Phaser、timer或未来动作队列。
 export class AIController {
   private pending: Pending | null = null;
   private stopped = false;
-  constructor(private readonly side: PlayerSide, private readonly delayMs: number = aiConfig.actionDelayMs) {}
+  private hasActed = false;
+  private observeAfterRecruit = false;
+  constructor(private readonly side: PlayerSide, private readonly timingRandom: TimingRandom = createTimingRandom()) {}
 
   update(deltaMs: number): void {
     if (this.stopped || !this.side.running || !Number.isFinite(deltaMs) || deltaMs <= 0) return;
@@ -32,9 +45,15 @@ export class AIController {
       const candidate = this.candidates().sort((a, b) => b.score - a.score)[0];
       if (!candidate || candidate.score <= 0) return;
       const action = candidate.action;
+      const delayRange = !this.hasActed ? aiConfig.timing.initialReactionMs
+        : this.observeAfterRecruit ? aiConfig.timing.recruitObservationMs
+          : action.kind === 'drop' && action.action === 'unlock' ? aiConfig.timing.shovelActionMs
+            : aiConfig.timing.ordinaryActionMs;
+      const delayMs = Math.floor(this.timingRandom() * (delayRange.max - delayRange.min + 1)) + delayRange.min;
+      if (this.observeAfterRecruit && this.hasActed) this.observeAfterRecruit = false;
       const positions = action.kind === 'drop' ? [action.source, action.target]
         : action.kind === 'item' ? [action.target] : [];
-      this.pending = { candidate, remainingMs: this.delayMs,
+      this.pending = { candidate, remainingMs: delayMs,
         expected: positions.map(position => {
           const item = this.side.itemAt(position);
           return { position, item, level: item && item !== '铲' ? item.level : null };
@@ -51,10 +70,15 @@ export class AIController {
     const action = pending.candidate.action;
     // 重新枚举同一个动作，校验规则和active hero保护；不偷偷改为另一个动作。
     if (!this.candidates().some(candidate => this.sameAction(action, candidate.action))) return;
-    if (action.kind === 'recruit') this.side.recruit();
-    else if (action.kind === 'drop') this.side.drop(action.source, action.target);
-    else if (action.kind === 'item') this.side.useActiveItem(action.index, action.target);
-    else this.side.collectFarmerReward(action.farmer, action.rewardId);
+    let succeeded = false;
+    if (action.kind === 'recruit') succeeded = this.side.recruit();
+    else if (action.kind === 'drop') succeeded = this.side.drop(action.source, action.target) === action.action;
+    else if (action.kind === 'item') succeeded = this.side.useActiveItem(action.index, action.target);
+    else succeeded = this.side.collectFarmerReward(action.farmer, action.rewardId);
+    if (succeeded) {
+      this.hasActed = true;
+      this.observeAfterRecruit = action.kind === 'recruit';
+    }
   }
 
   stop(): void { this.stopped = true; this.pending = null; }

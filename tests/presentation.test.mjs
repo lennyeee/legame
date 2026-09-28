@@ -37,6 +37,7 @@ const { gameConfig } = await import('../src/config/game.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
 const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
 const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
+const { aiConfig } = await import('../src/config/ai.ts');
 const { heroCombat } = await import('../src/config/heroes.ts');
 const { combatConfig } = await import('../src/config/combat.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
@@ -975,13 +976,14 @@ test('v0.60-C 同步漏怪显示平局；旧update回调在重开后不能再运
  assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,0);
 });
 
-test('v0.61-A 正式GameScene从空top开局，通过Match延迟招募与动态部署，无开发阵容',()=>{
+test('v0.61 正式GameScene从空top开局，通过Match反应延迟招募，无开发阵容',()=>{
  const p=pve(),s=p.game.sides.top;
  assert.equal(s.recruitment.money,20);assert.deepEqual(s.recruitment.slots,Array(5).fill(null));
  assert.equal(s.board.tiles.filter(t=>t.unlocked).length,6);assert.ok(s.board.tiles.every(t=>t.unit===null&&t.bonusType==='none'));
  assert.ok(Object.isFrozen(s.recruitment.loadout));assert.equal(s.recruitment.loadout.active.length,2);
  assert.ok(s.recruitment.loadout.passive.some(i=>i.id==='farmer'));
- p.run(590);assert.equal(s.recruitment.successfulRecruits,0);p.run(10);
+ p.run(aiConfig.timing.initialReactionMs.min-10);assert.equal(s.recruitment.successfulRecruits,0);
+ p.run(aiConfig.timing.initialReactionMs.max-aiConfig.timing.initialReactionMs.min+40);
  assert.equal(s.recruitment.successfulRecruits,1);assert.equal(s.recruitment.money,10);assert.equal(s.recruitment.nextCost,12);
  assert.ok(s.recruitment.slots.every(i=>i!==null));
  assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,0);assert.equal(p.game.sides.bottom.recruitment.money,20);
