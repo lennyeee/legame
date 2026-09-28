@@ -11,6 +11,7 @@ import { getHeroStats } from '../config/heroes';
 import { applyTileBonuses } from '../combat/tileBonuses';
 import { currentStateSnapshot, currentStateScore, emptyActionValue, pathDistance, placementValue } from './aiEvaluation';
 import type { ActionValue } from './aiEvaluation';
+import { chooseNearBestPlacement } from './aiPlacement';
 
 type AIAction =
   | { kind: 'recruit' }
@@ -27,7 +28,7 @@ interface Pending {
 
 export type TimingRandom = () => number;
 
-// 计时使用 Web Crypto 独立取样，不消耗招募/金铲铲使用的 Math.random 序列。
+// 计时/站位分别使用独立 Web Crypto 取样，不消耗招募/金铲铲的 Math.random 序列。
 function createTimingRandom(): TimingRandom {
   return () => {
     const sample = new Uint32Array(1);
@@ -42,13 +43,27 @@ export class AIController {
   private stopped = false;
   private hasActed = false;
   private observeAfterRecruit = false;
-  constructor(private readonly side: PlayerSide, private readonly timingRandom: TimingRandom = createTimingRandom()) {}
+  constructor(private readonly side: PlayerSide, private readonly timingRandom: TimingRandom = createTimingRandom(),
+    private readonly placementRandom: () => number = createTimingRandom()) {}
 
   update(deltaMs: number): void {
     if (this.stopped || !this.side.running || !Number.isFinite(deltaMs) || deltaMs <= 0) return;
     if (!this.pending) {
-      const candidate = this.candidates().sort((a, b) => b.score - a.score)[0];
+      const candidates = this.candidates().sort((a, b) => b.score - a.score);
+      let candidate = candidates[0];
       if (!candidate || candidate.score <= 0) return;
+      const bestAction = candidate.action;
+      // 先保留原动作/棋子选择，再仅对该普通兵的合法空地部署位置做near-best变化。
+      // 不随机化合成、交换、成将、农民、道具或经济动作。
+      if (bestAction.kind === 'drop' && bestAction.action === 'move' && bestAction.source.kind === 'slot'
+        && bestAction.target.kind === 'tile' && candidate.value.combat === 'deploy') {
+        candidate = chooseNearBestPlacement(candidates.filter(option => {
+          const action = option.action;
+          return action.kind === 'drop' && action.action === 'move' && action.source.kind === 'slot'
+            && action.source.index === bestAction.source.index && action.target.kind === 'tile'
+            && option.value.combat === 'deploy';
+        }), this.placementRandom);
+      }
       const action = candidate.action;
       const delayRange = !this.hasActed ? aiConfig.timing.initialReactionMs
         : this.observeAfterRecruit ? aiConfig.timing.recruitObservationMs

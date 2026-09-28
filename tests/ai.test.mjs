@@ -20,13 +20,82 @@ const { recruitmentPool }=await import('../src/systems/recruitment.ts');
 const { tileBonusConfig }=await import('../src/config/tileBonuses.ts');
 const { currentStateSnapshot, currentStateScore, emptyActionValue, placementValue }=await import('../src/controllers/aiEvaluation.ts');
 const { getCombatStats }=await import('../src/config/combat.ts');
+const { chooseNearBestPlacement }=await import('../src/controllers/aiPlacement.ts');
 const slot=index=>({kind:'slot',index}),tile=index=>({kind:'tile',index});
 const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 function kit(...ids){const inventory=createInventory();ids.forEach(id=>assert.equal(setEquipped(inventory,id,true),true));return createLoadout(inventory);}
 function side(...ids){return new PlayerSide('top',testMap,kit(...ids),{automaticWaves:false});}
 function run(ai,ms){for(let left=ms;left>0;left-=10)ai.update(Math.min(10,left));}
 function advance(m,ms){for(let left=ms;left>0;left-=10)m.update(Math.min(10,left));}
-const aiFor=side=>new AIController(side,()=>0);
+const aiFor=side=>new AIController(side,()=>0,()=>0);
+test('near-best placement includes67/65/64, excludes51, prefers higher scores and keeps sole/equal choices stable',()=>{
+ const options=[67,65,64,51].map(score=>({score}));
+ assert.equal(aiConfig.placementVariation.nearBestThreshold,3);
+ assert.equal(chooseNearBestPlacement(options,()=>0),options[0]);
+ assert.equal(chooseNearBestPlacement(options,()=>.6),options[1]);
+ assert.equal(chooseNearBestPlacement(options,()=>.99),options[2]);
+ for(const value of [0,.2,.5,.8,.999])assert.notEqual(chooseNearBestPlacement(options,()=>value),options[3]);
+ assert.equal(chooseNearBestPlacement(options,()=>.4),options[0]); // 高分仍有较大权重。
+ assert.equal(chooseNearBestPlacement([options[0],options[3]],()=>{throw Error('only one near-best');}),options[0]);
+ const equal=[{score:67},{score:67}];assert.equal(chooseNearBestPlacement(equal,()=>.49),equal[0]);
+ assert.equal(chooseNearBestPlacement(equal,()=>.5),equal[1]);
+});
+
+test('injected placement RNG varies the same ordinary deployment only among legal near-best open empty tiles',()=>{
+ const targets=[];
+ for(const value of [0,.999]){
+  const s=side();s.recruitment.money=0;s.recruitment.slots=[{type:'骑',level:1},{kind:'farmer',type:'农',level:1},null,null,null];
+  const ai=new AIController(s,()=>0,()=>value),options=ai.candidates();
+  const best=options.sort((a,b)=>b.score-a.score)[0];
+  run(ai,aiConfig.timing.initialReactionMs.min);
+  const index=s.board.tiles.findIndex(t=>t.unit?.type==='骑');targets.push(index);
+  assert.ok(index>=0&&s.board.tiles[index].unlocked);
+  assert.equal(s.recruitment.slots[1].kind,'farmer');
+  const selected=options.find(c=>c.action.kind==='drop'&&c.action.source.index===0&&c.action.target.kind==='tile'&&c.action.target.index===index);
+  assert.ok(selected.score>=best.score-aiConfig.placementVariation.nearBestThreshold);
+ }
+ assert.notEqual(targets[0],targets[1]);
+});
+
+test('placement variation cannot select locked/occupied cells or break active heroes and does not spend game RNG',()=>{
+ const s=side(),link=hero(s);s.recruitment.money=0;s.recruitment.slots[0]={type:'弓',level:1};
+ const original=Math.random;let reads=0,placementReads=0;
+ try{
+  Math.random=()=>{reads++;throw Error('placement must not draw gameplay RNG');};
+  const ai=new AIController(s,()=>0,()=>{placementReads++;return .999;}),calls=spy(s);
+  run(ai,aiConfig.timing.initialReactionMs.min);
+  assert.equal(reads,0);assert.equal(placementReads,1);
+  const call=calls.find(c=>c.name==='drop');assert.equal(call.result,'move');
+  assert.ok(s.board.tiles[call.args[1].index].unlocked);
+  assert.notEqual(call.args[1].index,link.leftIndex);assert.notEqual(call.args[1].index,link.rightIndex);
+  assert.equal([...s.heroes.links.values()][0],link);
+ }finally{Math.random=original;}
+});
+
+test('a sole legal ordinary placement stays stable and needs no placement sample',()=>{
+ const s=side();s.recruitment.money=0;s.board.tiles.forEach((tile,i)=>{tile.unlocked=i===0;});
+ s.recruitment.slots[0]={type:'刀',level:1};
+ const ai=new AIController(s,()=>0,()=>{throw Error('sole choice must not sample');});
+ run(ai,aiConfig.timing.initialReactionMs.min);
+ assert.equal(s.board.tiles[0].unit.type,'刀');assert.equal(s.recruitment.slots[0],null);
+ assert.equal(s.board.tiles.filter(tile=>tile.unit).length,1);
+});
+
+test('same timing/placement inputs remain deterministic without altering recruit RNG sequence or observation delay',()=>{
+ const original=Math.random,results=[];
+ try{
+  for(const value of [0,.999,.999]){
+   let reads=0;Math.random=()=>{reads++;return .45;};
+   const s=side(),ai=new AIController(s,()=>0,()=>value);
+   run(ai,900);assert.equal(reads,5);assert.equal(s.recruitment.money,10);
+   const first=structuredClone(s.recruitment.slots);ai.update(1);
+   assert.equal(ai.pending.remainingMs,aiConfig.timing.recruitObservationMs.min-1);
+   run(ai,799);assert.equal(reads,5);
+   results.push({first,board:structuredClone(s.board),holding:structuredClone(s.recruitment.slots)});
+  }
+  assert.deepEqual(results[1],results[2]);assert.deepEqual(results[0].first,results[1].first);
+ }finally{Math.random=original;}
+});
 function spy(s){const calls=[];for(const name of ['recruit','drop','useActiveItem','collectFarmerReward']){
  const actual=s[name].bind(s);s[name]=(...args)=>{const result=actual(...args);calls.push({name,args,result});return result;};}return calls;}
 function hero(s){s.recruitment.slots[0]=letter('小');s.recruitment.slots[1]=letter('美');s.drop(slot(0),tile(0));s.drop(slot(1),tile(1));return [...s.heroes.links.values()][0];}

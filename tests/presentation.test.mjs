@@ -40,6 +40,8 @@ const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
 const { aiConfig } = await import('../src/config/ai.ts');
 const { heroCombat, heroGrowth } = await import('../src/config/heroes.ts');
 const { combatConfig } = await import('../src/config/combat.ts');
+const { farmerRewardVisual } = await import('../src/config/farmer.ts');
+const { FarmerView } = await import('../src/ui/FarmerView.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 
@@ -96,7 +98,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney) {
     scene.game = { events: globalEvents };
     scene.scale = { width: 750 };
     scene.add = Object.fromEntries(['rectangle', 'circle', 'ellipse', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
-    scene.add.text = (x, y, text) => object('text', x, y).setText(text);
+    scene.add.text = (x, y, text, style) => { const textObject=object('text', x, y).setText(text);textObject.style=style;return textObject; };
     scene.sys = { events: new EventEmitter() };
     scene.time = new Clock(scene);
   }
@@ -640,8 +642,8 @@ test('暂停重开取消保持冻结，确认复用完整重开并保留loadout�
  try {
   const p=pve(false, 100);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
   for(let round=0;round<3;round++){
-   Math.random=()=>15.5/30;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-   Math.random=()=>16.5/30;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+   Math.random=()=>15.5/24;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+   Math.random=()=>16.5/24;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
    p.run(12000);p.click(75,55);const snapshot=p.snapshot(),clock=p.game.time;
    assert.equal(p.text(375,875,p.overlay),'重新开始');p.click(375,875);
    assert.equal(p.text(375,565,p.overlay),'确定重新开始？');assert.equal(p.text(375,655,p.overlay),'当前进度将丢失。');
@@ -674,6 +676,40 @@ function farmerGame(){
 const farmCash=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&/^\$[0-9]+$/.test(o.text)&&o.visible&&o.y>532);
 const farmMoney=p=>Number(p.text(170,55).slice(2));
 
+test('Farmer badge and hit area enlarge equally on both sides, stay inside battlefield and only bottom can collect',()=>{
+ const p=pve(),views=[],rewards=[];
+ for(const displaySide of ['bottom','top']){
+  const side=p.game.sides[displaySide],farmer={kind:'farmer',type:'农',level:1};
+  side.board.tiles[0].unit=farmer;side.farmers.update(12000);
+  const view=new FarmerView(p.game,testMap,side,()=>true,()=>{},displaySide,displaySide==='bottom');views.push(view);
+  view.refresh();
+  const box=p.objects.get(p.game).findLast(o=>o.kind==='rectangle'&&o.color===0xf3d975&&o.visible);
+  const text=p.objects.get(p.game).findLast(o=>o.kind==='text'&&o.text==='$1'&&o.visible);
+  assert.equal(box.width,90);assert.equal(box.height,38);assert.equal(text.style.fontSize,'29px');
+  assert.ok(box.width/64>=1.35&&box.width/64<=1.5);assert.ok(box.height/28>=1.35&&box.height/28<=1.5);
+  const centers=[...testMap.cells,...testMap.path].map(cell=>boardProjection(testMap,750,displaySide).point(cell));
+  const half=testMap.cellSize*1.125/2,bounds=box.getBounds();
+  assert.ok(bounds.x>=Math.min(...centers.map(c=>c.x))-half);
+  assert.ok(bounds.x+bounds.width<=Math.max(...centers.map(c=>c.x))+half);
+  assert.ok(bounds.y>=Math.min(...centers.map(c=>c.y))-half);
+  assert.ok(bounds.y+bounds.height<=Math.max(...centers.map(c=>c.y))+half);
+  const center=boardProjection(testMap,750,displaySide).point(testMap.cells[0]);
+  assert.ok(bounds.y>center.y+32||bounds.y+bounds.height<center.y-13.5); // 不遮住农/Lv文字。
+  assert.equal(bounds.contains(box.x+44,box.y+18),true); // 原64×28点击范围以外仍可点。
+  assert.equal(box.interactive===true,displaySide==='bottom');
+  assert.equal(box.listenerCount('pointerdown'),displaySide==='bottom'?1:0);
+  rewards.push({side,farmer,view,box,text});
+ }
+ const top=rewards[1],before=top.side.recruitment.money;
+ top.box.emit('pointerdown',{},0,0,{stopPropagation(){}});assert.equal(top.side.recruitment.money,before);
+ assert.ok(top.side.farmers.states.get(top.farmer).reward);
+ const bottom=rewards[0],money=bottom.side.recruitment.money;
+ bottom.box.emit('pointerdown',{},0,0,{stopPropagation(){}});
+ assert.equal(bottom.side.recruitment.money,money+1);assert.equal(bottom.box.visible,false);assert.equal(bottom.text.visible,false);
+ top.side.farmers.update(5000);top.view.refresh();assert.equal(top.box.visible,false);assert.equal(top.text.visible,false);
+ views.forEach(view=>view.destroy());
+});
+
 test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点击/过期旧对象不加钱',()=>{
  const random=Math.random,speed=combatConfig.enemy.moveSpeed;
  try{
@@ -682,7 +718,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
   assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,555.6875),'');
   p.run(11990);p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
   p.click(375,765);p.run(10);assert.equal(farmCash(p).length,1);
-  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28);
+  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
   const emit=()=>badge.emit('pointerdown',{},0,0,{stopPropagation(){}});
   p.click(75,55);const ready=p.snapshot(),money=farmMoney(p);p.run(10000);emit();assert.equal(farmMoney(p),money);assert.equal(p.snapshot(),ready);
   p.click(375,765);p.run(4990);assert.equal(farmCash(p).length,1);
@@ -706,7 +742,7 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
   Math.random=()=>0.9;const p=farmerGame();
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   p.run(12000);
-  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28);
+  const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
   finishMatch(p,win);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
   const ended=p.snapshot(),money=farmMoney(p);p.run(30000);badge?.emit('pointerdown',{},0,0,{stopPropagation(){}});
   assert.equal(p.snapshot(),ended);assert.equal(farmMoney(p),money);
@@ -759,7 +795,7 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
     Math.random=()=>rng;p.click(375,1158);p.drag([183,1018],to);
    }
    p.run(12000);assert.equal(farmCash(p).length,1);
-   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===64&&o.height===28),clock=p.game.time;
+   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height),clock=p.game.time;
    p.click(75,55);assert.equal(p.text(375,985,p.overlay),'回到主页');p.click(375,985);
    assert.equal(p.text(375,565,p.overlay),'确定回到主页？');assert.equal(p.text(375,655,p.overlay),'当前对局进度将丢失。');
    const frozen=p.snapshot();p.run(30000);p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');assert.equal(p.isActive(),false);

@@ -7,6 +7,7 @@ export const aiConfig = {
     shovelActionMs: { min: 1000, max: 1900 },
   },
   minimumMoveDistanceCells: 0.5,
+  placementVariation: { nearBestThreshold: 3, bestWeightMultiplier: 2 },
   evaluation: {
     defense: { minimumAttackers: 2, heroWeight: 1.5, enemiesPerExtraAttacker: 4,
       advancedProgress: 0.65, advancedExtraAttackers: 1 },

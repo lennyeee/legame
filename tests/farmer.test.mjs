@@ -5,7 +5,7 @@ registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+=
 const {FarmerProduction}=await import('../src/systems/FarmerProduction.ts');
 const {farmerConfig}=await import('../src/config/farmer.ts');
 const {MAX_LEVEL}=await import('../src/config/levels.ts');
-const {createRecruitmentState,recruit}=await import('../src/systems/recruitment.ts');
+const {createRecruitmentState,recruit,recruitmentPool}=await import('../src/systems/recruitment.ts');
 const {createInventory,setEquipped,createLoadout}=await import('../src/systems/equipment.ts');
 const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
@@ -14,6 +14,28 @@ const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
 const {recruitmentWeights}=await import('../src/config/game.ts');
 const farmer=(level=1)=>({kind:'farmer',type:'农',level});
 const pos=(kind,index)=>({kind,index});
+test('Farmer new weight gives the expected independent five-slot probabilities, with hero recruitment only scaling letters',()=>{
+ function pool(...ids){const inventory=createInventory();ids.forEach(id=>setEquipped(inventory,id,true));return recruitmentPool(createLoadout(inventory));}
+ assert.equal(pool().some(e=>e.value==='农'),false);assert.equal(pool('hero_recruitment').some(e=>e.value==='农'),false);
+ const plain=pool('farmer'),boosted=pool('farmer','hero_recruitment');
+ assert.equal(farmerConfig.recruitmentWeight,4);
+ for(const [entries,base] of [[plain,20],[boosted,25]]){
+  assert.equal(entries.find(e=>e.value==='农').weight,4);
+  assert.equal(entries.reduce((sum,e)=>sum+e.weight,0),base+4);
+  const old=10/(base+10),p=4/(base+4);
+  assert.ok(p/old>=.4&&p/old<=.6);
+  const atLeast1=1-(1-p)**5,atLeast2=1-(1-p)**5-5*p*(1-p)**4;
+  assert.ok(atLeast1<1-(1-old)**5);assert.ok(atLeast2<1-(1-old)**5-5*old*(1-old)**4);
+ }
+ for(const entry of plain.filter(e=>e.value!=='农')){
+  const letter=['小','美','阿','饼','六'].includes(entry.value);
+  assert.equal(boosted.find(e=>e.value===entry.value).weight,entry.weight*(letter?2:1));
+ }
+ const state=createRecruitmentState();const inventory=createInventory();setEquipped(inventory,'farmer',true);
+ const equipped=createRecruitmentState(createLoadout(inventory));equipped.money=100;
+ recruit(equipped,()=>20/24);assert.ok(equipped.slots.every(i=>i?.kind==='farmer'));
+ assert.equal(state.loadout.passive.length,0);
+});
 function setup(){const board=createBoardState(testMap),wallet=createRecruitmentState(),production=new FarmerProduction(board,wallet);
  return {board,wallet,production,drop:(a,b)=>{const result=applyDrop(board,wallet,a,b);production.sync();return result;}};}
 

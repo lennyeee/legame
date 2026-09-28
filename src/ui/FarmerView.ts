@@ -6,6 +6,7 @@ import { boardDisplay } from '../config/layout';
 import { boardProjection } from './boardDisplay';
 import type { DisplaySide } from './boardDisplay';
 import { label } from './text';
+import { farmerRewardVisual } from '../config/farmer';
 
 export class FarmerView {
   private readonly badges = new Map<Farmer, { id: number; box: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }>();
@@ -17,6 +18,13 @@ export class FarmerView {
   private get production() { return this.side.farmers; }
 
   refresh(): void {
+    const projection = boardProjection(this.map, this.scene.scale.width, this.displaySide);
+    const centers = [...this.map.cells, ...this.map.path].map(point => projection.point(point));
+    const halfCell = this.map.cellSize * boardDisplay.scale / 2;
+    const left = Math.min(...centers.map(point => point.x)) - halfCell;
+    const right = Math.max(...centers.map(point => point.x)) + halfCell;
+    const firstRowY = Math.min(...centers.map(point => point.y));
+    const visual = farmerRewardVisual;
     for (const [farmer, badge] of this.badges) {
       if (this.production.states.get(farmer)?.reward?.id !== badge.id) {
         badge.box.destroy();badge.text.destroy();this.badges.delete(farmer);
@@ -25,14 +33,17 @@ export class FarmerView {
     for (const [farmer, state] of this.production.states) {
       if (!state.reward) continue;
       const cell = this.map.cells[state.tileIndex]!;
-      const center = boardProjection(this.map, this.scene.scale.width, this.displaySide).point(cell);
-      const point = { x: center.x, y: center.y - 26 * boardDisplay.scale };
+      const center = projection.point(cell);
+      // 顶行收益放在等级下方，避免越过战场边界；其余放在字上方，双方文字保持正向。
+      const point = { x: Math.max(left + visual.width / 2, Math.min(right - visual.width / 2, center.x)),
+        y: center.y + (Math.abs(center.y - firstRowY) < 0.01 ? visual.edgeOffsetY : -visual.offsetY) };
       let badge = this.badges.get(farmer);
       if (!badge) {
         const id = state.reward.id;
-        const box = this.scene.add.rectangle(point.x, point.y, 64, 28, 0xf3d975)
+        const box = this.scene.add.rectangle(point.x, point.y, visual.width, visual.height, 0xf3d975)
           .setStrokeStyle(2, 0x987b32).setDepth(40);
-        const text = label(this.scene, point.x, point.y, `$${state.reward.amount}`, 21, '#514a40').setDepth(41);
+        const text = label(this.scene, point.x, point.y, `$${state.reward.amount}`, visual.fontSize, '#514a40')
+          .setFontStyle('bold').setDepth(41);
         if (this.interactive) {
           box.setInteractive({ useHandCursor: true });
           box.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
