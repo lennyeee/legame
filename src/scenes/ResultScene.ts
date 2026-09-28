@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
 import { label } from '../ui/text';
 import type { ResultSnapshot } from '../match/ResultSnapshot';
+import type { RankChange } from '../progression/rank';
+import { showRankFeedback } from '../ui/RankFeedback';
 
-export interface ResultData { readonly snapshot: ResultSnapshot; readonly coinReward: number }
+export interface ResultData { readonly snapshot: ResultSnapshot; readonly coinReward: number; readonly rankChange?: RankChange }
 // 不拥有Match，也不提交永久奖励；只展示已完成的只读结算数据。
 export class ResultScene extends Phaser.Scene {
   resultSnapshot: ResultSnapshot | null = null;
@@ -12,13 +14,14 @@ export class ResultScene extends Phaser.Scene {
     this.resultSnapshot = snapshot;
     let handled = false;
     this.add.rectangle(375, 667, 750, 1334, 0xf7f3e8);
-    label(this, 375, 250, snapshot.result === 'win' ? '胜利' : snapshot.result === 'lose' ? '失败' : '平局', 64);
-    label(this, 375, 410, `第 ${snapshot.waveReached} 波`, 32);
-    label(this, 375, 490, `击杀 ${snapshot.playerKills}`, 30);
-    label(this, 375, 570, `来财 ${snapshot.playerSuccessfulRecruits} 次`, 30);
-    label(this, 375, 650, `剩余 $${snapshot.playerRemainingMoney}`, 30);
-    if (snapshot.result === 'win') label(this, 375, 730, `乐：${'♥'.repeat(snapshot.playerRemainingHp)}`, 30);
-    label(this, 375, 840, `本局金币 +${data.coinReward}`, 36, '#8c6b27');
+    label(this, 375, 180, snapshot.result === 'win' ? '胜利' : snapshot.result === 'lose' ? '失败' : '平局', 64);
+    label(this, 375, 300, `第 ${snapshot.waveReached} 波`, 32);
+    label(this, 375, 380, `击杀 ${snapshot.playerKills}`, 30);
+    label(this, 375, 460, `来财 ${snapshot.playerSuccessfulRecruits} 次`, 30);
+    label(this, 375, 540, `剩余 $${snapshot.playerRemainingMoney}`, 30);
+    if (snapshot.result === 'win') label(this, 375, 620, `乐：${'♥'.repeat(snapshot.playerRemainingHp)}`, 30);
+    label(this, 375, 710, `本局金币 +${data.coinReward}`, 36, '#8c6b27');
+    if (data.rankChange) showRankFeedback(this, data.rankChange);
     const leave = (rematch: boolean): void => {
       if (handled) return;
       handled = true;

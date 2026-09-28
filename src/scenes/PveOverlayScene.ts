@@ -3,12 +3,15 @@ import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
 import { resultPresentation, type ResultSnapshot } from '../match/ResultSnapshot';
 import { matchCoinReward } from '../progression/PlayerProgress';
+import type { RankChange } from '../progression/rank';
 
 export interface PveOverlayData {
   mode: 'paused' | 'victory' | 'defeat' | 'draw';
   health?: number;
   snapshot?: ResultSnapshot;
   loadout?: Loadout;
+  coinReward?: number;
+  rankChange?: RankChange;
 }
 
 // 开发期暂停/结算界面；Match已在逻辑层统一冻结双方，场景暂停只负责表现。
@@ -84,7 +87,7 @@ export class PveOverlayScene extends Phaser.Scene {
       if (handled) return;
       handled = true;
       this.scene.stop('GameScene');
-      this.scene.start('ResultScene', Object.freeze({ snapshot, coinReward: matchCoinReward(snapshot) }));
+      this.scene.start('ResultScene', Object.freeze({ snapshot, coinReward: data.coinReward ?? matchCoinReward(snapshot), rankChange: data.rankChange }));
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       handled = true;

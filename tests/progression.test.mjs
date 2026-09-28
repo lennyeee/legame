@@ -14,7 +14,7 @@ function result(id='match-1',result='lose',waveReached=10,playerKills=12){return
  playerSuccessfulRecruits:3,playerRemainingMoney:4,playerRemainingHp:result==='win'?2:0,opponentRemainingHp:result==='lose'?1:0});}
 
 test('new save is current version, zero coins/stats, only frugal owned/equipped; persisted under stable project key',()=>{
- const s=storage(),p=new PlayerProgress(s);assertDefault(p.save);assert.equal(SAVE_VERSION,2);
+ const s=storage(),p=new PlayerProgress(s);assertDefault(p.save);assert.equal(SAVE_VERSION,3);
  assert.equal(p.save.coins,0);assert.deepEqual(p.save.ownedItemIds,['frugal_home']);assert.deepEqual(p.save.equippedPassiveItemIds,['frugal_home']);
  assert.deepEqual(p.save.stats,{matchesPlayed:0,wins:0,highestWave:0,totalKills:0});assert.equal(s.writes,1);
  assert.equal(p.inventory().filter(i=>i.owned).length,1);assert.ok(p.inventory().find(i=>i.id==='frugal_home').equipped);
@@ -26,7 +26,7 @@ test('missing fields restore safe defaults; invalid numeric fields cannot enter 
  const s=sanitizeSave({saveVersion:1,coins:-2,stats:{matchesPlayed:1.5,wins:9,highestWave:'4',totalKills:Number.MAX_SAFE_INTEGER+1}});
  assert.equal(s.coins,0);assert.deepEqual(s.stats,defaultPlayerSave().stats);assert.deepEqual(s.ownedItemIds,['frugal_home']);
  for(const value of [NaN,Infinity,2.1,'2',null,-1])assert.equal(sanitizeSave({coins:value}).coins,0);
- assert.deepEqual(migrateSave({saveVersion:2}),defaultPlayerSave());
+ assert.deepEqual(migrateSave({saveVersion:3}),defaultPlayerSave());
 });
 test('ownership removes duplicates/unknown ids; equipment removes unowned, wrong category and caps 2/6',()=>{
  const s=sanitizeSave({ownedItemIds:['frugal_home','frugal_home','gone'],equippedActiveItemIds:['frugal_home','golden_hand'],equippedPassiveItemIds:['farmer','frugal_home','gone','frugal_home']});
@@ -73,10 +73,10 @@ test('explicit migrate preserves allowed progress and seen events; explicit rese
  const old={...defaultPlayerSave(),saveVersion:0,coins:42,stats:{matchesPlayed:5,wins:2,highestWave:8,totalKills:60},ownedItemIds:['frugal_home','farmer'],
  equippedPassiveItemIds:['farmer'],seenOneTimeEventIds:[WELCOME_EVENT],settledMatchIds:['old-match']};
  const migrate={0:{kind:'migrate',migrate:old=>old}},reset={0:{kind:'reset'}};
- assert.deepEqual(migrateSave(old,migrate),{...old,saveVersion:2});assert.deepEqual(migrateSave(old,reset),defaultPlayerSave());
- const migrated=new PlayerProgress(storage(JSON.stringify(old)),migrate).save;assert.deepEqual({...migrated,shop:old.shop},{...old,saveVersion:2});
+ assert.deepEqual(migrateSave(old,migrate),{...old,saveVersion:3});assert.deepEqual(migrateSave(old,reset),defaultPlayerSave());
+ const migrated=new PlayerProgress(storage(JSON.stringify(old)),migrate).save;assert.deepEqual({...migrated,shop:old.shop},{...old,saveVersion:3});
  assertDefault(new PlayerProgress(storage(JSON.stringify(old)),reset).save);
- assert.deepEqual(migrateSave({...old,saveVersion:2},reset),{...old,saveVersion:2});
+ assert.deepEqual(migrateSave({...old,saveVersion:3},reset),{...old,saveVersion:3});
 });
 test('storage denied/read failure/write failure keeps a working memory session without duplicate rewards',()=>{
  const warn=console.warn;let warnings=0;console.warn=()=>warnings++;

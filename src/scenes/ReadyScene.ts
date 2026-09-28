@@ -4,14 +4,17 @@ import { label } from '../ui/text';
 import { READY_BACKGROUND_COLOR } from '../config/ready';
 import { createLoadout } from '../systems/equipment';
 import type { InventoryItem, Loadout } from '../systems/equipment';
-import { localPlayerProfile } from '../flow/battleSetup';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 import { itemDefinitions } from '../config/equipment';
+import { avatarSymbol } from '../progression/profile';
+import { rankDisplay } from '../progression/rank';
+import { showProfile, showSettings, type NicknameInputFactory } from '../ui/HomeDialogs';
 
 // 仅静态预览，不创建钱包、棋盘运行状态、输入控制器、战斗或计时器。
 export class ReadyScene extends Phaser.Scene {
   startState: 'READY' | 'WELCOME' | 'STARTING' | 'MATCHING' = 'READY';
   playerProgress?: PlayerProgress;
+  nicknameInputFactory?: NicknameInputFactory;
   private inventory: InventoryItem[] = [];
   private openingItems = false;
   private lockForMatching: (() => void) | null = null;
@@ -25,11 +28,30 @@ export class ReadyScene extends Phaser.Scene {
     this.startState = 'READY';
     this.add.rectangle(375, 667, 750, 1334, READY_BACKGROUND_COLOR).setInteractive();
     this.add.circle(100, 110, 40, 0x697e67);
-    label(this, 100, 110, '乐', 30, '#fffaf0');
-    label(this, 245, 110, localPlayerProfile.nickname, 28);
+    const avatar = label(this, 100, 110, '', 40);
+    const nickname = label(this, 270, 95, '', 28);
     const save = progress.save;
-    label(this, 555, 110, `🪙 ${save.coins}`, 26);
-    label(this, 375, 170, `对局 ${save.stats.matchesPlayed} · 胜利 ${save.stats.wins} · 最高波次 ${save.stats.highestWave}`, 22);
+    const wallet = label(this, 555, 110, `🪙 ${save.coins}`, 26);
+    const rank = label(this, 280, 140, '', 22);
+    const stats = label(this, 375, 190, '', 22);
+    const refresh = (): void => {
+      const current = progress.save;
+      avatar.setText(avatarSymbol(current.profile.avatarId)); nickname.setText(current.profile.nickname);
+      rank.setText(rankDisplay(current.rank)); wallet.setText(`🪙 ${current.coins}`);
+      stats.setText(`对局 ${current.stats.matchesPlayed} · 胜利 ${current.stats.wins} · 最高波次 ${current.stats.highestWave}`);
+      this.inventory = progress.inventory();
+    };
+    refresh();
+    const profileButton = this.add.rectangle(255, 110, 410, 110, 0x000000, 0).setInteractive({ useHandCursor: true });
+    const settingsButton = this.add.rectangle(690, 80, 60, 60, 0xe1ddcf).setInteractive({ useHandCursor: true });
+    label(this, 690, 80, '⚙', 32);
+    const open = (settings: boolean): void => {
+      if (this.startState !== 'READY' || this.openingItems) return;
+      this.openingItems = true;
+      const close = (): void => { this.openingItems = false; refresh(); };
+      if (settings) showSettings(this, progress, close); else showProfile(this, progress, close, this.nicknameInputFactory);
+    };
+    profileButton.on('pointerdown', () => open(false)); settingsButton.on('pointerdown', () => open(true));
     this.add.rectangle(375, 440, 600, 450, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
     label(this, 375, 440, '乐 GAME', 58);
     label(this, 375, 565, '角色 · 地图展示区', 24, '#8b8272');
@@ -59,6 +81,7 @@ export class ReadyScene extends Phaser.Scene {
       button.disableInteractive();
       itemsButton.disableInteractive();
       shopButton.disableInteractive();
+      profileButton.disableInteractive(); settingsButton.disableInteractive();
       buttonText.setText('正在寻找对手…').setFontSize(26);
       itemsButton.setAlpha(0.5);
     };
@@ -107,6 +130,7 @@ export class ReadyScene extends Phaser.Scene {
     progress.saveEquipment(this.inventory);
     this.inventory = progress.inventory(); // 开局也使用通过ownership校验的永久装备。
     this.lockForMatching?.();
-    this.scene.launch('MatchingScene', { loadout: createLoadout(this.inventory) });
+    const save = progress.save;
+    this.scene.launch('MatchingScene', { loadout: createLoadout(this.inventory), player: { ...save.profile, rank: save.rank } });
   }
 }

@@ -1084,7 +1084,7 @@ HOME → HOME内MATCHING → VS → INTRO → RUNNING → RESULT。
 - 再来一局：结束overlay与旧GameScene、销毁旧Match，进入同一HOME式匹配/VS/INTRO流程，生成新对手、Side、AI和Timeline。只保留玩家loadout，所有本局统计和运行状态归零。
 - 返回主页：结束overlay与旧GameScene、销毁旧Match，恢复正常HOME的开始对战/道具按钮，不自动匹配；保留玩家装备配置。
 - 退出必须清理旧timer/tween、update/input监听、LeIntroView、结果UI绑定和运行状态，旧回调不能污染新局。战斗暂停菜单只保留继续游戏/返回主页，不与RESULT同时存在。
-- v0.63结果只总结这一局；v0.64新增本节二十八定义的本地永久战绩与小数值金币。仍不显示段位、MVP、伤害榜或对手统计。
+- v0.64新增本节二十八定义的本地永久战绩与小数值金币；v0.66新增本节三十定义的永久段位与结果反馈。仍不显示MVP、伤害榜或对手统计。
 
 当前可调整的低保真presentation参数：匹配2–3秒、VS滑入400ms、停留1400ms、散开500ms、乐入场7000ms、结果面板延迟400ms。它们用于当前已验收体验，未来视觉迭代可单独调整；流程时钟归属与清理规则仍需保持。首怪9500ms属于当前战斗节奏，本阶段没有重新调整。
 
@@ -1155,7 +1155,7 @@ docs/AI_DESIGN_BASELINE.md
 
 > ✅ v0.64正式规则。局内美金（$）与局外永久金币严格分离。
 
-- LocalStorage key：`legame.playerSave`；v0.64建立`saveVersion = 1`，v0.65扩展为2（商店字段），正常迁移保留旧进度。保存同一站点、同一浏览器的本机永久进度；关页/关浏览器/重启后保留。不同设备/浏览器不共享，清除站点数据可能丢失。当前不是云存档，没有账号/Firebase同步。
+- LocalStorage key：`legame.playerSave`；v0.64建立`saveVersion = 1`，v0.65扩展为2（商店字段），v0.66扩展为3（rank/profile），正常迁移保留旧进度。保存同一站点、同一浏览器的本机永久进度；关页/关浏览器/重启后保留。不同设备/浏览器不共享，清除站点数据可能丢失。当前不是云存档，没有账号/Firebase同步。
 - PlayerSave只包含局外数据：coins、ownedItemIds、equippedActiveItemIds、equippedPassiveItemIds、stats四项（matchesPlayed、wins、highestWave、totalKills）、seenOneTimeEventIds和用于结算幂等的settledMatchIds。绝不序列化Match、PlayerSide、棋盘或战斗状态。
 - 新存档：金币0、四项战绩0；仅拥有勤俭持家，并默认装备在第一个被动槽。其他10件不赠送、不在我的道具中显示，不用锁定卡剧透。未来购买的新道具不自动装备。
 - 道具定义统一使用现有ItemDefinition；ownership与装备均为stable item ID数组，新增第12/20件道具不增加独立存档布尔字段。
@@ -1217,52 +1217,34 @@ docs/AI_DESIGN_BASELINE.md
 - “价值998金币”划线与“免费送/0金币”只是笑话文案，绝不进入价格、奖励或经济数据。
 - 低保真示例尺寸：750×1334逻辑画布内欢迎卡650×850，详情610×540；独立结果页金币与底部按钮分开排布。正式美术阶段可调整这些尺寸，但不能破坏触控、信息完整和生命周期规则。
 
-## 三十、v0.66 段位
+## 三十、v0.66 段位 / 玩家资料 / 重置
 
-> ✅ 规则或方向已确认；🟡 试验数值、时间及平衡目标按本节说明维护；⬜ 未定细节不得自行补全。
+> ✅ v0.66正式规则；动画时长、布局和emoji属于当前低保真表现，可在以后独立调整。
 
-正式段位顺序：
-
-黑铁
-青铜
-白银
-黄金
-铂金
-翡翠
-钻石
-大师
-宗师
-王者
-
-钻石及以下：
-IV → III → II → I
-
-大师以上：
-积分体系。
-
-禁止：
-根据段位、连胜、胜率等
-偷偷修改 recruit RNG。
-
-没有：
-隐藏“输多了给好牌”
-或
-“连胜降低概率”。
+- 正式段位：黑铁→青铜→白银→黄金→铂金→翡翠→钻石→大师→宗师→王者；不增加任何王者以上身份。
+- 黑铁～钻石每段IV→III→II→I，每小段0～5星。胜+1、负-1、平0；4星胜到5星不升段，5星再胜升下一小段0星。I满星再胜进入下一大段IV0星。
+- 1星失败到0星；0星再失败掉前一小段4星。黑铁IV0星为绝对最低，失败不变。无0星保护、晋级赛、隐藏分、连胜加星、保段卡或额外奖励。
+- 钻石I5星再胜→大师0分；大师0～99、宗师100～199、王者200+。高段位胜+10、负-10、平0；大师0分失败→钻石I4星，宗师100失败→大师90，王者200失败→宗师190。王者无设计上限，工程上限制安全整数范围。
+- RankState使用结构化数据：`{kind:'stars',divisionIndex:0..27,stars:0..5}`或`{kind:'points',points:非负安全整数}`，不把显示字符串作为逻辑数据。新玩家/reset/force-reset恢复黑铁IV0星。
+- rank sanitize集中处理，非法类型默认，星/小段索引取整并clamp，高分限制非负安全整数。saveVersion3的v1/v2迁移保留金币、战绩、ownership、装备、商店、欢迎事件、结算去重记录，并补默认rank/profile；已有合法rank/profile保留。普通更新绝不误force-reset。
+- 单次永久结算一起提交金币、战绩、商店进度和rank；Match ID保护去重。产生冻结RankChange：beforeRank、afterRank、result、delta、promoted、demoted。ResultScene只读取快照，动画绝不修改存档；页面重建、返回或rematch不重复变更段位。
+- 独立RESULT在统计/金币下面分出段位区域，保持底部两按钮可访问。低保真反馈：大星从上落入星槽，碎星用放大与左右几何碎片淡出；晋升/降级用文字轻微scale/alpha；高段位积分数字Tween。当前核心动画约600～710ms，收尾约320ms，不阻止离开；退出清理所有临时对象与Tween。
+- rank仅为永久进度及身份表现，绝不改变任何招募、资源、装备效果、敌人压力、单位/武将属性、AI评分/反应/站位/装备规则。没有段位金币加成或商店折扣。
+- profile保存nickname与稳定avatarId。默认昵称“乐玩家”、avatarId“mouse”。昵称trim，允许中文/英文/数字，要求2～10个可见字符，不允许空值、过长或控制字符。无联网验证、唯一性或账号系统。
+- Avatar registry至少12个稳定ID：mouse/cat/dog/frog/panda/pig/duck/monkey/tiger/rabbit/bear/fox，当前映射emoji，以后可替换资源而不改变存档ID。非法昵称/头像安全默认。
+- HOME显示头像、昵称、段位、金币与轻量战绩；点击资料区域打开轻量编辑层，保存立即持久化并更新HOME，下一局VS使用新资料。昵称使用一个原生输入框与画布坐标适配，退出后销毁。
+- HOME右上齿轮打开轻量设置；“重置游戏进度”必须二次确认，说明清除当前浏览器/设备的金币、战绩、段位、道具/装备、商店、昵称/头像、欢迎事件且不可恢复。取消不修改存档，确认只调用本游戏PlayerProgress.reset，不清空整个域名LocalStorage。
+- reset恢复当前真正默认存档：金币/四项战绩0、黑铁IV0星、仅拥有并默认装备勤俭持家、合法新货架/刷新进度0、默认profile、欢迎事件未展示、结算记录空、当前saveVersion。下一次点击开始重新显示欢迎礼物。developer migrate/force-reset集中策略继续保留，不引入服务器清档。
 
 ## 三十一、Fake Opponent
 
-> ✅ 规则或方向已确认；🟡 试验数值、时间及平衡目标按本节说明维护；⬜ 未定细节不得自行补全。
+> ✅ v0.66已确认身份表现规则；具体采样参数为当前轻量实现，不属于AI难度。
 
-AI 对手资料：
-每局临时生成。
-
-不维护大量永久 fake account ID / 历史数据库。
-
-每局：
-生成 profile + loadout + personality 等。
-
-以后可以让资料与段位合理关联，
-但不能通过隐藏作弊改变底层规则。
+- 每次匹配生成临时OpponentProfile：独立id、nickname、avatarId、rank；rematch生成新身份，不建立永久假玩家数据库。
+- 昵称集中生成：70%从56条日常/游戏/摸鱼梗池抽取，30%前后缀组合；头像从同一Avatar registry抽取，稳定字段不保存emoji。
+- 星段对手85%在玩家附近±2个小段，15%偏移±3～4小段，clamp0..27，星数0～5。大师以上积分在玩家附近±50（10分步长），clamp非负安全整数。使用独立可注入presentation随机，不消费gameplay/AI随机。
+- VS显示上下双方头像、昵称、段位；大师以上仅显示积分不显示星槽。v0.63滑入400ms/停留1400ms/散开500ms、Match启动点及首怪9500ms完全保持。
+- OpponentProfile.rank只供显示，绝不传入AIController或作为AI loadout/评分/计时/资源参数。同一套AI输入与随机源下仅改变身份rank不得影响行为。
 
 ## 三十二、v0.70 Gameplay Alpha
 
@@ -1587,7 +1569,7 @@ AI_DESIGN_BASELINE.md 是 AI 行为的 Source of Truth。
 - 🟡 v0.62：无限HP/count/density曲线、阶段/pulse、兵种伤害和间隔、EXP需求/奖励、招募/铲/农民权重、道具CD及各测试参数最终平衡。
 - ⬜ 原作speed-related数字的单位/含义、wave3精确HP和铲子样本概率未确定，不能由观察反推精确公式。
 - 🟡/⬜ AI动作评分权重、worthwhile阈值、延迟/jitter/noise参数、personality/loadout采样分布尚未提供，详见AI文档。
-- ✅ v0.64金币奖励、初始ownership/默认装备、save schema/迁移和永久四项战绩已明确，见二十八；v0.65三格商店、固定价格、每2局刷新和道具交互已明确，见二十九。🟡/⬜ v0.66段位积分与升降规则仍待确认。
+- ✅ v0.64金币/存档见二十八，v0.65商店/道具交互见二十九，v0.66段位升降、资料与重置见三十，对手身份表现见三十一。未来赛季/联网排名不属于当前实现。
 - ⬜ 约12武将中其余身份、技能和共享字配方；地图具体道路；武器品质/碎片/兼容和数值；正式美术/动画/声音资源尚未设计完整。
 - ⬜ v0.95：网络PVP pause、权威状态归属、seed/随机结果协议、同步/纠偏与断线规则需后续实践决定。RTDB是首选方向，不表示这些协议已确定。
 

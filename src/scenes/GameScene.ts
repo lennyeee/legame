@@ -118,8 +118,10 @@ export class GameScene extends Phaser.Scene {
         this.input.enabled = false;
         this.scene.pause();
         const mode = match.result === 'draw' ? 'draw' : match.result === 'bottom' ? 'victory' : 'defeat';
-        progressForScene(this).commitMatchResult(match.resultSnapshot!);
-        this.scene.launch('PveOverlayScene', { mode, snapshot: match.resultSnapshot, loadout });
+        const progress = progressForScene(this);
+        const coinReward = progress.commitMatchResult(match.resultSnapshot!);
+        this.scene.launch('PveOverlayScene', { mode, snapshot: match.resultSnapshot, loadout,
+          coinReward, rankChange: progress.rankChangeFor(match.resultSnapshot!.matchId) });
       }
     };
     refreshProgress();

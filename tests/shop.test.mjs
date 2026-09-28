@@ -58,7 +58,7 @@ test('equipment fills first available position without replacing full active/pas
 test('v1 migration preserves v0.64 data/events/ledger and initializes one fresh shop without reset',()=>{
  const old={...defaultPlayerSave(),saveVersion:1,coins:19,ownedItemIds:['frugal_home','farmer'],equippedPassiveItemIds:['farmer'],
  stats:{matchesPlayed:7,wins:2,highestWave:12,totalKills:45},seenOneTimeEventIds:[WELCOME_EVENT],settledMatchIds:['past']};delete old.shop;
- const {p}=store(old);assert.equal(p.save.saveVersion,2);for(const key of ['coins','ownedItemIds','equippedPassiveItemIds','stats','seenOneTimeEventIds','settledMatchIds'])assert.deepEqual(p.save[key],old[key]);
+ const {p}=store(old);assert.equal(p.save.saveVersion,3);for(const key of ['coins','ownedItemIds','equippedPassiveItemIds','stats','seenOneTimeEventIds','settledMatchIds'])assert.deepEqual(p.save[key],old[key]);
  assert.equal(p.save.shop.shelfItemIds.includes('farmer'),false);assert.equal(p.save.shop.matchesTowardRefresh,0);
 });
 test('shop sanitize filters unknown/duplicate/ineligible but preserves purchased shelf positions, clamps progress',()=>{

@@ -4,6 +4,8 @@ import type { ResultSnapshot } from '../match/ResultSnapshot';
 import { defaultPlayerSave, migrateSave, sanitizeSave, SAVE_KEY, WELCOME_EVENT } from './PlayerSave';
 import type { PlayerSave, SavePolicy } from './PlayerSave';
 import { createShelf, progressionRandom, shopConfig } from './shop';
+import { changeRank, type RankChange } from './rank';
+import { avatars, validNickname, type PlayerProfile } from './profile';
 
 export interface SaveStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
 export const coinRewards = { base: 1, waveEvery: 5, winBonus: 2, cap: 8 } as const;
@@ -19,6 +21,7 @@ const add = (a: number, b: number): number => Math.min(Number.MAX_SAFE_INTEGER, 
 // 永久进度是局外服务，不持有Match/Side；全部写入都通过这里。
 export class PlayerProgress {
   private data: PlayerSave;
+  private rankChanges = new Map<string, RankChange>();
   constructor(private readonly storage: SaveStorage | null = browserStorage(), policies?: Readonly<Record<number, SavePolicy>>,
     private readonly shopRandom = progressionRandom) {
     try {
@@ -29,6 +32,12 @@ export class PlayerProgress {
     this.persist();
   }
   get save(): Readonly<PlayerSave> { return structuredClone(this.data); }
+  updateProfile(profile: PlayerProfile): boolean {
+    if (!validNickname(profile.nickname) || !avatars.some(avatar => avatar.id === profile.avatarId)) return false;
+    this.data.profile = { nickname: profile.nickname.trim(), avatarId: profile.avatarId };
+    this.persist(); return true;
+  }
+  rankChangeFor(matchId: string): RankChange | undefined { return this.rankChanges.get(matchId); }
   inventory(): InventoryItem[] {
     const order = [...this.data.equippedActiveItemIds, ...this.data.equippedPassiveItemIds];
     return itemDefinitions.map(({ id }) => ({ id, level: 1, owned: this.data.ownedItemIds.includes(id), equipped: order.includes(id) }))
@@ -69,6 +78,9 @@ export class PlayerProgress {
     const reward = matchCoinReward(snapshot);
     if (this.data.settledMatchIds.includes(snapshot.matchId)) return reward;
     this.data.settledMatchIds.push(snapshot.matchId);
+    const rankChange = changeRank(this.data.rank, snapshot.result);
+    this.data.rank = rankChange.afterRank;
+    this.rankChanges.set(snapshot.matchId, rankChange);
     this.data.coins = add(this.data.coins, reward);
     const stats = this.data.stats;
     stats.matchesPlayed = add(stats.matchesPlayed, 1);
@@ -81,9 +93,10 @@ export class PlayerProgress {
     }
     this.persist(); return reward;
   }
-  // 仅提供底层API；调用方必须先确认，不在本版主页硬塞设置入口。
+  // 集中重置本游戏进度；HOME设置调用前必须二次确认。
   reset(): void {
     this.data = defaultPlayerSave();
+    this.rankChanges.clear();
     this.data.shop.shelfItemIds = createShelf(this.data.ownedItemIds, this.shopRandom);
     this.persist();
   }

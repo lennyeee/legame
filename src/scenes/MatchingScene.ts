@@ -3,11 +3,14 @@ import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
 import { createBattleSetup, flowConfig, matchingDuration, presentationRandom } from '../flow/battleSetup';
 import type { BattleSetup, DisplayProfile } from '../flow/battleSetup';
+import { avatarSymbol, type PlayerProfile } from '../progression/profile';
+import { rankDisplay, type RankState } from '../progression/rank';
 
 export interface MatchingData {
   loadout?: Loadout;
   presentationRandom?: () => number;
   createOpponentLoadout?: () => Loadout;
+  player?: PlayerProfile & { rank: RankState };
 }
 
 // HOME 保持在下面；此场景只拥有本局 setup 和可销毁的 VS 转场。
@@ -21,7 +24,7 @@ export class MatchingScene extends Phaser.Scene {
   create(data: MatchingData = {}): void {
     this.cancelFlow?.();
     const random = data.presentationRandom ?? presentationRandom;
-    const setup = createBattleSetup(data.loadout, random, data.createOpponentLoadout);
+    const setup = createBattleSetup(data.loadout, random, data.createOpponentLoadout, data.player);
     this.setup = setup;
     this.phase = 'MATCHING';
     this.scene.bringToTop();
@@ -40,8 +43,9 @@ export class MatchingScene extends Phaser.Scene {
       const container = this.add.container(375, y, [
         this.add.rectangle(0, 0, 750, 667, 0xeee9dc).setStrokeStyle(2, 0xc2bcae),
         this.add.circle(0, -35, 48, 0x697e67),
-        label(this, 0, -35, String(profile.avatarVariant + 1), 30, '#fffaf0'),
+        label(this, 0, -35, avatarSymbol(profile.avatarId), 48),
         label(this, 0, 60, profile.nickname, 32),
+        label(this, 0, 120, rankDisplay(profile.rank), 26),
       ]).setSize(750, 667).setInteractive();
       // 只遮挡面板仍占据的位置，散开后露出的区域可传递到 GameScene。
       container.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => event.stopPropagation());

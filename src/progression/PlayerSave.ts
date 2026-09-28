@@ -1,8 +1,10 @@
 import { equipmentLimits, itemDefinitions } from '../config/equipment';
 import type { ItemDefinition } from '../config/equipment';
 import { shopConfig } from './shop';
+import { defaultRank, sanitizeRank, type RankState } from './rank';
+import { defaultProfile, sanitizeProfile, type PlayerProfile } from './profile';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'legame.playerSave';
 export const WELCOME_EVENT = 'welcome_gift_frugal_v1';
 export interface PlayerSave {
@@ -15,12 +17,14 @@ export interface PlayerSave {
   seenOneTimeEventIds: string[];
   settledMatchIds: string[];
   shop: { shelfItemIds: string[]; matchesTowardRefresh: number };
+  rank: RankState;
+  profile: PlayerProfile;
 }
 export function defaultPlayerSave(): PlayerSave {
   return { saveVersion: SAVE_VERSION, coins: 0, ownedItemIds: ['frugal_home'],
     equippedActiveItemIds: [], equippedPassiveItemIds: ['frugal_home'],
     stats: { matchesPlayed: 0, wins: 0, highestWave: 0, totalKills: 0 },
-    seenOneTimeEventIds: [], settledMatchIds: [], shop: { shelfItemIds: [], matchesTowardRefresh: 0 } };
+    seenOneTimeEventIds: [], settledMatchIds: [], shop: { shelfItemIds: [], matchesTowardRefresh: 0 }, rank: defaultRank(), profile: defaultProfile() };
 }
 export const safeInteger = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -36,6 +40,7 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
   const shop = record(input.shop);
   const matchesPlayed = safeInteger(stats.matchesPlayed);
   return { saveVersion: SAVE_VERSION, coins: safeInteger(input.coins), ownedItemIds: owned,
+    rank: sanitizeRank(input.rank), profile: sanitizeProfile(input.profile),
     equippedActiveItemIds: equipped('active', input.equippedActiveItemIds ?? defaults.equippedActiveItemIds),
     equippedPassiveItemIds: equipped('passive', input.equippedPassiveItemIds ?? defaults.equippedPassiveItemIds),
     stats: { matchesPlayed, wins: Math.min(matchesPlayed, safeInteger(stats.wins)),
@@ -47,7 +52,7 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
 
 export type SavePolicy = { kind: 'reset' } | { kind: 'migrate'; migrate: (old: unknown) => unknown };
 // 当前不强制清除v1；未来明确指定旧版本迁移函数或reset即可。
-export const savePolicies: Readonly<Record<number, SavePolicy>> = { 1: { kind: 'migrate', migrate: old => old } };
+export const savePolicies: Readonly<Record<number, SavePolicy>> = { 1: { kind: 'migrate', migrate: old => old }, 2: { kind: 'migrate', migrate: old => old } };
 export function migrateSave(value: unknown, policies = savePolicies): PlayerSave {
   const version = record(value).saveVersion;
   if (version === SAVE_VERSION) return sanitizeSave(value);
