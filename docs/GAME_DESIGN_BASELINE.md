@@ -1084,7 +1084,7 @@ HOME → HOME内MATCHING → VS → INTRO → RUNNING → RESULT。
 - 再来一局：结束overlay与旧GameScene、销毁旧Match，进入同一HOME式匹配/VS/INTRO流程，生成新对手、Side、AI和Timeline。只保留玩家loadout，所有本局统计和运行状态归零。
 - 返回主页：结束overlay与旧GameScene、销毁旧Match，恢复正常HOME的开始对战/道具按钮，不自动匹配；保留玩家装备配置。
 - 退出必须清理旧timer/tween、update/input监听、LeIntroView、结果UI绑定和运行状态，旧回调不能污染新局。战斗暂停菜单只保留继续游戏/返回主页，不与RESULT同时存在。
-- 当前结果只总结这一局，不持久化，不奖励金币，不显示段位、MVP、伤害榜或对手统计。持久化与金币属于后续版本。
+- v0.63结果只总结这一局；v0.64新增本节二十八定义的本地永久战绩与小数值金币。仍不显示段位、MVP、伤害榜或对手统计。
 
 当前可调整的低保真presentation参数：匹配2–3秒、VS滑入400ms、停留1400ms、散开500ms、乐入场7000ms、结果面板延迟400ms。它们用于当前已验收体验，未来视觉迭代可单独调整；流程时钟归属与清理规则仍需保持。首怪9500ms属于当前战斗节奏，本阶段没有重新调整。
 
@@ -1153,38 +1153,24 @@ docs/AI_DESIGN_BASELINE.md
 
 ## 二十八、v0.64 存档 / 长期资源
 
-> ✅ 规则或方向已确认；🟡 试验数值、时间及平衡目标按本节说明维护；⬜ 未定细节不得自行补全。
+> ✅ v0.64正式规则。局内美金（$）与局外永久金币严格分离。
 
-局内：
-$
-
-局外：
-金币
-
-必须是两个独立概念。
-
-金币属于长期资源。
-
-正式比赛可以记录：
-- 战绩
-- 段位
-- 金币
-- 统计等
-
-LocalStorage：
-需要 saveVersion，
-以后允许数据结构迁移。
-
-需要区分：
-“重置进度”
-和
-“清除全部数据”。
-
-局外金币不能简单购买永久巨大战斗力，
-避免私人 PVP 变成永久数值碾压。
-
-具体金币奖励数值：
-⬜/🟡 后续设计。
+- LocalStorage key：`legame.playerSave`；当前`saveVersion = 1`。保存同一站点、同一浏览器的本机永久进度；关页/关浏览器/重启后保留。不同设备/浏览器不共享，清除站点数据可能丢失。当前不是云存档，没有账号/Firebase同步。
+- PlayerSave只包含局外数据：coins、ownedItemIds、equippedActiveItemIds、equippedPassiveItemIds、stats四项（matchesPlayed、wins、highestWave、totalKills）、seenOneTimeEventIds和用于结算幂等的settledMatchIds。绝不序列化Match、PlayerSide、棋盘或战斗状态。
+- 新存档：金币0、四项战绩0；仅拥有勤俭持家，并默认装备在第一个被动槽。其他10件不赠送、不在我的道具中显示，不用锁定卡剧透。未来购买的新道具不自动装备。
+- 道具定义统一使用现有ItemDefinition；ownership与装备均为stable item ID数组，新增第12/20件道具不增加独立存档布尔字段。
+- 装备必须属于owned；主动最多2个、被动最多6个，类型必须正确。装备/卸下后立即保存，下次打开恢复；对局只使用开局loadout快照。
+- 小数值金币：每局奖励`min(8, 1 + floor(waveReached / 5) + winBonus)`，只有bottom胜利winBonus为2，失败/平局为0。单局最多8金币，不把奖励乘100/1000。
+- 正式结束后使用不可变ResultSnapshot结算一次：matchesPlayed+1，胜利时wins+1，highestWave取较高值，totalKills增加playerKills，coins增加本局奖励。以唯一Match ID保证永久结算幂等，overlay重建、rematch、返回主页不得重复累计。
+- RESULT在已有统计下显示本局金币+X；战斗HUD不显示永久金币。HOME轻量显示金币、对局、胜利、最高波次，开始对战保持主CTA。战绩不存胜率等派生字段。
+- 加载/校验/sanitize/migrate/save统一集中：坏JSON、读取失败安全默认；非法数字归非负安全整数；未知/重复ID过滤，未拥有/错类/超限装备过滤。不存在旧正式存档时，不把开发期全道具背包当已解锁。
+- 永久数据变更（结算、装备、一次性事件、重置）立即写入；不每帧保存。写失败保持内存进度继续游戏并可警告，不使游戏崩溃。
+- 重置进度底层API恢复全部默认数据，包括所有权/装备/战绩/金币及未展示欢迎事件。本版不硬塞设置页或重置按钮；未来UI调用前必须二次确认。
+- 兼容策略按旧saveVersion集中配置：migrate函数保留允许的永久数据；明确reset策略放弃旧进度并创建当前默认存档。当前v1正常加载不强制清档。未来“全体清档”指新版代码发布后，各设备下次加载检测指定旧版本并本地重置，不是远程即时删档。
+- 一次性欢迎事件ID：`welcome_gift_frugal_v1`，记录于seenOneTimeEventIds。新存档/reset后第一次在HOME点击开始对战才显示“恭喜！你中大奖了！”领取演出；打开HOME不自动弹。展示时立即记录并保存，不依赖对局数或ownership推断。
+- 欢迎弹窗期间不创建Match/AI、不开始匹配、不消费gameplay RNG，主页操作受门控；点击立即领取自动恢复一次开始意图，继续原匹配/VS流程。它仅是演出，真实勤俭持家ownership/default装备早已存在，不重复发道具、金币或装备。
+- 欢迎事件普通migration保留，刷新、返回HOME、rematch与普通更新不重复；主动reset/force-reset后重新成为未展示。旧弹窗handler随Scene退出失效。
+- v0.64不实现商店、购买、段位、金币消费、云存档、正式资料编辑；v0.65再提供商店及安全扣款边界。AI装备生成、v0.62平衡与v0.63开场保持原样。
 
 ## 二十九、v0.65 商店
 
@@ -1208,8 +1194,7 @@ LocalStorage：
 具体：
 - 商品价格
 - 免费刷新周期
-- 初始解锁内容
-仍属于 🟡/⬜ 后续确定。
+仍属于 🟡/⬜ 后续确定。初始仅拥有勤俭持家已由v0.64明确，见二十八。
 
 ## 三十、v0.66 段位
 
@@ -1581,7 +1566,7 @@ AI_DESIGN_BASELINE.md 是 AI 行为的 Source of Truth。
 - 🟡 v0.62：无限HP/count/density曲线、阶段/pulse、兵种伤害和间隔、EXP需求/奖励、招募/铲/农民权重、道具CD及各测试参数最终平衡。
 - ⬜ 原作speed-related数字的单位/含义、wave3精确HP和铲子样本概率未确定，不能由观察反推精确公式。
 - 🟡/⬜ AI动作评分权重、worthwhile阈值、延迟/jitter/noise参数、personality/loadout采样分布尚未提供，详见AI文档。
-- 🟡/⬜ v0.64–0.66：金币奖励、商店固定价格/约4商品的最终数量/免费刷新周期/初始解锁、save schema与迁移、统计和段位积分/升降规则尚未确定。
+- ✅ v0.64金币奖励、初始ownership/默认装备、save schema/迁移和永久四项战绩已明确，见二十八。🟡/⬜ v0.65–0.66商店固定价格/约4商品的最终数量/免费刷新周期、段位积分与升降规则仍待确认。
 - ⬜ 约12武将中其余身份、技能和共享字配方；地图具体道路；武器品质/碎片/兼容和数值；正式美术/动画/声音资源尚未设计完整。
 - ⬜ v0.95：网络PVP pause、权威状态归属、seed/随机结果协议、同步/纠偏与断线规则需后续实践决定。RTDB是首选方向，不表示这些协议已确定。
 

@@ -48,6 +48,9 @@ const { FarmerView } = await import('../src/ui/FarmerView.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
 const { default: TweenManager } = await import('../node_modules/phaser/src/tweens/TweenManager.js');
+const { PlayerProgress } = await import('../src/progression/PlayerProgress.ts');
+const { defaultPlayerSave, SAVE_KEY, WELCOME_EVENT } = await import('../src/progression/PlayerSave.ts');
+const { itemDefinitions } = await import('../src/config/equipment.ts');
 const { LeIntroView } = await import('../src/ui/LeIntroView.ts');
 const { buildPath, pointOnPath } = await import('../src/combat/path.ts');
 
@@ -84,6 +87,10 @@ test('每个新的匹配创建独立profile及match-local id，允许昵称重�
 
 // 使用真实场景、控制器和 Phaser Clock；仅替代渲染对象及场景调度。
 function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, autoFlow = true, matchingOptions = {}) {
+  // 旧玩法测试显式拥有测试装备并已看过欢迎演出，不再依赖真实玩家默认ownership。
+  const seed={...defaultPlayerSave(),ownedItemIds:itemDefinitions.map(d=>d.id),equippedPassiveItemIds:[],seenOneTimeEventIds:[WELCOME_EVENT]};
+  let saved=JSON.stringify(seed);
+  const progress=matchingOptions.playerProgress ?? new PlayerProgress({getItem:()=>saved,setItem:(_k,v)=>{saved=v;}});
   const game = new GameScene();
   const ready = new ReadyScene();
   const matching = new MatchingScene();
@@ -95,6 +102,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   const items = new ItemsScene();
   let itemsActive = false;
   const overlay = new PveOverlayScene();
+  for(const scene of [game,ready,items])scene.playerProgress=progress;
   let active = true;
   let overlayActive = false;
   let readyActive = true;
@@ -231,7 +239,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
+  return { progress, game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
 
@@ -1378,4 +1386,76 @@ test('destroying result overlay before delay invalidates its pending timer',()=>
  p.shutdown(p.overlay);p.run(1000);
  assert.equal(p.overlay.resultSnapshot,null);assert.equal(objects.filter(o=>o.kind==='text').length,0);
  assert.equal(p.overlay.time._active.length,0);
+});
+
+function freshProgress(){let raw=null;const storage={getItem:()=>raw,setItem:(_k,v)=>{raw=v;}};
+ return {storage,progress:new PlayerProgress(storage)};}
+
+test('v0.64 new HOME shows zero progress, owned-only inventory and default frugal loadout',()=>{
+ const {progress,storage}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});
+ assert.equal(p.text(555,110,p.ready),'金币：0');assert.equal(p.text(375,170,p.ready),'对局 0 · 胜利 0 · 最高波次 0');
+ assert.equal(p.game.match,null);assert.equal(p.setupHistory.length,0);assert.equal(progress.hasSeenWelcome(),false);
+ p.click(375,885);assert.equal(p.text(375,100,p.items),'道具');assert.equal(p.text(155,620,p.items),'勤俭持家');
+ const cards=p.objects.get(p.items).filter(o=>o.kind==='rectangle'&&o.width===116);assert.equal(cards.length,1);
+ assert.equal(p.text(375,315,p.items),'暂无');
+ const ownedTexts=p.objects.get(p.items).filter(o=>o.kind==='text').map(o=>o.text);
+ for(const def of itemDefinitions.filter(d=>d.id!=='frugal_home'))assert.equal(ownedTexts.includes(def.name),false);
+ p.click(155,630);p.click(375,815);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,[]);
+ p.click(375,1200);assert.deepEqual(p.ready.inventory.filter(i=>i.equipped),[]);
+ p.click(375,885);p.click(155,630);p.click(375,815);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,['frugal_home']);
+});
+
+test('v0.64 welcome requires first start intent, locks HOME and starts exactly one matching after claim',()=>{
+ const {progress,storage}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});
+ const random=Math.random;try{Math.random=()=>{throw Error('welcome must not use gameplay RNG');};p.ready.requestStartGame();}finally{Math.random=random;}
+ assert.equal(p.ready.startState,'WELCOME');assert.equal(p.game.match,null);assert.equal(p.setupHistory.length,0);
+ assert.equal(p.text(375,470,p.ready),'恭喜！你中大奖了！');assert.equal(progress.save.coins,0);
+ const before=progress.save;assert.deepEqual(before.ownedItemIds,['frugal_home']);assert.deepEqual(before.equippedPassiveItemIds,['frugal_home']);
+ assert.equal(new PlayerProgress(storage).hasSeenWelcome(),true);
+ for(let n=0;n<10;n++){p.ready.requestStartGame();p.click(375,885);}
+ assert.equal(p.objects.has(p.items),false);assert.equal(p.setupHistory.length,0);
+ const claim=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===790),callbacks=claim.listeners('pointerdown');
+ p.click(375,790);callbacks.forEach(fn=>fn({},0,0,{stopPropagation(){}}));
+ assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,1);assert.equal(p.startCount(),0);
+ assert.equal(progress.save.coins,0);assert.deepEqual(progress.save.ownedItemIds,['frugal_home']);
+ p.finishFlow();assert.equal(p.startCount(),1);assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
+ finishMatch(p,false);p.click(375,875);p.click(375,765);assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,2);
+});
+
+test('v0.64 shutdown during welcome invalidates old claim handler; reset/force reset re-enable presentation',()=>{
+ const {progress}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});p.click(375,765);
+ const callbacks=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===790).listeners('pointerdown');
+ p.shutdown(p.ready);callbacks.forEach(fn=>fn({},0,0,{stopPropagation(){}}));assert.equal(p.setupHistory.length,0);
+ progress.reset();const fresh=pve(false,20,false,{playerProgress:progress});fresh.click(375,765);assert.equal(fresh.ready.startState,'WELCOME');
+});
+
+test('v0.64 loaded welcome event skips gift; rematch also bypasses gift without changing intro flow',()=>{
+ const {progress,storage}=freshProgress();progress.markWelcomeSeen();const loaded=new PlayerProgress(storage);
+ const p=pve(false,20,true,{playerProgress:loaded});p.click(375,765);assert.equal(p.startCount(),1);
+ assert.equal(p.objects.get(p.ready).some(o=>o.text==='立即领取'),false);
+ const old=p.game.match;finishMatch(p,true);p.click(375,765);assert.equal(p.startCount(),2);assert.notEqual(p.game.match,old);
+ assert.equal(p.game.presentationPhase,'INTRO');assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
+});
+
+test('v0.64 formal result commits once and displays coins; HOME refreshes permanent info, battle HUD does not',()=>{
+ const {progress,storage}=freshProgress();progress.markWelcomeSeen();const p=pve(true,20,true,{playerProgress:progress});
+ const snapshot=()=>p.objects.get(p.game).filter(o=>o.kind==='text').map(o=>o.text);
+ assert.equal(snapshot().some(t=>t.includes('金币')),false);
+ finishMatch(p,true);const result=p.game.match.resultSnapshot;
+ assert.equal(progress.save.coins,3);assert.equal(progress.save.stats.matchesPlayed,1);assert.equal(progress.save.stats.wins,1);
+ assert.equal(p.text(375,720,p.overlay),'本局金币 +3');
+ p.shutdown(p.overlay);p.game.scene.launch('PveOverlayScene',{mode:'victory',snapshot:result,loadout:p.game.sides.bottom.recruitment.loadout});
+ p.run(410);assert.equal(progress.save.coins,3);assert.equal(progress.save.stats.matchesPlayed,1);
+ p.click(375,875);assert.equal(p.text(555,110,p.ready),'金币：3');assert.equal(p.text(375,170,p.ready),'对局 1 · 胜利 1 · 最高波次 1');
+ assert.deepEqual(new PlayerProgress(storage).save,progress.save);
+ p.click(375,765);finishMatch(p,false);assert.equal(progress.save.coins,4);assert.equal(progress.save.stats.matchesPlayed,2);assert.equal(progress.save.stats.wins,1);
+ p.click(375,765);assert.equal(progress.save.coins,4);assert.equal(p.game.match.bottomSide.recruitment.money,20);
+});
+
+test('v0.64 start loadout cannot promote forged scene-owned flags into permanent ownership',()=>{
+ const {progress}=freshProgress();progress.markWelcomeSeen();const p=pve(false,20,true,{playerProgress:progress});
+ const farmer=p.ready.inventory.find(i=>i.id==='farmer');farmer.owned=true;farmer.equipped=true;
+ p.click(375,765);assert.equal(progress.save.ownedItemIds.includes('farmer'),false);
+ assert.equal(p.game.match.bottomSide.recruitment.loadout.passive.some(i=>i.id==='farmer'),false);
+ assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
 });

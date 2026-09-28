@@ -17,8 +17,10 @@ import { AIController } from '../controllers/AIController';
 import type { BattleSetup } from '../flow/battleSetup';
 import { LeIntroView } from '../ui/LeIntroView';
 import { pressureConfig } from '../config/pressure';
+import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 
 export class GameScene extends Phaser.Scene {
+  playerProgress?: PlayerProgress;
   match: Match | null = null;
   battleSetup: BattleSetup | null = null;
   presentationPhase: 'INTRO' | 'RUNNING' | null = null;
@@ -116,6 +118,7 @@ export class GameScene extends Phaser.Scene {
         this.input.enabled = false;
         this.scene.pause();
         const mode = match.result === 'draw' ? 'draw' : match.result === 'bottom' ? 'victory' : 'defeat';
+        progressForScene(this).commitMatchResult(match.resultSnapshot!);
         this.scene.launch('PveOverlayScene', { mode, snapshot: match.resultSnapshot, loadout });
       }
     };

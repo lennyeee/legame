@@ -15,6 +15,7 @@ export interface MatchController { update(deltaMs: number): void; stop(): void; 
 
 // 唯一的双边逻辑时钟。每个固定步先完成双方战斗，再统一判定HP结果。
 export class Match {
+  readonly id = globalThis.crypto.randomUUID();
   readonly bottomSide: PlayerSide;
   readonly topSide: PlayerSide;
   readonly sides;
@@ -70,6 +71,7 @@ export class Match {
       if (this.health.bottom === 0 || this.health.top === 0) {
         this.result = this.health.bottom === 0 ? (this.health.top === 0 ? 'draw' : 'top') : 'bottom';
         this.resultSnapshot = Object.freeze({
+          matchId: this.id,
           result: this.result === 'draw' ? 'draw' : this.result === 'bottom' ? 'win' : 'lose',
           waveReached: this.timeline.wave,
           playerKills: this.kills.bottom,

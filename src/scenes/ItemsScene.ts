@@ -1,22 +1,25 @@
 import Phaser from 'phaser';
 import { equipmentLimits, itemDefinitions } from '../config/equipment';
-import { createInventory, setEquipped } from '../systems/equipment';
+import { setEquipped } from '../systems/equipment';
 import type { InventoryItem } from '../systems/equipment';
 import { label } from '../ui/text';
+import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 
 export class ItemsScene extends Phaser.Scene {
+  playerProgress?: PlayerProgress;
   constructor() { super('ItemsScene'); }
 
-  create(data: { inventory?: InventoryItem[] } = {}): void {
-    const inventory = data.inventory ?? createInventory();
-    label(this, 375, 100, '道具 · 开发背包', 36);
+  create(_data: { inventory?: InventoryItem[] } = {}): void {
+    const progress = progressForScene(this);
+    const inventory = progress.inventory();
+    label(this, 375, 100, '道具', 36);
     const back = this.add.rectangle(375, 1200, 300, 76, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 375, 1200, '返回', 28, '#fffaf0');
     let leaving = false;
     back.on('pointerdown', () => {
       if (leaving) return;
       leaving = true;
-      this.scene.start('ReadyScene', { inventory });
+      this.scene.start('ReadyScene');
     });
     const slots: { category: 'active' | 'passive'; index: number; text: Phaser.GameObjects.Text }[] = [];
     for (const category of ['active', 'passive'] as const) {
@@ -36,6 +39,9 @@ export class ItemsScene extends Phaser.Scene {
       }
     };
     let modalOpen = false;
+    if (!inventory.some(item => item.owned && itemDefinitions.find(def => def.id === item.id)?.category === 'active')) {
+      label(this, 375, 315, '暂无', 18, '#8b8272');
+    }
     inventory.filter(item => item.owned).forEach((item, index) => {
       const definition = itemDefinitions.find(def => def.id === item.id);
       if (!definition) return;
@@ -63,7 +69,7 @@ export class ItemsScene extends Phaser.Scene {
         shade.on('pointerdown', close);
         action.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
           event.stopPropagation();
-          if (setEquipped(inventory, item.id, !item.equipped)) { refresh(); close(); }
+          if (setEquipped(inventory, item.id, !item.equipped)) { progress.saveEquipment(inventory); refresh(); close(); }
           else actionText.setText('装备槽已满');
         });
       });

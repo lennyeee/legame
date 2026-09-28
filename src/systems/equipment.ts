@@ -13,7 +13,7 @@ export interface Loadout {
   readonly passive: readonly LoadoutItem[];
 }
 
-// 本次网页会话内的开发背包；不持久化，局内系统只读取独立loadout快照。
+// AI、平衡模拟与显式测试fixture的全道具工厂；真实玩家背包由PlayerProgress按ownership生成。
 export function createInventory(): InventoryItem[] {
   return itemDefinitions.map(({ id }) => ({ id, level: 1, owned: true, equipped: false }));
 }

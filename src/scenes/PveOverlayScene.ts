@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
 import { resultPresentation, type ResultSnapshot } from '../match/ResultSnapshot';
+import { matchCoinReward } from '../progression/PlayerProgress';
 
 export interface PveOverlayData {
   mode: 'paused' | 'victory' | 'defeat' | 'draw';
@@ -95,6 +96,7 @@ export class PveOverlayScene extends Phaser.Scene {
       label(this, 375, 560, `来财 ${snapshot.playerSuccessfulRecruits} 次`, 30);
       label(this, 375, 620, `剩余 $${snapshot.playerRemainingMoney}`, 30);
       if (snapshot.result === 'win') label(this, 375, 680, `乐：${'♥'.repeat(snapshot.playerRemainingHp)}`, 30);
+      label(this, 375, 720, `本局金币 +${matchCoinReward(snapshot)}`, 24);
       const rematch = this.add.rectangle(375, 765, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
       label(this, 375, 765, '再来一局', 30, '#fffaf0');
       const home = this.add.rectangle(375, 875, 250, 68, 0xe1ddcf).setInteractive({ useHandCursor: true });
