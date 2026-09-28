@@ -42,7 +42,7 @@ export function currentStateSnapshot(side: PlayerSide, values: readonly ActionVa
     && pathDistance(side.combat.map, side.combat.map.cells[index]!)
       <= applyTileBonuses(getCombatStats(tile.unit), side.board, [index]).range).length;
   const effectiveHeroes = [...side.heroes.links.values()].filter(link => pathDistance(side.combat.map, link.origin)
-    <= applyTileBonuses(getHeroStats(link.level), side.board, [link.leftIndex, link.rightIndex]).range).length;
+    <= applyTileBonuses(getHeroStats(link.level, link.heroId), side.board, [link.leftIndex, link.rightIndex]).range).length;
   const required = c.minimumAttackers + Math.floor(enemies.length / c.enemiesPerExtraAttacker)
     + (enemyProgress >= c.advancedProgress ? c.advancedExtraAttackers : 0);
   return {

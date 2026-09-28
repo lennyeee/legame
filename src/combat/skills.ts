@@ -4,6 +4,7 @@ import type { SkillId } from '../config/skills';
 import type { Enemy } from './enemies';
 import type { HeroLink } from '../systems/heroActivation';
 import { selectTarget } from './targeting';
+import { MAX_LEVEL } from '../config/levels';
 
 export interface SkillState {
   skillId: SkillId;
@@ -38,8 +39,10 @@ const selectors: Record<SkillId, (enemies: readonly Enemy[], maxTargets: number)
 };
 
 export function heroAttackInterval(link: HeroLink, base: number): number {
-  return link.skill?.phase === 'empowered'
-    ? Math.max(hasteConfig.minAttackInterval, base / (hasteConfig.speedMultiplier + (link.level - 1) * hasteConfig.speedPerLevel)) : base;
+  if (link.skill?.phase !== 'empowered') return base;
+  const effect = getSkillStats(link.skill.skillId, link.level).effectByLevel[Math.min(MAX_LEVEL, link.level) - 1]!;
+  const multiplier = link.level > MAX_LEVEL ? hasteConfig.speedMultiplier + (link.level - 1) * hasteConfig.speedPerLevel : effect.speedMultiplier!;
+  return Math.max(effect.minAttackInterval!, base / multiplier);
 }
 
 export function consumeEmpoweredAttack(link: HeroLink, emit: (event: SkillEvent) => void): void {
@@ -56,7 +59,7 @@ export function consumeEmpoweredAttack(link: HeroLink, emit: (event: SkillEvent)
 export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], deltaMs: number,
   hit: (enemy: Enemy, damage: number, link: HeroLink) => void, emit: (event: SkillEvent) => void,
   execute: (enemy: Enemy, link: HeroLink) => void,
-  ordinaryAttackRange = getHeroStats(link.level).range): void {
+  ordinaryAttackRange = getHeroStats(link.level, link.heroId).range): void {
   const state = link.skill;
   if (!state) return;
   const stats = getSkillStats(state.skillId, link.level);
@@ -67,12 +70,12 @@ export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], delta
   if (state.phase === 'charging' && hasAttackTarget) {
     state.cooldownElapsed = Math.min(state.cooldownDuration, state.cooldownElapsed + deltaMs);
   }
-  if (state.skillId === 'xiaoliu_haste') {
+  if (stats.behavior === 'empoweredAttack') {
     if (state.cooldownElapsed + 1e-8 < state.cooldownDuration) return;
     state.phase = 'ready';
     if (!hasAttackTarget) return;
     state.phase = 'empowered';
-    state.remainingAttacks = hasteConfig.attacks;
+    state.remainingAttacks = stats.effectByLevel[link.level - 1]!.attacks!;
     state.cooldownElapsed = 0;
     emit({ kind: 'skillStart', skillId: state.skillId, link });
     return;
@@ -95,7 +98,7 @@ export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], delta
   const id = state.targetIds[state.nextTarget++]!;
   const target = enemies.find(enemy => enemy.id === id && enemy.hp > 0 && !enemy.isBoss);
   if (target) {
-    if (state.skillId === 'abing_execute') execute(target, link);
+    if (stats.behavior === 'execute') execute(target, link);
     else hit(target, state.castDamage, link);
     emit({ kind: 'skillHit', skillId: state.skillId, link, targetId: target.id });
   }

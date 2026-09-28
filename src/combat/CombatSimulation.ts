@@ -12,7 +12,7 @@ import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
 import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
-import { getHeroStats, heroGrowth, getHeroDefinition, heroCombat } from '../config/heroes';
+import { getHeroStats, heroGrowth, getHeroDefinition } from '../config/heroes';
 import { getHeroProgression } from '../systems/heroProgression';
 import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack } from './skills';
 import type { SkillEvent } from './skills';
@@ -117,7 +117,7 @@ export class CombatSimulation {
     }
     for (const link of links) {
       if (!this.heroAttackers.has(link.key)) {
-        const interval = applyTileBonuses(getHeroStats(link.level), this.board,
+        const interval = applyTileBonuses(getHeroStats(link.level, link.heroId), this.board,
           [link.leftIndex, link.rightIndex]).attackInterval;
         this.heroAttackers.set(link.key, { link, cooldown: interval, interval });
       }
@@ -237,7 +237,7 @@ export class CombatSimulation {
       }
     }
     for (const attacker of this.heroAttackers.values()) {
-      const stats = applyTileBonuses(getHeroStats(attacker.link.level), this.board,
+      const stats = applyTileBonuses(getHeroStats(attacker.link.level, attacker.link.heroId), this.board,
         [attacker.link.leftIndex, attacker.link.rightIndex]);
       // 强化结束的当前逻辑步不提前推进新 CD；小美原有打击时序保持不变。
       if (attacker.link.skill?.skillId === 'xiaoliu_haste') {
@@ -251,7 +251,7 @@ export class CombatSimulation {
       if (!target) continue;
       events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
       const victims = getHeroDefinition(attacker.link.heroId).attackMode === 'splash'
-        ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, heroCombat.splashRadius)) : [target];
+        ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, getHeroDefinition(attacker.link.heroId).combat!.splashRadius)) : [target];
       for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
       consumeEmpoweredAttack(attacker.link, event => events.push(event));
       attacker.cooldown = interval;
@@ -261,7 +261,7 @@ export class CombatSimulation {
       updateHeroSkill(link, this.enemies, deltaMs,
         (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event),
         (enemy, source) => this.hit(enemy, 0, events, source, true),
-        applyTileBonuses(getHeroStats(link.level), this.board, [link.leftIndex, link.rightIndex]).range);
+        applyTileBonuses(getHeroStats(link.level, link.heroId), this.board, [link.leftIndex, link.rightIndex]).range);
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
     this.progress?.finishStep(this.enemies.length);

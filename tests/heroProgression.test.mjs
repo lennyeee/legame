@@ -37,11 +37,12 @@ for(const levels of [[3,1],[2,5],[7,7]])test(`${levels.join('+')}向高等级同
  applyDrop(board,reserve,p('slot',0),p('tile',1));assert.equal(board.tiles[0].unit.level,high);
 });
 
-test('通用配方支持未来共享字，不修改生产征兵池',()=>{
- heroRecipes.push({id:'huangzhong',skillId:null,name:'黄忠',letters:['黄','忠']},{id:'huangzu',skillId:null,name:'黄祖',letters:['黄','祖']});
- try{const {board,reserve,growth}=setup();board.tiles[0].unit=letter('黄',3);board.tiles[1].unit=letter('祖');growth.sync();assert.equal(board.tiles[1].unit.level,3);assert.equal([...growth.links.values()][0].name,'黄祖');
- applyDrop(board,reserve,p('tile',1),p('slot',0));board.tiles[1].unit=letter('忠');growth.sync();assert.equal(board.tiles[1].unit.level,3);
- }finally{heroRecipes.splice(-2);}
+test('注册表通用共享字配方传播等级，不修改生产征兵池',()=>{
+ const {board,reserve,growth}=setup([3,1]);assert.equal(board.tiles[1].unit.level,3);
+ assert.equal([...growth.links.values()][0].name,'小美');
+ applyDrop(board,reserve,p('tile',1),p('slot',0));board.tiles[1].unit=letter('六');growth.sync();
+ assert.equal(board.tiles[1].unit.level,3);assert.equal([...growth.links.values()][0].name,'小六');
+ assert.equal(reserve.slots[0].level,3);
 });
 for(const a of ['slot','tile'])for(const b of ['slot','tile'])for(const material of [1,4,5])test(`${a}→${b}同字Lv.${material}材料只让目标4→5`,()=>{
  const board=createBoardState(testMap),reserve=createRecruitmentState();

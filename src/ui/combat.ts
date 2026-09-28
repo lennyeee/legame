@@ -93,7 +93,7 @@ export class CombatView {
         const point = link?.origin ?? this.battle.map.cells[this.selectedTile]!;
         const radius = isUnit(unit)
           ? applyTileBonuses(getCombatStats(unit), this.battle.board, [this.selectedTile]).range
-          : applyTileBonuses(getHeroStats(link!.level), this.battle.board, [link!.leftIndex, link!.rightIndex]).range;
+          : applyTileBonuses(getHeroStats(link!.level, link!.heroId), this.battle.board, [link!.leftIndex, link!.rightIndex]).range;
         const color = isUnit(unit) ? visuals.attackColors[unit.type] : heroVisuals.color;
         this.range.fillStyle(color, 0.1);
         this.range.fillCircle(point.x, point.y, radius);

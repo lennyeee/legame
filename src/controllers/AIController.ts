@@ -163,7 +163,7 @@ export class AIController {
           if (formed) {
             score = scores.hero;
             value.combat = 'hero';
-            const stats = applyTileBonuses(getHeroStats(Math.max(formed.left.level, formed.right.level)), preview,
+            const stats = applyTileBonuses(getHeroStats(Math.max(formed.left.level, formed.right.level), formed.heroId), preview,
               [formed.leftIndex, formed.rightIndex]);
             if (pathDistance(side.combat.map, formed.origin) > stats.range) {
               value.combat = null;
