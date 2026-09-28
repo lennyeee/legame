@@ -200,7 +200,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   function tick(flowOnly=false) {
     now+=10;
     const scenes=[...(readyActive?[ready]:[]),...(itemsActive?[items]:[]),
-      ...(gameActive&&active&&!flowOnly?[game]:[]),...(matchingActive?[matching]:[])];
+      ...(gameActive&&active&&!flowOnly?[game]:[]),...(matchingActive?[matching]:[]),...(overlayActive?[overlay]:[])];
     for(const scene of scenes){
       scene.time.preUpdate();scene.time.update(now,10);scene.tweens.step();scene.events.emit('update',now,10);
     }
@@ -334,13 +334,13 @@ test('连续三次result再匹配创建全新对手/Match/Side/Timeline并清理
  }
 });
 
-function finishMatch(p, win, survivorLeaks=0) {
+function finishMatch(p, win, survivorLeaks=0, showPanel=true) {
  const losing=win?'top':'bottom', surviving=win?'bottom':'top';
  for(const [id,count]of [[losing,3],[surviving,survivorLeaks]])for(let n=0;n<count;n++){
   const side=p.game.sides[id],enemy=side.combat.spawnEnemy();
   enemy.distance=side.combat.path.totalLength-.001;enemy.moveSpeed=55;
  }
- p.run(20);
+ p.run(20);if(showPanel)p.run(400);
 }
 
 function beginReveal(p){
@@ -477,10 +477,10 @@ test('背包详情、装卸返回、单局被动栏及连续重开保留loadout'
     assert.equal(p.text(120,1110),'农民');assert.equal(p.text(630,1262),'—');
     for(const x of [80,670])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1018).interactive,true);
     p.run(1000);assert.equal(p.text(170, 55),'$ 20');
-    finishMatch(p,false);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
+    finishMatch(p,false);assert.equal(p.text(375,350,p.overlay),'失败');p.click(375,765);
     assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(625, 55),'第 1 波');
   }
-  finishMatch(p,true);assert.equal(p.text(375,565,p.overlay),'胜利');
+  finishMatch(p,true);assert.equal(p.text(375,350,p.overlay),'胜利');
   p.click(375,765);assert.equal(p.text(120,1110),'农民');
 });
 
@@ -585,7 +585,7 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       p.run(5000);p.drag([248.4375,574.0625],[183,1018]);
       assert.equal(p.snapshot(),paused);
       p.click(375,765);finishMatch(p,win);
-      assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+      assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
       const ended=p.snapshot();p.run(5000);p.drag([248.4375,574.0625],[183,1018]);
       assert.equal(p.snapshot(),ended);
       p.click(375,765);
@@ -648,7 +648,7 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
     p.click(375,765);p.run(500);assert.equal(flashes().length,0);
     combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
     p.drag([248.4375,574.0625],[183,1018]);finishMatch(p,false);
-    assert.equal(p.text(375,565,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
+    assert.equal(p.text(375,350,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
     p.click(375,765);assert.equal(flashes().length,0);p.run(10000);assert.equal(flashes().length,0);
   } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
 });
@@ -673,7 +673,7 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       p.click(75, 55);const casting=p.snapshot();p.run(20000);assert.equal(p.snapshot(),casting);
       combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
       p.click(375,765);p.drag([248.4375,574.0625],[183,1018]);p.run(10);assert.equal(flashes().length,0);
-      finishMatch(p,false);assert.equal(p.text(375,565,p.overlay),'失败');
+      finishMatch(p,false);assert.equal(p.text(375,350,p.overlay),'失败');
       const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
       p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
       assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,0);
@@ -745,8 +745,8 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       p.drag([183,1018], [501.5625,661.4375]);
       p.run(2500);finishMatch(p,win,win?1:0);
       assert.equal(p.isActive(), false);
-      assert.equal(p.text(375, 565, p.overlay), win ? '胜利' : '失败');
-      if (win) assert.equal(p.text(375, 655, p.overlay), '乐：♥♥');
+      assert.equal(p.text(375,350,p.overlay), win ? '胜利' : '失败');
+      if (win) assert.equal(p.text(375,680,p.overlay), '乐：♥♥');
       assert.equal(p.text(375, 765, p.overlay), '再来一局');
       const ended = p.snapshot();
       p.run(10000);
@@ -1007,7 +1007,7 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   p.run(12000);
   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
-  finishMatch(p,win);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+  finishMatch(p,win);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
   const ended=p.snapshot(),money=farmMoney(p);p.run(30000);badge?.emit('pointerdown',{},0,0,{stopPropagation(){}});
   assert.equal(p.snapshot(),ended);assert.equal(farmMoney(p),money);
    p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.text(120,1110),'农民');
@@ -1079,7 +1079,7 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
 });
 for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后停止CD且重开重新充能',()=>{
  const p=equippedV56();p.run(5000);finishMatch(p,win);
-  assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
+  assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
   p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1186),'招贤榜');
   p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');
   assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),100);
@@ -1110,7 +1110,7 @@ test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除�
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止两道具，重开清空单位和强化',()=>{
- const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+ const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
  const snapshot=p.snapshot();p.run(30000);dragActive(p,80,183,1018);assert.equal(p.snapshot(),snapshot);
  p.click(375,765);assert.equal(farmMoney(p),20);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
  assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);
@@ -1266,7 +1266,7 @@ test('v0.60-C 同步漏怪显示平局；旧update回调在重开后不能再运
  for(const s of Object.values(old.sides))for(let i=0;i<3;i++){
   const e=s.combat.spawnEnemy();e.distance=s.combat.path.totalLength-.001;
  }
- p.run(20);assert.equal(p.text(375,565,p.overlay),'平局');assert.equal(old.result,'draw');
+ p.run(420);assert.equal(p.text(375,350,p.overlay),'平局');assert.equal(old.result,'draw');
  const ended=p.snapshot();old.update(250);p.run(5000);assert.equal(p.snapshot(),ended);
  p.click(375,765);const fresh=p.game.match;assert.notEqual(fresh,old);
  assert.equal(old.status,'destroyed');assert.deepEqual(fresh.health,{bottom:3,top:3});
@@ -1312,4 +1312,70 @@ test('v0.62-A HUD tracks highest started wave while the preceding wave is still 
  assert.equal(p.game.sides.bottom.combat.enemies.length,4);
  p.run(100);assert.equal(p.game.sides.bottom.combat.enemies.length,6);
  assert.equal(p.text(625,55),'第 2 波');
+});
+
+for(const win of [true,false])test('RESULT '+(win?'win':'lose')+' freezes immediately, overlay clock waits 400ms and displays immutable statistics',()=>{
+ const p=pve();p.click(375,1158);const old=p.game.match;
+ finishMatch(p,win,win?1:0,false);
+ assert.equal(p.game.input.enabled,false);assert.equal(old.status,'ended');
+ const snapshot=old.resultSnapshot,ended=p.snapshot(),time=old.timeline.elapsedMs;
+ assert.equal(p.overlay.resultSnapshot,snapshot);assert.equal(p.text(375,350,p.overlay),undefined);
+ const ui=()=>p.objects.get(p.overlay).filter(o=>o.kind==='text').map(o=>o.text);
+ p.click(375,1158);p.click(75,55);p.drag([183,1018],[248,574]);
+ p.run(370);assert.equal(ui().length,0);assert.equal(old.timeline.elapsedMs,time);assert.equal(p.snapshot(),ended);
+ p.run(40);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
+ assert.equal(p.text(375,440,p.overlay),'第 '+snapshot.waveReached+' 波');
+ assert.equal(p.text(375,500,p.overlay),'击杀 '+snapshot.playerKills);
+ assert.equal(p.text(375,560,p.overlay),'来财 '+snapshot.playerSuccessfulRecruits+' 次');
+ assert.equal(p.text(375,620,p.overlay),'剩余 $'+snapshot.playerRemainingMoney);
+ assert.equal(ui().some(t=>t.startsWith('乐：')),win);
+ if(win)assert.equal(p.text(375,680,p.overlay),'乐：♥♥');
+ assert.equal(ui().includes('已暂停'),false);p.run(5000);assert.equal(p.snapshot(),ended);
+});
+
+test('RESULT draw has stats and both actions but no HP row',()=>{
+ const p=pve();for(const side of Object.values(p.game.sides))for(let n=0;n<3;n++){
+  const e=side.combat.spawnEnemy();e.distance=side.combat.path.totalLength-.001;
+ }
+ p.run(420);assert.equal(p.text(375,350,p.overlay),'平局');
+ assert.equal(p.objects.get(p.overlay).some(o=>o.kind==='text'&&o.text.startsWith('乐：')),false);
+ assert.equal(p.text(375,765,p.overlay),'再来一局');assert.equal(p.text(375,875,p.overlay),'返回主页');
+});
+
+test('RESULT home destroys old runtime, clears snapshot binding and restores both HOME controls',()=>{
+ const p=pve();finishMatch(p,false);const old=p.game.match,kit=old.bottomSide.recruitment.loadout;
+ const callbacks=p.game.events.listeners('update');p.click(375,875);
+ assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);assert.equal(p.overlay.resultSnapshot,null);
+ assert.equal(p.text(375,765,p.ready),'开始对战');assert.equal(p.text(375,885,p.ready),'道具');
+ assert.equal(p.overlay.time._active.length,0);assert.equal(p.game.events.listenerCount('update'),0);
+ callbacks.forEach(fn=>fn(10000,250));p.run(1000);assert.equal(p.game.match,null);
+ p.click(375,765);assert.notEqual(p.game.match,old);assert.deepEqual(p.game.match.bottomSide.recruitment.loadout,kit);
+ assert.equal(p.game.match.resultSnapshot,null);assert.deepEqual(p.game.match.kills,{bottom:0,top:0});
+});
+
+test('five RESULT/rematch cycles replace Match, opponent, statistics, Le views and all stale callbacks',()=>{
+ const p=pve();const kit=p.game.match.bottomSide.recruitment.loadout;
+ for(let round=0;round<5;round++){
+  const old=p.game.match,setup=p.game.battleSetup,objects=p.objects.get(p.game),updates=p.game.events.listeners('update');
+  p.click(375,1158);finishMatch(p,round%2===0);
+  const snapshot=old.resultSnapshot,button=p.objects.get(p.overlay).findLast(o=>o.kind==='rectangle'&&o.x===375&&o.y===765);
+  const oldActions=button.listeners('pointerdown');p.click(375,765);
+  const fresh=p.game.match;assert.notEqual(fresh,old);assert.equal(old.status,'destroyed');
+  assert.notEqual(p.game.battleSetup.opponentProfile.id,setup.opponentProfile.id);
+  assert.equal(p.overlay.resultSnapshot,null);assert.notEqual(fresh.resultSnapshot,snapshot);assert.equal(fresh.resultSnapshot,null);
+  assert.deepEqual(fresh.kills,{bottom:0,top:0});assert.equal(fresh.bottomSide.recruitment.successfulRecruits,0);
+  assert.equal(fresh.bottomSide.recruitment.money,20);assert.deepEqual(fresh.health,{bottom:3,top:3});assert.equal(fresh.timeline.wave,1);
+  assert.deepEqual(fresh.bottomSide.recruitment.loadout,kit);assert.notEqual(p.objects.get(p.game),objects);
+  const state=p.snapshot();updates.forEach(fn=>fn(100000,250));oldActions.forEach(fn=>fn());
+  assert.equal(p.game.match,fresh);assert.equal(p.snapshot(),state);assert.equal(fresh.timeline.elapsedMs,0);
+  assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.overlay.time._active.length,0);
+  assert.equal(p.matching.tweens.tweens.length,0);
+ }
+});
+
+test('destroying result overlay before delay invalidates its pending timer',()=>{
+ const p=pve();finishMatch(p,false,0,false);const objects=p.objects.get(p.overlay);
+ p.shutdown(p.overlay);p.run(1000);
+ assert.equal(p.overlay.resultSnapshot,null);assert.equal(objects.filter(o=>o.kind==='text').length,0);
+ assert.equal(p.overlay.time._active.length,0);
 });

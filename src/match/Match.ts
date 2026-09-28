@@ -6,6 +6,7 @@ import type { Loadout } from '../systems/equipment';
 import { PlayerSide } from '../systems/PlayerSide';
 import type { CombatEvent } from '../combat/CombatSimulation';
 import { MatchTimeline } from './MatchTimeline';
+import type { ResultSnapshot } from './ResultSnapshot';
 
 export type SideId = 'bottom' | 'top';
 export type MatchResult = 'bottom' | 'top' | 'draw';
@@ -21,6 +22,8 @@ export class Match {
   readonly health: Record<SideId, number>;
   status: 'running' | 'paused' | 'ended' | 'destroyed' = 'running';
   result: MatchResult | null = null;
+  resultSnapshot: ResultSnapshot | null = null;
+  readonly kills: Record<SideId, number> = { bottom: 0, top: 0 };
   private accumulator = 0;
   private passiveClock = 0;
   private runtimeElapsedMs = 0;
@@ -61,10 +64,20 @@ export class Match {
       // 不在单方escape回调中结算，双方都已完成相同的逻辑步。
       for (const id of ['bottom', 'top'] as const) {
         events[id].push(...batch[id]);
+        this.kills[id] += batch[id].filter(event => event.kind === 'kill').length;
         this.health[id] = Math.max(0, this.health[id] - batch[id].filter(event => event.kind === 'escape').length);
       }
       if (this.health.bottom === 0 || this.health.top === 0) {
         this.result = this.health.bottom === 0 ? (this.health.top === 0 ? 'draw' : 'top') : 'bottom';
+        this.resultSnapshot = Object.freeze({
+          result: this.result === 'draw' ? 'draw' : this.result === 'bottom' ? 'win' : 'lose',
+          waveReached: this.timeline.wave,
+          playerKills: this.kills.bottom,
+          playerSuccessfulRecruits: this.bottomSide.recruitment.successfulRecruits,
+          playerRemainingMoney: this.bottomSide.recruitment.money,
+          playerRemainingHp: this.health.bottom,
+          opponentRemainingHp: this.health.top,
+        });
         this.status = 'ended';
         this.bottomSide.stop();
         this.topSide.stop();

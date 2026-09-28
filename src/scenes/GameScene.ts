@@ -116,7 +116,7 @@ export class GameScene extends Phaser.Scene {
         this.input.enabled = false;
         this.scene.pause();
         const mode = match.result === 'draw' ? 'draw' : match.result === 'bottom' ? 'victory' : 'defeat';
-        this.scene.launch('PveOverlayScene', { mode, health: match.health.bottom, loadout });
+        this.scene.launch('PveOverlayScene', { mode, snapshot: match.resultSnapshot, loadout });
       }
     };
     refreshProgress();

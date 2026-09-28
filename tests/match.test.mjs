@@ -227,3 +227,37 @@ test('overlapping waves fan out identical HP/speed/events even with one side cle
  advance(m,100);assert.equal(m.topSide.combat.enemies.filter(e=>e.spawnEventId===5).length,1);
  assert.equal(m.topSide.combat.enemies.filter(e=>e.spawnEventId===6).length,1);
 });
+
+for(const loser of ['bottom','top','both'])test('RESULT snapshot maps '+loser+' and includes final fixed-step state',()=>{
+ const m=quiet();m.bottomSide.recruit();m.bottomSide.recruit();
+ assert.equal(m.bottomSide.recruit(),false);
+ // 真实战斗死亡事件与另一侧最终漏怪发生在同一个固定步。
+ hero(m.bottomSide);advance(m,1300);const enemy=m.bottomSide.combat.spawnEnemy();enemy.moveSpeed=0;enemy.hp=1;
+ for(const id of loser==='both'?['bottom','top']:[loser])for(let n=0;n<3;n++){
+  const e=m.sides[id].combat.spawnEnemy();e.distance=m.sides[id].combat.path.totalLength-.001;
+ }
+ const events=m.update(combatConfig.stepMs),s=m.resultSnapshot;
+ assert.equal(events.bottom.filter(e=>e.kind==='kill').length,1);
+ assert.equal(m.kills.bottom,1);assert.equal(s.playerKills,1);
+ assert.equal(s.result,loser==='both'?'draw':loser==='bottom'?'lose':'win');
+ assert.equal(s.playerSuccessfulRecruits,1);assert.equal(s.playerRemainingMoney,11);
+ assert.equal(s.playerRemainingHp,m.health.bottom);assert.equal(s.opponentRemainingHp,m.health.top);
+ assert.equal(s.waveReached,1);assert.ok(Object.isFrozen(s));
+ const before=snapshot(m);advance(m,10000);assert.equal(snapshot(m),before);assert.equal(m.resultSnapshot,s);
+ m.bottomSide.recruitment.money=999;assert.equal(s.playerRemainingMoney,11);
+ assert.throws(()=>{s.playerKills=99;},TypeError);
+ m.destroy();assert.equal(s.playerKills,1);
+});
+
+test('RESULT wave uses highest actually started wave without off-by-one',()=>{
+ const m=new Match(testMap,undefined,undefined,{...pressureConfig,firstEnemyDelay:100,waveStartInterval:250});
+ advance(m,600);assert.equal(m.timeline.wave,3);leaks(m,'top',3);
+ assert.equal(m.resultSnapshot.waveReached,3);
+});
+
+test('kill count counts real death once, excludes leaks and presentation, resets in new Match',()=>{
+ const m=quiet();hero(m.bottomSide);const e=m.bottomSide.combat.spawnEnemy();e.hp=1;e.moveSpeed=0;
+ advance(m,1300);assert.equal(m.kills.bottom,1);advance(m,1300);assert.equal(m.kills.bottom,1);
+ leaks(m,'bottom',1);assert.equal(m.kills.bottom,1);assert.equal(m.kills.top,0);
+ m.destroy();const fresh=quiet();assert.deepEqual(fresh.kills,{bottom:0,top:0});assert.equal(fresh.resultSnapshot,null);
+});

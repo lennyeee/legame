@@ -1066,59 +1066,27 @@ Lv1→Lv2 EXP need 10。
 
 ## 二十四、正式完整比赛流程
 
-> ✅ 规则或方向已确认；🟡 试验数值、时间及平衡目标按本节说明维护；⬜ 未定细节不得自行补全。
+> ✅ v0.63 已确认流程规则；🟡 当前低保真表现时间可在后续动画阶段调整，不代表永久美术规格。
 
 正式流程：
 
-打开游戏
-→ HOME
-→ 点击开始
-→ MATCHING（约 2–3 秒假匹配）
-→ VS（双方资料碰撞约 2 秒）
-→ 战斗加载
-→ INTRO / 乐入场
-→ RUNNING
-→ RESULT
-→ 段位/金币/统计
-→ 再来一局 或 HOME
+HOME → HOME内MATCHING → VS → INTRO → RUNNING → RESULT。
 
-计划正式状态：
+- HOME点击开始对战后原主页保持可见并锁定操作，在原主页内展示匹配反馈。
+- 每次匹配生成新的OpponentProfile和不可变BattleSetup；双方loadout快照用于新Match。
+- VS双方资料从上下滑入、停留，再向上下散开露出战场。Match从VS散开开始计时（Match time 0），不是从网页加载或匹配开始计时。
+- INTRO期间乐沿本方路径入场，双方表现独立且文字正向。玩家已经可以来财、拖放、合并、铲地。不增加3、2、1倒计时。
+- 当前首怪为Match time 9500ms，仍使用正式无限压力时间轴；不得恢复旧清场推进或20波结束规则。
+- 任一方HP归零，在双方完成同一个fixed logic step后判定结果；同一步双方归零为draw。RESULT立即冻结双方Timeline、Combat、AI、Farmer、道具CD、经济和乐表现，同时立即禁止全部战场操作。
+- 最终战场画面保留约400ms，由仍活动的结果overlay Scene Clock负责延迟；不是继续运行Match或等待已暂停GameScene的时钟。
+- 结果面板在暗色遮罩上显示胜利/失败/平局、第X波、击杀数、成功来财次数、剩余美金。只在胜利时显示玩家自己的剩余乐HP；失败/平局不显示HP或对手统计。
+- Match-local不可变ResultSnapshot包含result（win/lose/draw）、waveReached、playerKills、playerSuccessfulRecruits、playerRemainingMoney、playerRemainingHp、opponentRemainingHp。统计包含最后一个逻辑步的kill/leak及即时奖励；波次为timeline.wave（实际已开始的最高波次，从1开始）。击杀直接累计本方正式kill事件，不从收入/EXP反推；来财次数和余额使用现有RecruitmentState。
+- 再来一局：结束overlay与旧GameScene、销毁旧Match，进入同一HOME式匹配/VS/INTRO流程，生成新对手、Side、AI和Timeline。只保留玩家loadout，所有本局统计和运行状态归零。
+- 返回主页：结束overlay与旧GameScene、销毁旧Match，恢复正常HOME的开始对战/道具按钮，不自动匹配；保留玩家装备配置。
+- 退出必须清理旧timer/tween、update/input监听、LeIntroView、结果UI绑定和运行状态，旧回调不能污染新局。战斗暂停菜单只保留继续游戏/返回主页，不与RESULT同时存在。
+- 当前结果只总结这一局，不持久化，不奖励金币，不显示段位、MVP、伤害榜或对手统计。持久化与金币属于后续版本。
 
-HOME
-MATCHING
-VS
-INTRO
-RUNNING
-RESULT
-
-不做：
-3、2、1、GO 倒计时。
-
-乐入场：
-大约 7 秒。
-
-入场期间玩家已经可以：
-- recruit
-- drag
-- merge
-- shovel
-
-不是强制不可操作动画。
-
-正式第一批 enemy：
-目标大约 scene start +9～10 秒。
-
-因此当前 v0.60 的 2 秒首怪绝不是最终规则。
-
-乐未来可以有随机有趣小动作，
-双方独立随机，
-不需要 anti-repeat。
-具体 Tween/表现以后做。
-
-“再来一局”：
-进入新的 Match，
-生成新的 fake opponent，
-不是保留上一名对手。
+当前可调整的低保真presentation参数：匹配2–3秒、VS滑入400ms、停留1400ms、散开500ms、乐入场7000ms、结果面板延迟400ms。它们用于当前已验收体验，未来视觉迭代可单独调整；流程时钟归属与清理规则仍需保持。首怪9500ms属于当前战斗节奏，本阶段没有重新调整。
 
 ## 二十五、Pause
 

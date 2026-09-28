@@ -1,29 +1,34 @@
 import Phaser from 'phaser';
 import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
+import { resultPresentation, type ResultSnapshot } from '../match/ResultSnapshot';
 
 export interface PveOverlayData {
   mode: 'paused' | 'victory' | 'defeat' | 'draw';
-  health: number;
+  health?: number;
+  snapshot?: ResultSnapshot;
   loadout?: Loadout;
 }
 
 // 开发期暂停/结算界面；Match已在逻辑层统一冻结双方，场景暂停只负责表现。
 export class PveOverlayScene extends Phaser.Scene {
+  resultSnapshot: ResultSnapshot | null = null;
   constructor() {
     super('PveOverlayScene');
   }
 
   create(data: PveOverlayData): void {
-    this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.65).setInteractive();
-    const paused = data.mode === 'paused';
-    const title = label(this, 375, 565, paused ? '已暂停' : data.mode === 'victory' ? '胜利' : data.mode === 'draw' ? '平局' : '失败', 58, '#fffaf0');
-    if (data.mode === 'victory') {
-      label(this, 375, 655, `乐：${'♥'.repeat(data.health)}`, 30, '#fffaf0');
+    this.resultSnapshot = null;
+    if (data.mode !== 'paused') {
+      this.showResult(data);
+      return;
     }
+    this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.65).setInteractive();
+    const title = label(this, 375, 565, '已暂停', 58, '#fffaf0');
+
     const button = this.add.rectangle(375, 765, 330, 86, 0x697e67)
       .setInteractive({ useHandCursor: true });
-    const buttonText = label(this, 375, 765, paused ? '继续游戏' : '再来一局', 30, '#fffaf0');
+    const buttonText = label(this, 375, 765, '继续游戏', 30, '#fffaf0');
     let handled = false;
     let confirming = false;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { handled = true; confirming = false; });
@@ -34,42 +39,73 @@ export class PveOverlayScene extends Phaser.Scene {
       this.scene.stop('GameScene');
       this.scene.start('ReadyScene', { loadout: data.loadout, autoMatch: rematch });
     };
-    if (paused) {
-      const homeButton = this.add.rectangle(375, 875, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
-      const homeText = label(this, 375, 875, '返回主页', 30, '#fffaf0');
-      const menu = [[button, buttonText], [homeButton, homeText]] as const;
-      const confirmAction = ((_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
-        event.stopPropagation();
-        if (handled || confirming) return;
-        confirming = true;
-        title.setText('确定返回主页？');
-        for (const [control, text] of menu) { control.setVisible(false).disableInteractive(); text.setVisible(false); }
-        const warning = label(this, 375, 655, '当前对局进度将丢失。', 26, '#fffaf0');
-        const cancelButton = this.add.rectangle(220, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
-        const cancelText = label(this, 220, 765, '取消', 28, '#fffaf0');
-        const confirmButton = this.add.rectangle(530, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
-        const confirmText = label(this, 530, 765, '返回主页', 28, '#fffaf0');
-        cancelButton.on('pointerdown', () => {
-          if (handled || !confirming) return;
-          confirming = false;
-          [warning,cancelButton,cancelText,confirmButton,confirmText].forEach(object=>object.destroy());
-          title.setText('已暂停');
-          for (const [control, text] of menu) { control.setVisible(true).setInteractive({ useHandCursor: true }); text.setVisible(true); }
-        });
-        confirmButton.on('pointerdown', () => { if (confirming) leaveMatch(false); });
+    const homeButton = this.add.rectangle(375, 875, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
+    const homeText = label(this, 375, 875, '返回主页', 30, '#fffaf0');
+    const menu = [[button, buttonText], [homeButton, homeText]] as const;
+    const confirmAction = ((_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      if (handled || confirming) return;
+      confirming = true;
+      title.setText('确定返回主页？');
+      for (const [control, text] of menu) { control.setVisible(false).disableInteractive(); text.setVisible(false); }
+      const warning = label(this, 375, 655, '当前对局进度将丢失。', 26, '#fffaf0');
+      const cancelButton = this.add.rectangle(220, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
+      const cancelText = label(this, 220, 765, '取消', 28, '#fffaf0');
+      const confirmButton = this.add.rectangle(530, 765, 250, 86, 0x697e67).setInteractive({ useHandCursor: true });
+      const confirmText = label(this, 530, 765, '返回主页', 28, '#fffaf0');
+      cancelButton.on('pointerdown', () => {
+        if (handled || !confirming) return;
+        confirming = false;
+        [warning,cancelButton,cancelText,confirmButton,confirmText].forEach(object=>object.destroy());
+        title.setText('已暂停');
+        for (const [control, text] of menu) { control.setVisible(true).setInteractive({ useHandCursor: true }); text.setVisible(true); }
       });
-      homeButton.on('pointerdown', confirmAction);
-    }
+      confirmButton.on('pointerdown', () => { if (confirming) leaveMatch(false); });
+    });
+    homeButton.on('pointerdown', confirmAction);
     button.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
       if (handled || confirming) return;
-      if (paused) {
-        handled = true;
-        this.scene.resume('GameScene');
-        this.scene.stop();
-      } else {
-        leaveMatch(true);
-      }
+      handled = true;
+      this.scene.resume('GameScene');
+      this.scene.stop();
+    });
+  }
+
+  private showResult(data: PveOverlayData): void {
+    if (!data.snapshot) throw new Error('Result requires a completed Match snapshot');
+    const snapshot = data.snapshot;
+    this.resultSnapshot = snapshot;
+    let handled = false;
+    // 立即拦截输入，但400ms内不改变最终战场画面。
+    this.add.rectangle(375, 667, 750, 1334, 0x353d36, 0).setInteractive();
+    const leave = (rematch: boolean): void => {
+      if (handled) return;
+      handled = true;
+      this.scene.stop('GameScene');
+      this.scene.start('ReadyScene', { loadout: data.loadout, autoMatch: rematch });
+    };
+    const timer = this.time.delayedCall(resultPresentation.delayMs, () => {
+      if (handled) return;
+      this.add.rectangle(375, 667, 750, 1334, 0x353d36, 0.65);
+      this.add.rectangle(375, 620, 600, 730, 0xf5f0e5);
+      label(this, 375, 350, snapshot.result === 'win' ? '胜利' : snapshot.result === 'lose' ? '失败' : '平局', 58);
+      label(this, 375, 440, `第 ${snapshot.waveReached} 波`, 30);
+      label(this, 375, 500, `击杀 ${snapshot.playerKills}`, 30);
+      label(this, 375, 560, `来财 ${snapshot.playerSuccessfulRecruits} 次`, 30);
+      label(this, 375, 620, `剩余 $${snapshot.playerRemainingMoney}`, 30);
+      if (snapshot.result === 'win') label(this, 375, 680, `乐：${'♥'.repeat(snapshot.playerRemainingHp)}`, 30);
+      const rematch = this.add.rectangle(375, 765, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
+      label(this, 375, 765, '再来一局', 30, '#fffaf0');
+      const home = this.add.rectangle(375, 875, 250, 68, 0xe1ddcf).setInteractive({ useHandCursor: true });
+      label(this, 375, 875, '返回主页', 26);
+      rematch.on('pointerdown', () => leave(true));
+      home.on('pointerdown', () => leave(false));
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      handled = true;
+      timer.remove(false);
+      this.resultSnapshot = null;
     });
   }
 }
