@@ -17,6 +17,8 @@ const { waveConfig }=await import('../src/config/waves.ts');
 const { createInventory,setEquipped,createLoadout }=await import('../src/systems/equipment.ts');
 const { recruitmentPool }=await import('../src/systems/recruitment.ts');
 const { tileBonusConfig }=await import('../src/config/tileBonuses.ts');
+const { currentStateSnapshot, currentStateScore, emptyActionValue, placementValue }=await import('../src/controllers/aiEvaluation.ts');
+const { getCombatStats }=await import('../src/config/combat.ts');
 const slot=index=>({kind:'slot',index}),tile=index=>({kind:'tile',index});
 const letter=(type,level=1)=>({kind:'heroLetter',type,level});
 function kit(...ids){const inventory=createInventory();ids.forEach(id=>assert.equal(setEquipped(inventory,id,true),true));return createLoadout(inventory);}
@@ -172,7 +174,7 @@ test('destroy/restart invalidates old AI pending and creates clean new AI; no ti
  const m=quiet(),old=new AIController(m.topSide);m.bindController('top',old);advance(m,300);m.destroy();
  const fresh=quiet(),ai=aiFor(fresh.topSide);fresh.bindController('top',ai);
  old.update(10000);m.update(10000);assert.equal(fresh.topSide.recruitment.money,20);assert.equal(fresh.topSide.recruitment.successfulRecruits,0);
- assert.equal(old.pending,null);advance(fresh,1190);assert.equal(fresh.topSide.recruitment.successfulRecruits,0);
+ assert.equal(old.pending,null);advance(fresh,aiConfig.timing.initialReactionMs.min-10);assert.equal(fresh.topSide.recruitment.successfulRecruits,0);
  advance(fresh,10);assert.equal(fresh.topSide.recruitment.successfulRecruits,1);
 });
 test('AI operations cannot change bottom wallet/holding/board/Farmer/EXP/item runtime',()=>{
@@ -192,15 +194,15 @@ test('AI has no bottom/Match/timeline access, future RNG probes, direct state wr
 test('AI timing ranges are centralized and replace the former fixed 600ms delay',()=>{
  assert.equal('actionDelayMs' in aiConfig,false);
  assert.deepEqual(aiConfig.timing,{
-  initialReactionMs:{min:1200,max:2200},ordinaryActionMs:{min:800,max:1600},
-  recruitObservationMs:{min:1200,max:2200},shovelActionMs:{min:1000,max:1900},
+  initialReactionMs:{min:900,max:1600},ordinaryActionMs:{min:800,max:1600},
+  recruitObservationMs:{min:800,max:1500},shovelActionMs:{min:1000,max:1900},
  });
  assert.deepEqual(aiConfig.scores,{collect:140,merge:120,hero:110,item:95,unlock:80,
   deploy:60,letter:35,preparePair:15,improvePosition:25,sell:20,recruit:10,proximity:5});
 });
 
 test('initial reaction delay samples the inclusive configured range before first action',()=>{
- for(const [sample,expected] of [[0,1200],[.9999,2200]]){
+ for(const [sample,expected] of [[0,900],[.9999,1600]]){
   const s=side(),calls=spy(s),ai=new AIController(s,()=>sample);
   ai.update(1);assert.equal(ai.pending.remainingMs,expected-1);assert.equal(calls.length,0);
   run(ai,expected-2);assert.equal(calls.length,0);run(ai,1);
@@ -235,6 +237,8 @@ test('shovel candidate receives the dedicated slower timing range',()=>{
  const s=side(),values=[0,.25],ai=new AIController(s,()=>values.shift()??0);s.recruitment.money=0;
  s.recruitment.slots[0]={type:'刀',level:1};s.recruitment.slots[1]={type:'刀',level:1};s.recruitment.slots[2]='铲';
  ai.update(1);run(ai,aiConfig.timing.initialReactionMs.min-1);assert.equal(s.recruitment.slots[2],'铲');
+ // 已处理普通兵并填满开放土地，铲地现在有实际空间价值。
+ s.board.tiles.forEach(t=>{if(t.unlocked)t.unit={type:'弓',level:5};});s.recruitment.slots[1]=null;
  ai.update(1);assert.equal(ai.pending.candidate.action.action,'unlock');
  assert.equal(ai.pending.remainingMs,aiConfig.timing.shovelActionMs.min
   +Math.floor(.25*(aiConfig.timing.shovelActionMs.max-aiConfig.timing.shovelActionMs.min+1))-1);
@@ -242,7 +246,7 @@ test('shovel candidate receives the dedicated slower timing range',()=>{
 
 test('pause freezes the exact pending remainder; resume continues without a new sample',()=>{
  const s=side(),samples=[0,.8],ai=new AIController(s,()=>samples.shift()??.8),calls=spy(s);
- ai.update(1);run(ai,399);const remaining=ai.pending.remainingMs;assert.equal(remaining,800);
+ ai.update(1);run(ai,399);const remaining=ai.pending.remainingMs;assert.equal(remaining,aiConfig.timing.initialReactionMs.min-400);
  s.pause();ai.update(30000);assert.equal(ai.pending.remainingMs,remaining);assert.equal(calls.length,0);
  s.resume();run(ai,remaining-1);assert.equal(calls.length,0);ai.update(1);
  assert.equal(calls[0].name,'recruit');assert.equal(samples.length,1);
@@ -258,9 +262,168 @@ test('timing RNG is independent of recruit RNG and each new pending action takes
   ai.update(1);assert.equal(timingDraws,2);
   const firstObservation=ai.pending.remainingMs;
   assert.equal(firstObservation,aiConfig.timing.recruitObservationMs.min-1);
-  // 该间隔内再执行一次来财，随后下一张新 pending 再独立抽样。
+  // 观察后先处理当前牌，下一张新 pending 再独立抽样。
   run(ai,firstObservation);assert.equal(s.recruitment.successfulRecruits,1);
   ai.update(1);assert.equal(timingDraws,3);
   assert.ok(ai.pending.remainingMs>=aiConfig.timing.ordinaryActionMs.min-1);
  }finally{Math.random=ruleRandom;}
+});
+
+const candidates=s=>aiFor(s).candidates();
+const best=s=>candidates(s).sort((a,b)=>b.score-a.score)[0];
+function pressure(s,progress=0){const e=s.combat.spawnEnemy();e.distance=s.combat.path.totalLength*progress;return e;}
+const farmer=()=>({kind:'farmer',type:'农',level:1});
+
+test('current-state snapshot reads living enemies, progress, own defense, holding and free space without mutation',()=>{
+ const s=side();pressure(s,.8);const dead=pressure(s,.95);dead.hp=0;
+ s.recruitment.slots[0]={type:'刀',level:1};s.recruitment.slots[1]=farmer();
+ const before=JSON.stringify({board:s.board,state:s.recruitment,enemies:s.combat.enemies});
+ const raw=candidates(s),state=currentStateSnapshot(s,raw.map(c=>c.value),false);
+ assert.equal(state.livingEnemyCount,1);assert.equal(state.enemyProgress,.8);
+ assert.equal(state.deployedAttackers,0);assert.equal(state.activeHeroes,0);assert.equal(state.readiness,'LOW');
+ assert.equal(state.occupiedHolding,2);assert.equal(state.emptyTiles,6);assert.equal(state.hasCombatDeployment,true);
+ assert.notEqual(state.holding,s.recruitment.slots);assert.equal(JSON.stringify({board:s.board,state:s.recruitment,enemies:s.combat.enemies}),before);
+});
+
+test('empty defense with enemies prioritizes immediate ordinary deployment over Farmer, sleeping letter and shovel',()=>{
+ const s=side('farmer');s.recruitment.money=0;pressure(s);
+ s.recruitment.slots=[farmer(),farmer(),letter('小'),letter('六'),{type:'刀',level:1}];
+ const chosen=best(s);assert.equal(chosen.action.kind,'drop');assert.equal(chosen.action.source.index,4);
+ assert.equal(chosen.value.combat,'deploy');
+ const calls=spy(s);run(aiFor(s),aiConfig.timing.initialReactionMs.min);
+ assert.equal(calls[0].result,'move');assert.equal(calls[0].args[0].index,4);
+ assert.ok(s.board.tiles.some(t=>t.unit?.type==='刀'));
+});
+
+test('completing a currently legal hero competes as immediate combat rather than sleeping-letter deployment',()=>{
+ const s=side();s.recruitment.money=0;pressure(s);
+ s.recruitment.slots[0]=letter('小');s.drop(slot(0),tile(0));
+ s.recruitment.slots=[letter('美'),farmer(),{type:'刀',level:1},null,null];
+ const chosen=best(s);assert.equal(chosen.value.combat,'hero');assert.equal(chosen.action.source.index,0);
+ run(aiFor(s),aiConfig.timing.initialReactionMs.min);assert.equal(s.heroes.links.size,1);
+ assert.equal([...s.heroes.links.values()][0].heroId,'xiaomei');
+});
+
+test('a lone sleeping letter does not count as an attacker or outrank a combat unit under current pressure',()=>{
+ const s=side();pressure(s,.7);s.recruitment.slots=[letter('阿'),{type:'弓',level:1},null,null,null];
+ s.drop(slot(0),tile(0));s.recruitment.slots[0]=letter('六');
+ const raw=candidates(s),state=currentStateSnapshot(s,raw.map(c=>c.value),false);
+ assert.equal(state.deployedAttackers,0);assert.equal(state.activeHeroes,0);
+ assert.equal(best(s).action.source.index,1);
+});
+
+test('established defense restores normal construction value instead of permanently suppressing Farmer or hero preparation',()=>{
+ const s=side();pressure(s);s.recruitment.money=0;
+ s.recruitment.slots=[{type:'刀',level:2},{type:'弓',level:2},null,null,null];s.drop(slot(0),tile(0));s.drop(slot(1),tile(2));
+ s.recruitment.slots=[farmer(),letter('阿'),null,null,null];
+ const raw=candidates(s),state=currentStateSnapshot(s,raw.map(c=>c.value),false);
+ assert.equal(state.readiness,'OK');assert.equal(best(s).action.source.index,0);
+ const construction={...emptyActionValue(),construction:true};
+ const calmScore=currentStateScore(60,'drop',construction,state);
+ assert.equal(calmScore,60);assert.ok(calmScore>currentStateScore(60,'drop',construction,{...state,readiness:'LOW'}));
+});
+
+test('shovel loses to immediate deployment with free land, but gains value when open land is scarce',()=>{
+ const s=side();s.recruitment.money=0;pressure(s);s.recruitment.slots=['铲',{type:'刀',level:1},null,null,null];
+ assert.equal(best(s).value.combat,'deploy');
+ const early=candidates(s).find(c=>c.value.unlock).score;
+ s.board.tiles.forEach(t=>{if(t.unlocked)t.unit=farmer();});
+ const chosen=best(s);assert.equal(chosen.action.action,'unlock');assert.ok(chosen.score>early);
+});
+
+test('a deployed combat merge gains more immediate value than a holding-only or Farmer merge',()=>{
+ const s=side();s.recruitment.money=0;pressure(s);
+ s.recruitment.slots=[{type:'刀',level:1},{type:'刀',level:1},farmer(),farmer(),null];s.drop(slot(0),tile(0));
+ const raw=candidates(s),battle=raw.find(c=>c.value.combat==='merge'),economy=raw.find(c=>c.action.action==='merge'&&!c.value.combat);
+ assert.ok(battle.score>economy.score);assert.equal(best(s).value.combat,'merge');
+ run(aiFor(s),aiConfig.timing.initialReactionMs.min);assert.equal(s.board.tiles[0].unit.level,2);
+});
+
+test('holding combat merge remains worthwhile without classifying it as a deployed attacker',()=>{
+ const s=side();pressure(s);s.recruitment.slots=[{type:'枪',level:1},{type:'枪',level:1},null,null,null];
+ const raw=candidates(s);assert.ok(raw.some(c=>c.value.combat==='holdingMerge'));
+ const state=currentStateSnapshot(s,raw.map(c=>c.value),true);assert.equal(state.deployedAttackers,0);assert.equal(state.hasImmediateMerge,true);
+});
+
+test('near-full holding rewards legal space release using current contents only',()=>{
+ const s=side();s.recruitment.money=0;s.recruitment.slots=[{type:'刀',level:1},letter('阿'),farmer(),null,null];
+ const low=candidates(s).find(c=>c.action.source?.index===0&&c.action.target?.index===0&&c.action.target?.kind==='tile');
+ s.recruitment.slots[3]='铲';const high=candidates(s).find(c=>c.action.source?.index===0&&c.action.target?.index===0&&c.action.target?.kind==='tile');
+ assert.ok(Math.abs(high.score-low.score-aiConfig.evaluation.space.release)<1e-8);
+});
+
+test('useful current merge is processed before recruit; empty or exhausted holding can refresh with real money',()=>{
+ const s=side();s.recruitment.money=100;s.recruitment.slots=[{type:'刀',level:1},{type:'刀',level:1},null,null,null];
+ assert.equal(best(s).action.action,'merge');
+ const empty=side();assert.equal(best(empty).action.kind,'recruit');
+ empty.board.tiles.forEach(t=>{t.unlocked=true;t.unit={type:'弓',level:5};});
+ empty.recruitment.slots=Array.from({length:5},()=>({type:'弓',level:5}));
+ assert.equal(best(empty).action.kind,'recruit');
+ const calls=spy(empty);run(aiFor(empty),aiConfig.timing.initialReactionMs.min);assert.equal(calls[0].name,'recruit');
+ assert.equal(empty.recruitment.money,10);assert.equal(empty.recruitment.nextCost,12);
+});
+
+test('current enemy progress and count increase pressure without changing action timing or game stats',()=>{
+ const s=side();s.recruitment.slots[0]={type:'刀',level:1};pressure(s);
+ const score=best(s).score;s.combat.enemies[0].distance=s.combat.path.totalLength*.8;
+ assert.ok(best(s).score>score);
+ for(let i=0;i<4;i++)pressure(s,.8);
+ const raw=candidates(s),state=currentStateSnapshot(s,raw.map(c=>c.value),false);
+ assert.equal(state.livingEnemyCount,5);assert.equal(state.readiness,'LOW');
+ const ai=aiFor(s);ai.update(1);assert.equal(ai.pending.remainingMs,aiConfig.timing.initialReactionMs.min-1);
+ assert.equal(s.combat.enemies[0].maxHp,90);
+});
+
+test('Farmer pending reward stays ahead of current combat construction and is collected via shared operation',()=>{
+ const s=side('farmer');s.recruitment.money=0;s.recruitment.slots[0]=farmer();s.drop(slot(0),tile(2));s.updateItems(12000);
+ pressure(s,.8);s.recruitment.slots=[{type:'刀',level:1},letter('小'),letter('美'),null,null];
+ assert.equal(best(s).action.kind,'collect');const calls=spy(s);run(aiFor(s),aiConfig.timing.initialReactionMs.min);
+ assert.equal(calls[0].name,'collectFarmerReward');assert.equal(s.recruitment.money,1);
+});
+
+test('placement preferences are small, range-aware and do not override immediate combat urgency',()=>{
+ for(const type of ['刀','枪','弓','骑']){
+  const stats=getCombatStats({type,level:1});
+  const near=placementValue(testMap,testMap.cells[0],stats.range,type,[]);
+  const far=placementValue(testMap,{x:10000,y:10000},stats.range,type,[]);
+  assert.ok(near>far);assert.ok(near<=aiConfig.evaluation.placement.maximumBonus);assert.equal(far,0);
+ }
+});
+
+test('ordinary relocation requires monotonic path improvement so it cannot bounce A to B then B to A',()=>{
+ const s=side();s.recruitment.money=0;s.board.tiles[14].unlocked=true;
+ s.recruitment.slots[0]={type:'刀',level:1};s.drop(slot(0),tile(14));const ai=aiFor(s),calls=spy(s);
+ run(ai,aiConfig.timing.initialReactionMs.min);
+ const moves=calls.filter(c=>c.result==='move');assert.equal(moves.length,1);
+ assert.notEqual(moves[0].args[1].index,14);assert.ok(!candidates(s).some(c=>c.action.target?.kind==='tile'&&c.action.target.index===14));
+});
+
+test('current-state evaluation never reads other side or future state, and all successful choices use bound operations',()=>{
+ const source=readFileSync(new URL('../src/controllers/aiEvaluation.ts',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/\.bottomSide|\.timeline|Math\.random\s*\(|spawnEnemy\s*\(|\.money\s*=|\.unit\s*=/);
+ const m=quiet();m.topSide.recruitment.slots=[farmer(),letter('阿'),{type:'枪',level:1},null,null];pressure(m.topSide,.6);
+ const before=JSON.stringify({state:m.bottomSide.recruitment,board:m.bottomSide.board,enemies:m.bottomSide.combat.enemies});
+ const calls=spy(m.topSide);run(aiFor(m.topSide),aiConfig.timing.initialReactionMs.min);
+ assert.equal(calls[0].name,'drop');assert.equal(calls[0].args[0].index,2);
+ assert.equal(JSON.stringify({state:m.bottomSide.recruitment,board:m.bottomSide.board,enemies:m.bottomSide.combat.enemies}),before);
+});
+
+test('ordinary units outside all path coverage do not falsely count as an established defense',()=>{
+ const s=side();pressure(s);
+ const far=testMap.cells.map((point,index)=>({point,index})).filter(({point})=>
+  placementValue(testMap,point,getCombatStats({type:'刀',level:1}).range,'刀',[])===0).slice(0,2);
+ assert.equal(far.length,2);
+ far.forEach(({index})=>{s.board.tiles[index].unlocked=true;s.board.tiles[index].unit={type:'刀',level:1};});
+ const state=currentStateSnapshot(s,[],false);
+ assert.equal(state.deployedAttackers,2);assert.equal(state.effectiveAttackers,0);assert.equal(state.readiness,'LOW');
+});
+
+test('a deployment unable to reach the path does not receive the immediate-defense bonus',()=>{
+ const s=side();pressure(s);s.recruitment.slots[0]={type:'刀',level:1};
+ const far=testMap.cells.findIndex(point=>placementValue(testMap,point,getCombatStats({type:'刀',level:1}).range,'刀',[])===0);
+ s.board.tiles[far].unlocked=true;
+ const chosen=candidates(s).find(c=>c.action.source?.kind==='slot'&&c.action.source.index===0
+  &&c.action.target?.kind==='tile'&&c.action.target.index===far);
+ assert.equal(chosen.value.combat,null);assert.ok(chosen.score<best(s).score);
+ assert.equal(best(s).value.combat,'deploy');
 });

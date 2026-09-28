@@ -1,12 +1,22 @@
-// DEVELOPMENT / TEMPORARY: Basic Live AI验证参数，不是正式匹配、人格或平衡规则。
+// DEVELOPMENT / TEMPORARY: 当前状态AI测试参数，不是正式匹配、人格或平衡规则。
 export const aiConfig = {
   timing: {
-    initialReactionMs: { min: 1200, max: 2200 },
+    initialReactionMs: { min: 900, max: 1600 },
     ordinaryActionMs: { min: 800, max: 1600 },
-    recruitObservationMs: { min: 1200, max: 2200 },
+    recruitObservationMs: { min: 800, max: 1500 },
     shovelActionMs: { min: 1000, max: 1900 },
   },
   minimumMoveDistanceCells: 0.5,
+  evaluation: {
+    defense: { minimumAttackers: 2, heroWeight: 1.5, enemiesPerExtraAttacker: 4,
+      advancedProgress: 0.65, advancedExtraAttackers: 1 },
+    urgency: { combat: 100, progress: 20, enemyCount: 2, maximumEnemyBonus: 10,
+      holdingMerge: 30, collect: 110, constructionPenalty: 45, economicMergePenalty: 70 },
+    space: { holdingThreshold: 4, release: 16, scarceEmptyTiles: 1,
+      neededUnlock: 45, unnecessaryUnlockPenalty: 55 },
+    recruit: { processedHoldingLimit: 1, refreshBonus: 20, usefulActionPenalty: 20 },
+    placement: { maximumBonus: 8, spearStraightWeight: 1, cavalryCornerWeight: 0.5 },
+  },
   scores: { collect: 140, merge: 120, hero: 110, item: 95, unlock: 80,
     deploy: 60, letter: 35, preparePair: 15, improvePosition: 25, sell: 20, recruit: 10,
     proximity: 5 },

@@ -6,13 +6,18 @@ import type { DragItem } from '../systems/board';
 import { isUnit, isHeroLetter } from '../systems/items';
 import type { Farmer } from '../systems/items';
 import { getHeroLinks } from '../systems/heroActivation';
+import { getCombatStats } from '../config/combat';
+import { getHeroStats } from '../config/heroes';
+import { applyTileBonuses } from '../combat/tileBonuses';
+import { currentStateSnapshot, currentStateScore, emptyActionValue, pathDistance, placementValue } from './aiEvaluation';
+import type { ActionValue } from './aiEvaluation';
 
 type AIAction =
   | { kind: 'recruit' }
   | { kind: 'drop'; source: UnitPosition; target: UnitPosition; action: DropAction }
   | { kind: 'item'; index: number; target: UnitPosition }
   | { kind: 'collect'; farmer: Farmer; rewardId: number };
-interface Candidate { action: AIAction; score: number }
+interface Candidate { action: AIAction; score: number; value: ActionValue }
 interface Pending {
   candidate: Candidate;
   remainingMs: number;
@@ -103,7 +108,7 @@ export class AIController {
     const protectedPosition = (p: UnitPosition) => p.kind === 'tile' && protectedTiles.has(p.index);
     const candidates: Candidate[] = [];
     for (const [farmer, state] of side.farmers.states) if (state.reward) {
-      candidates.push({ action: { kind: 'collect', farmer, rewardId: state.reward.id }, score: scores.collect });
+      candidates.push({ action: { kind: 'collect', farmer, rewardId: state.reward.id }, score: scores.collect, value: emptyActionValue() });
     }
     for (const source of positions) {
       const item = side.itemAt(source);
@@ -113,26 +118,68 @@ export class AIController {
         if (action === 'invalid' || (protectedPosition(target) && action !== 'merge')) continue;
         const occupant = side.itemAt(target);
         let score = 0;
-        if (action === 'merge') score = scores.merge;
-        else if (action === 'unlock') score = scores.unlock + this.proximity(target.index);
+        const value = emptyActionValue();
+        value.freesHolding = source.kind === 'slot' && (action === 'merge' || action === 'unlock'
+          || action === 'move' && target.kind === 'tile');
+        if (action === 'merge') {
+          score = scores.merge;
+          value.combat = isUnit(item) ? target.kind === 'tile' ? 'merge' : 'holdingMerge'
+            : protectedPosition(target) ? 'merge' : null;
+          if (isUnit(item) && isUnit(occupant) && target.kind === 'tile') {
+            const stats = applyTileBonuses(getCombatStats({ ...occupant, level: occupant.level + 1 }), side.board, [target.index]);
+            if (this.pathDistance(target.index) > stats.range) {
+              value.combat = null;
+              value.construction = true;
+            }
+          }
+        }
+        else if (action === 'unlock') {
+          score = scores.unlock + this.proximity(target.index);
+          value.unlock = true;
+          value.construction = true;
+        }
         else if (target.kind === 'tile' && item !== '铲') {
           // 仅为无副作用查询构造move/swap后的占格投影；激活判断复用正式getHeroLinks。
           const preview = { tiles: side.board.tiles.map((tile, index) => ({ ...tile,
             unit: index === target.index ? item
               : source.kind === 'tile' && index === source.index ? (action === 'swap' && occupant !== '铲' ? occupant : null) : tile.unit })) };
           const formed = getHeroLinks(side.combat.map, preview, null, links)
-            .some(link => !links.some(old => old.key === link.key && old.left === link.left && old.right === link.right));
-          if (formed) score = scores.hero;
+            .find(link => !links.some(old => old.key === link.key && old.left === link.left && old.right === link.right));
+          if (formed) {
+            score = scores.hero;
+            value.combat = 'hero';
+            const stats = applyTileBonuses(getHeroStats(Math.max(formed.left.level, formed.right.level)), preview,
+              [formed.leftIndex, formed.rightIndex]);
+            if (pathDistance(side.combat.map, formed.origin) > stats.range) {
+              value.combat = null;
+              value.construction = true;
+            }
+            value.placement = placementValue(side.combat.map, formed.origin, stats.range, 'hero', side.combat.enemies);
+          }
           else if (source.kind === 'slot' && action === 'move') {
             score = (isHeroLetter(item) ? scores.letter : scores.deploy) + this.proximity(target.index);
             if (isHeroLetter(item) && this.hasHoldingPartner(item.type, target.index)) score += scores.preparePair;
+            value.combat = isUnit(item) ? 'deploy' : null;
+            value.construction = !isUnit(item);
           } else if (source.kind === 'slot' && action === 'swap' && isUnit(item) && isUnit(occupant)
-            && item.type === occupant.type && item.level > occupant.level) score = scores.deploy;
+            && item.type === occupant.type && item.level > occupant.level) {
+            score = scores.deploy;
+            value.combat = 'merge';
+          }
           else if (source.kind === 'tile' && action === 'move' && isUnit(item)
             && this.pathDistance(source.index) - this.pathDistance(target.index)
               >= side.combat.map.cellSize * aiConfig.minimumMoveDistanceCells) score = scores.improvePosition;
+          if (isUnit(item) && !formed) {
+            const stats = applyTileBonuses(getCombatStats(item), preview, [target.index]);
+            if (this.pathDistance(target.index) > stats.range && value.combat) {
+              value.combat = null;
+              value.construction = true;
+            }
+            value.placement = placementValue(side.combat.map, side.combat.map.cells[target.index]!, stats.range,
+              item.type, side.combat.enemies);
+          }
         }
-        if (score > 0) candidates.push({ action: { kind: 'drop', source, target, action }, score });
+        if (score > 0) candidates.push({ action: { kind: 'drop', source, target, action }, score, value });
       }
     }
     side.activeItems.slots.forEach((slot, index) => {
@@ -141,11 +188,19 @@ export class AIController {
         // 点金手只在空间紧张时清理备战区；不会为了$1出售正在防守的单位。
         if (slot.id === 'golden_hand' && (target.kind !== 'slot'
           || side.recruitment.slots.some(item => item === null) || side.board.tiles.some(tile => tile.unlocked && !tile.unit))) continue;
-        candidates.push({ action: { kind: 'item', index, target }, score: slot.id === 'golden_hand' ? scores.sell : scores.item });
+        const value = emptyActionValue();
+        value.freesHolding = slot.id === 'golden_hand' && target.kind === 'slot';
+        if (slot.id !== 'golden_hand' && target.kind === 'tile'
+          && (isUnit(side.itemAt(target)) || protectedPosition(target))) value.combat = 'merge';
+        else value.construction = slot.id !== 'golden_hand';
+        candidates.push({ action: { kind: 'item', index, target }, score: slot.id === 'golden_hand' ? scores.sell : scores.item, value });
       }
     });
-    if (side.canRecruit()) candidates.push({ action: { kind: 'recruit' }, score: scores.recruit });
-    return candidates;
+    if (side.canRecruit()) candidates.push({ action: { kind: 'recruit' }, score: scores.recruit, value: emptyActionValue() });
+    const snapshot = currentStateSnapshot(side, candidates.map(candidate => candidate.value),
+      candidates.some(candidate => candidate.action.kind === 'drop' && candidate.action.action === 'merge'));
+    return candidates.map(candidate => ({ ...candidate,
+      score: currentStateScore(candidate.score, candidate.action.kind, candidate.value, snapshot) }));
   }
 
   private hasHoldingPartner(type: string, index: number): boolean {
@@ -164,11 +219,7 @@ export class AIController {
 
   private pathDistance(index: number): number {
     const map = this.side.combat.map, point = map.cells[index]!;
-    return Math.min(...map.path.slice(1).map((end, i) => {
-      const start = map.path[i]!, dx = end.x - start.x, dy = end.y - start.y;
-      const ratio = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy || 1)));
-      return Math.hypot(point.x - start.x - ratio * dx, point.y - start.y - ratio * dy);
-    }));
+    return pathDistance(map, point);
   }
   private proximity(index: number): number {
     return aiConfig.scores.proximity / (1 + this.pathDistance(index) / this.side.combat.map.cellSize);
