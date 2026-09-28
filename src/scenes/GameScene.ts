@@ -14,7 +14,8 @@ import { drawLoadout } from '../ui/loadout';
 import { boardDisplayScene } from '../ui/boardDisplay';
 import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
-import { setupDevTopSide } from '../dev/topSetup';
+import { AIController } from '../controllers/AIController';
+import { createDevelopmentAILoadout } from '../controllers/developmentLoadout';
 
 export class GameScene extends Phaser.Scene {
   match: Match | null = null;
@@ -25,10 +26,10 @@ export class GameScene extends Phaser.Scene {
 
   create(data: { loadout?: Loadout } = {}): void {
     this.input.enabled = true;
-    const match = new Match(testMap, data.loadout);
+    const match = new Match(testMap, data.loadout, createDevelopmentAILoadout());
     this.match = match;
     const { bottomSide, topSide } = match;
-    setupDevTopSide(topSide);
+    match.bindController('top', new AIController(topSide));
     const state = bottomSide.recruitment;
     const loadout = state.loadout;
     const moneyText = label(this, 170, 55, '', 32);

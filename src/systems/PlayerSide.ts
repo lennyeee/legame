@@ -3,9 +3,9 @@ import { waveConfig } from '../config/waves';
 import { passiveEconomy } from '../config/equipment';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { WaveProgress } from '../combat/WaveProgress';
-import { createBoardState, applyDrop } from './board';
+import { createBoardState, applyDrop, getDropAction, getDragItem } from './board';
 import type { UnitPosition, DropAction } from './board';
-import { createRecruitmentState, recruit, hasPassive } from './recruitment';
+import { createRecruitmentState, recruit, hasPassive, recruitmentPrice } from './recruitment';
 import type { Loadout } from './equipment';
 import type { Farmer } from './items';
 import { getHeroProgression } from './heroProgression';
@@ -44,6 +44,15 @@ export class PlayerSide {
 
   recruit(random?: () => number): boolean {
     return this.running && recruit(this.recruitment, random);
+  }
+
+  canRecruit(): boolean { return this.running && this.recruitment.money >= recruitmentPrice(this.recruitment); }
+  itemAt(position: UnitPosition) { return getDragItem(this.board, this.recruitment, position); }
+  dropAction(source: UnitPosition, target: UnitPosition | null): DropAction {
+    return this.running ? getDropAction(this.board, this.recruitment, source, target) : 'invalid';
+  }
+  canUseActiveItem(index: number, target: UnitPosition | null): boolean {
+    return this.running && this.activeItems.canUse(index, this.board, this.recruitment, target);
   }
 
   drop(source: UnitPosition, target: UnitPosition | null, random?: () => number): DropAction {

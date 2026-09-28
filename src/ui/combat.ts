@@ -24,10 +24,12 @@ export class CombatView {
   private readonly heroLevels = new Map<string, Phaser.GameObjects.Text>();
   private skillFlashes: { link: HeroLink; text: Phaser.GameObjects.Text; expires: number }[] = [];
   private readonly projection;
+  private readonly showHeroExp: boolean;
 
   constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation,
     side: DisplaySide = 'bottom') {
     this.projection = boardProjection(battle.map, scene.scale?.width ?? 750, side);
+    this.showHeroExp = side === 'bottom';
     // 血条是阅读方向固定的 HUD，不能随上半场的几何图形一起翻转。
     this.uprightBars = side === 'top' ? scene.add.graphics().setDepth(11) : null;
     this.scene = boardDisplayScene(scene, battle.map, side);
@@ -75,6 +77,7 @@ export class CombatView {
         this.heroLevels.set(link.key, text);
       }
       text.setText(`Lv.${link.level}`);
+      if (!this.showHeroExp) continue;
       const width = this.battle.map.cellSize * 2 - 12;
       const x = link.origin.x - width / 2;
       const y = link.origin.y + this.battle.map.cellSize / 2 - 5;

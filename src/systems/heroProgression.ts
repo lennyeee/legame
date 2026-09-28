@@ -56,6 +56,7 @@ export class HeroProgression {
   }
 
   isActive(link: HeroLink): boolean { return this.links.get(link.key) === link; }
+  hasHaste(heroId: HeroId): boolean { return this.hasteHeroes.has(heroId); }
   grantHaste(heroId: HeroId): boolean {
     if (this.hasteHeroes.has(heroId)) return false;
     this.hasteHeroes.add(heroId);

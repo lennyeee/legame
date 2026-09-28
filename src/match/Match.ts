@@ -10,6 +10,7 @@ import { MatchTimeline } from './MatchTimeline';
 export type SideId = 'bottom' | 'top';
 export type MatchResult = 'bottom' | 'top' | 'draw';
 export interface MatchEvents { bottom: CombatEvent[]; top: CombatEvent[] }
+export interface MatchController { update(deltaMs: number): void; stop(): void; destroy(): void }
 
 // 唯一的双边逻辑时钟。每个固定步先完成双方战斗，再统一判定HP结果。
 export class Match {
@@ -23,6 +24,7 @@ export class Match {
   private accumulator = 0;
   private passiveClock = 0;
   private runtimeElapsedMs = 0;
+  private readonly controllers = new Map<SideId, MatchController>();
 
   constructor(map: BoardMap, bottomLoadout?: Loadout, topLoadout?: Loadout, config: WaveConfig = waveConfig) {
     this.bottomSide = new PlayerSide('bottom', map, bottomLoadout, { automaticWaves: false });
@@ -33,6 +35,12 @@ export class Match {
   }
 
   get running(): boolean { return this.status === 'running'; }
+
+  bindController(id: SideId, controller: MatchController): void {
+    if (this.status === 'ended' || this.status === 'destroyed') { controller.destroy(); return; }
+    this.controllers.get(id)?.destroy();
+    this.controllers.set(id, controller);
+  }
 
   update(deltaMs: number, draggedTile: number | null = null): MatchEvents {
     const events: MatchEvents = { bottom: [], top: [] };
@@ -60,6 +68,7 @@ export class Match {
         this.status = 'ended';
         this.bottomSide.stop();
         this.topSide.stop();
+        for (const controller of this.controllers.values()) controller.stop();
         break;
       }
       // 生产/CD原有接口使用毫秒：派发累计整毫秒差，避免60Hz浮点累加在12秒边界漏一帧。
@@ -74,6 +83,8 @@ export class Match {
         this.bottomSide.tickPassiveSecond();
         this.topSide.tickPassiveSecond();
       }
+      // 双边战斗/结果/计时已处理；AI只使用本局实际逻辑步，不依赖真实时间。
+      for (const controller of this.controllers.values()) controller.update(step);
     }
     return events;
   }
@@ -92,6 +103,8 @@ export class Match {
   destroy(): void {
     this.status = 'destroyed';
     this.accumulator = 0; this.passiveClock = 0; this.runtimeElapsedMs = 0;
+    for (const controller of this.controllers.values()) controller.destroy();
+    this.controllers.clear();
     this.bottomSide.destroy(); this.topSide.destroy();
   }
 }

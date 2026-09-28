@@ -35,6 +35,7 @@ const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { waveConfig } = await import('../src/config/waves.ts');
 const { gameConfig } = await import('../src/config/game.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
+const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
 const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
 const { heroCombat } = await import('../src/config/heroes.ts');
 const { combatConfig } = await import('../src/config/combat.ts');
@@ -169,6 +170,14 @@ function finishMatch(p, win, survivorLeaks=0) {
  p.run(20);
 }
 
+// 渲染测试自己明确布置所需阵容；正式GameScene不再预置单位。
+function topRenderFixture(p) {
+ p.game.match.bindController('top',{update(){},stop(){},destroy(){}});
+ setupDevTopSide(p.game.sides.top);
+ p.run(10);
+ return p;
+}
+
 test('背包详情、装卸返回、单局被动栏及连续重开保留loadout',()=>{
   const p=pve(false);assert.equal(p.text(375,885,p.ready),'道具');p.click(375,885);
   p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,620,p.items),'农民');
@@ -189,7 +198,7 @@ test('背包详情、装卸返回、单局被动栏及连续重开保留loadout'
     assert.equal(p.text(120,1110),'农民');assert.equal(p.text(630,1262),'—');
     for(const x of [80,670])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1018).interactive,true);
     p.run(1000);assert.equal(p.text(170, 55),'$ 20');
-    p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
+    finishMatch(p,false);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
     assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(625, 55),'第 1 波');
   }
   const counts=waveConfig.enemyCounts;
@@ -361,7 +370,7 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
     p.click(75, 55);const casting=p.snapshot();p.run(5000);assert.equal(p.snapshot(),casting);
     p.click(375,765);p.run(500);assert.equal(flashes().length,0);
     combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
-    p.drag([248.4375,574.0625],[183,1018]);p.run(30000);
+    p.drag([248.4375,574.0625],[183,1018]);finishMatch(p,false);
     assert.equal(p.text(375,565,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
     p.click(375,765);assert.equal(flashes().length,0);p.run(10000);assert.equal(flashes().length,0);
   } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
@@ -386,7 +395,7 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       p.click(75, 55);const casting=p.snapshot();p.run(20000);assert.equal(p.snapshot(),casting);
       combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
       p.click(375,765);p.drag([248.4375,574.0625],[183,1018]);p.run(10);assert.equal(flashes().length,0);
-      p.run(60000);assert.equal(p.text(375,565,p.overlay),'失败');
+      finishMatch(p,false);assert.equal(p.text(375,565,p.overlay),'失败');
       const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
       p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
       assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,0);
@@ -851,8 +860,8 @@ test('准备页使用单一灰色背景，保留开始和道具按钮',()=>{
  p.click(375,885);assert.equal(p.objects.has(p.items),true);
 });
 
-test('v0.60-B 两个真实Side独立创建，开发对手棋盘由自身状态动态渲染',()=>{
- const p=pve(),{bottom,top}=p.game.sides;
+test('v0.60-B 两个真实Side独立创建，显式测试阵容由自身状态动态渲染',()=>{
+ const p=topRenderFixture(pve()),{bottom,top}=p.game.sides;
  assert.notEqual(bottom,top);assert.notEqual(bottom.board,top.board);
  assert.notEqual(bottom.recruitment,top.recruitment);
  assert.notEqual(bottom.combat,top.combat);assert.notEqual(bottom.farmers,top.farmers);
@@ -889,7 +898,7 @@ test('v0.60-B 180°仅用于显示：格心、连续路径和文字方向正确�
  assert.equal(upperPath.x,750-lowerPath.x);
  assert.equal(upperPath.y+lowerPath.y,2*(testMap.mirrorY*1.125-103.75));
  assert.equal(top.graphicsTransform().scale,-bottom.graphicsTransform().scale);
- const p=pve();assert.equal(p.game.sides.top.combat.heroLinks[0].heroId,'xiaomei');
+ const p=topRenderFixture(pve());assert.equal(p.game.sides.top.combat.heroLinks[0].heroId,'xiaomei');
  assert.equal(p.game.sides.top.board.tiles[0].unit.type,'小');
  assert.equal(p.game.sides.top.board.tiles[1].unit.type,'美');
  const objects=p.objects.get(p.game);
@@ -899,7 +908,7 @@ test('v0.60-B 180°仅用于显示：格心、连续路径和文字方向正确�
 });
 
 test('v0.60-B 两边同号敌人各归其战斗实例，top没有玩家输入和操作HUD',()=>{
- const p=pve(),{bottom,top}=p.game.sides;
+ const p=topRenderFixture(pve()),{bottom,top}=p.game.sides;
  const bottomEnemy=bottom.combat.spawnEnemy(),topEnemy=top.combat.spawnEnemy();
  assert.ok(topEnemy);assert.notEqual(topEnemy,bottomEnemy);
  bottom.recruitment.slots[0]={type:'刀',level:1};
@@ -932,7 +941,9 @@ test('v0.60-B 暂停冻结两个Side，重开只留下新Side与新棋盘对象'
  p.click(375,875);p.click(530,765);
  assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
  assert.equal(old.top.combat.enemies.length,0);assert.equal(old.bottom.combat.enemies.length,0);
- assert.equal(p.game.sides.top.board.tiles[0].unit.type,'小');
+ assert.equal(p.game.sides.top.board.tiles[0].unit,null);
+ assert.deepEqual(p.game.sides.top.recruitment.slots,Array(5).fill(null));
+ assert.equal(p.game.sides.top.board.tiles.filter(t=>t.unlocked).length,6);
  assert.equal(p.game.sides.bottom.board.tiles[0].unit,null);
  assert.equal(p.game.events.listenerCount('update'),1);
  p.run(10);assert.equal(p.game.time._active.length,0);
@@ -962,4 +973,29 @@ test('v0.60-C 同步漏怪显示平局；旧update回调在重开后不能再运
  const initial=p.snapshot();callbacks.forEach(fn=>fn(20000,250));assert.equal(p.snapshot(),initial);
  assert.equal(fresh.timeline.elapsedMs,0);assert.equal(fresh.bottomSide.recruitment.money,20);
  assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,0);
+});
+
+test('v0.61-A 正式GameScene从空top开局，通过Match延迟招募与动态部署，无开发阵容',()=>{
+ const p=pve(),s=p.game.sides.top;
+ assert.equal(s.recruitment.money,20);assert.deepEqual(s.recruitment.slots,Array(5).fill(null));
+ assert.equal(s.board.tiles.filter(t=>t.unlocked).length,6);assert.ok(s.board.tiles.every(t=>t.unit===null&&t.bonusType==='none'));
+ assert.ok(Object.isFrozen(s.recruitment.loadout));assert.equal(s.recruitment.loadout.active.length,2);
+ assert.ok(s.recruitment.loadout.passive.some(i=>i.id==='farmer'));
+ p.run(590);assert.equal(s.recruitment.successfulRecruits,0);p.run(10);
+ assert.equal(s.recruitment.successfulRecruits,1);assert.equal(s.recruitment.money,10);assert.equal(s.recruitment.nextCost,12);
+ assert.ok(s.recruitment.slots.every(i=>i!==null));
+ assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,0);assert.equal(p.game.sides.bottom.recruitment.money,20);
+});
+
+test('v0.61-A top保持正常武将等级/镜像但隐藏EXP，bottom保留EXP条',()=>{
+ const p=topRenderFixture(pve()),s=p.game.sides.bottom;
+ s.recruitment.slots[0]={kind:'heroLetter',type:'小',level:1};s.recruitment.slots[1]={kind:'heroLetter',type:'美',level:1};
+ s.drop({kind:'slot',index:0},{kind:'tile',index:0});s.drop({kind:'slot',index:1},{kind:'tile',index:1});
+ const bottom=[...s.heroes.links.values()][0],top=[...p.game.sides.top.heroes.links.values()][0];
+ bottom.currentExp=10;top.currentExp=10;p.run(10);
+ const bars=sign=>p.objects.get(p.game).filter(o=>o.kind==='graphics'&&Math.sign(o.scale)===sign)
+  .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[4]===3);
+ assert.equal(bars(-1).length,0);assert.equal(bars(1).length,2);assert.ok(bars(1).some(d=>d[3]>0&&d[3]<138));
+ const point=boardProjection(testMap,750,'top').point({x:top.origin.x,y:top.origin.y+15});
+ assert.equal(p.text(point.x,point.y),'Lv.2');assert.equal(top.currentExp,10);
 });

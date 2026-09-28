@@ -21,10 +21,25 @@ export class ActiveItems {
   ready(index: number): boolean {
     return !this.stopped && activeItemCooldown(this.slots[index]?.id ?? '') !== undefined && this.slots[index]?.remainingMs === 0;
   }
-  use(index: number, board: BoardState, state: RecruitmentState, target: UnitPosition | null): boolean {
+  canUse(index: number, board: BoardState, state: RecruitmentState, target: UnitPosition | null): boolean {
     if (!this.ready(index) || !target) return false;
     const unit = getDragItem(board, state, target);
     if (!unit || unit === '铲') return false;
+    const id = this.slots[index]!.id;
+    if (id === 'golden_hand') return true;
+    if (id === 'haste_edict') {
+      if (isUnit(unit)) return !unit.hasteEnhanced;
+      if (!isHeroLetter(unit) || target.kind !== 'tile') return false;
+      const progression = getHeroProgression(board);
+      const link = [...progression.links.values()].find(link => link.left === unit || link.right === unit);
+      return !!link && !progression.hasHaste(link.heroId);
+    }
+    return unit.level < MAX_LEVEL;
+  }
+  use(index: number, board: BoardState, state: RecruitmentState, target: UnitPosition | null): boolean {
+    if (!this.canUse(index, board, state, target) || !target) return false;
+    const unit = getDragItem(board, state, target)!;
+    if (unit === '铲') return false;
     const id = this.slots[index]!.id;
     if (id === 'golden_hand') {
       if (target.kind === 'slot') state.slots[target.index] = null;
