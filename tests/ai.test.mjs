@@ -13,7 +13,7 @@ const { aiConfig }=await import('../src/config/ai.ts');
 const { PlayerSide }=await import('../src/systems/PlayerSide.ts');
 const { Match }=await import('../src/match/Match.ts');
 const { testMap }=await import('../src/config/maps.ts');
-const { waveConfig }=await import('../src/config/waves.ts');
+const { pressureConfig }=await import('../src/config/pressure.ts');
 const { createInventory,setEquipped,createLoadout }=await import('../src/systems/equipment.ts');
 const { recruitmentPool }=await import('../src/systems/recruitment.ts');
 const { tileBonusConfig }=await import('../src/config/tileBonuses.ts');
@@ -29,7 +29,7 @@ const aiFor=side=>new AIController(side,()=>0);
 function spy(s){const calls=[];for(const name of ['recruit','drop','useActiveItem','collectFarmerReward']){
  const actual=s[name].bind(s);s[name]=(...args)=>{const result=actual(...args);calls.push({name,args,result});return result;};}return calls;}
 function hero(s){s.recruitment.slots[0]=letter('小');s.recruitment.slots[1]=letter('美');s.drop(slot(0),tile(0));s.drop(slot(1),tile(1));return [...s.heroes.links.values()][0];}
-function quiet(loadout){return new Match(testMap,undefined,loadout,{...waveConfig,spawnInterval:1e9});}
+function quiet(loadout){return new Match(testMap,undefined,loadout,{...pressureConfig,firstEnemyDelay:1e9});}
 
 test('live AI creation is a legal empty $20 / five slots / six ordinary open cells',()=>{
  const m=new Match(testMap,undefined,createDevelopmentAILoadout(()=>0));const ai=new AIController(m.topSide);m.bindController('top',ai);
@@ -426,4 +426,14 @@ test('a deployment unable to reach the path does not receive the immediate-defen
   &&c.action.target?.kind==='tile'&&c.action.target.index===far);
  assert.equal(chosen.value.combat,null);assert.ok(chosen.score<best(s).score);
  assert.equal(best(s).value.combat,'deploy');
+});
+
+test('AI operates during the 9.5-second first-enemy delay through normal paid recruitment and deployment',()=>{
+ const m=new Match(testMap),s=m.topSide,calls=spy(s),ai=aiFor(s);m.bindController('top',ai);
+ advance(m,9400);assert.equal(s.combat.enemies.length,0);assert.equal(m.bottomSide.combat.enemies.length,0);
+ assert.ok(calls.some(c=>c.name==='recruit'&&c.result===true));
+ assert.ok(calls.some(c=>c.name==='drop'&&c.result==='move'));
+ assert.equal(s.recruitment.successfulRecruits,1);assert.equal(s.recruitment.money,10);
+ assert.equal(s.recruitment.nextCost,12);
+ assert.equal(m.bottomSide.recruitment.money,20);assert.ok(m.timeline.elapsedMs>=9390);
 });

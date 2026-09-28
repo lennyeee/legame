@@ -32,7 +32,7 @@ const { GameScene } = await import('../src/scenes/GameScene.ts');
 const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
 const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
-const { waveConfig } = await import('../src/config/waves.ts');
+const { pressureConfig, waveStartForWave } = await import('../src/config/pressure.ts');
 const { gameConfig } = await import('../src/config/game.ts');
 const { GAME_VERSION } = await import('../src/config/game.ts');
 const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
@@ -202,11 +202,8 @@ test('背包详情、装卸返回、单局被动栏及连续重开保留loadout'
     finishMatch(p,false);assert.equal(p.text(375,565,p.overlay),'失败');p.click(375,765);
     assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(625, 55),'第 1 波');
   }
-  const counts=waveConfig.enemyCounts;
-  try {
-    finishMatch(p,true);assert.equal(p.text(375,565,p.overlay),'胜利');
-    p.click(375,765);assert.equal(p.text(120,1110),'农民');
-  } finally { waveConfig.enemyCounts=counts; }
+  finishMatch(p,true);assert.equal(p.text(375,565,p.overlay),'胜利');
+  p.click(375,765);assert.equal(p.text(120,1110),'农民');
 });
 
 test('未装备农民开局被动栏为空',()=>{
@@ -248,7 +245,7 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   assert.equal(p.game.time._active.length, 0);
   const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
     .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===15);
-  p.run(990);assert.equal(enemyCircles().length, 0);
+  p.run(pressureConfig.firstEnemyDelay-1010);assert.equal(enemyCircles().length, 0);
   p.run(20);assert.equal(enemyCircles().length, 1);
   const random = Math.random;
   try { Math.random=()=>0;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]); }
@@ -261,7 +258,6 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
 
 test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
   const random = Math.random;
-  const counts = waveConfig.enemyCounts;
   const damage = heroCombat.damage;
   const skillDamage = skillConfigs.xiaomei_barrage.damage;
   try {
@@ -269,7 +265,6 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
     for (const win of [false, true, false]) {
       heroCombat.damage = win ? damage : 1;
       skillConfigs.xiaomei_barrage.damage = win ? skillDamage : 1;
-      waveConfig.enemyCounts = win ? [1] : counts;
       Math.random = () => 15.5 / 20;
       p.click(375, 1158);
       p.drag([183,1018], [164.0625,574.0625]);
@@ -324,7 +319,7 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
       p.run(30000);p.click(375,765);
     }
-  } finally { Math.random=random;waveConfig.enemyCounts=counts;heroCombat.damage=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
+  } finally { Math.random=random;heroCombat.damage=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
 });
 
 test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/重开清理', () => {
@@ -335,7 +330,8 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     Math.random = () => 15.5 / 20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
     Math.random = () => 16.5 / 20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
-    p.run(4500);
+    const expEnemy=p.game.sides.bottom.combat.spawnEnemy();expEnemy.moveSpeed=0;
+    p.run(4500);assert.equal([...p.game.sides.bottom.heroes.links.values()][0].currentExp,10);
     assert.equal(p.text(206.25,593.9375),'Lv.1');
     const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
       .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===156&&d[2]===635&&d[4]===3);
@@ -361,6 +357,8 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
     const p=pve(true, 100);
     Math.random=()=>15.5/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
     Math.random=()=>16.5/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+    // Skill presentation fixture supplies durable in-range targets, independent of spawn cadence.
+    for(let i=0;i<5;i++)p.game.sides.bottom.combat.spawnEnemy().moveSpeed=0;
     const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible&&o.y>532);
     p.run(9500);assert.equal(flashes().length,0);
     p.click(75, 55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
@@ -385,6 +383,7 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       const p=pve(true, 100);
       Math.random=()=>left/20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
       Math.random=()=>right/20;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+      for(let i=0;i<5;i++)p.game.sides.bottom.combat.spawnEnemy().moveSpeed=0;
       const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text===name&&o.visible&&o.y>532);
       // 观察真实成长后的首次发动，不假定击杀升级前后的CD完全相同。
       p.run(1000);p.click(75, 55);const paused=p.snapshot();
@@ -443,7 +442,6 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
 });
 
 test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、计时器和监听', () => {
-  const counts = waveConfig.enemyCounts;
   const random = Math.random;
   try {
     const p = pve(true, 100);
@@ -485,7 +483,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
     assert.ok(p.objects.get(p.game).filter(o => o.kind === 'graphics' && o.draws.some(d=>d[0]==='fillRoundedRect'))
       .every(o => o.draws.every(d=>d[0]==='fillRoundedRect')));
     }
-  } finally { waveConfig.enemyCounts = counts; Math.random = random; }
+  } finally { Math.random = random; }
 });
 
 test('上方入口右下、终点左上，路径和格子统一计算且不改变基础地图', () => {
@@ -703,7 +701,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
  }finally{Math.random=random;combatConfig.enemy.moveSpeed=speed;}
 });
 for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益冻结不可领取，再来一局清空并保留农民loadout',()=>{
- const random=Math.random,counts=waveConfig.enemyCounts;
+ const random=Math.random;
  try{
   Math.random=()=>0.9;const p=farmerGame();
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
@@ -715,7 +713,7 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
    p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.text(120,1110),'农民');
   p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));
   assert.equal(p.game.events.listenerCount('update'),1);
- }finally{Math.random=random;waveConfig.enemyCounts=counts;}
+ }finally{Math.random=random;}
 });
 
 
@@ -780,14 +778,11 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后停止CD且重开重新充能',()=>{
- const counts=waveConfig.enemyCounts;
- try{
-  const p=equippedV56();p.run(5000);finishMatch(p,win);
+ const p=equippedV56();p.run(5000);finishMatch(p,win);
   assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
   p.click(375,765);assert.equal(p.text(80,1018),'升级符\n20s');assert.equal(p.text(120,1186),'招贤榜');
   p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.text(80,1018),'升级符\n20s');
   assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),100);
- }finally{waveConfig.enemyCounts=counts;}
 });
 
 
@@ -815,12 +810,10 @@ test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除�
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止两道具，重开清空单位和强化',()=>{
- const counts=waveConfig.enemyCounts;
- try{const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
+ const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,565,p.overlay),win?'胜利':'失败');
  const snapshot=p.snapshot();p.run(30000);dragActive(p,80,183,1018);assert.equal(p.snapshot(),snapshot);
  p.click(375,765);assert.equal(farmMoney(p),20);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
  assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);
- }finally{waveConfig.enemyCounts=counts;}
 });
 
 
@@ -937,7 +930,7 @@ test('v0.60-B 两边同号敌人各归其战斗实例，top没有玩家输入和
 
 test('v0.60-B 暂停冻结两个Side，重开只留下新Side与新棋盘对象',()=>{
  const p=pve(),old=p.game.sides;
- p.run(2500);const oldDistance=old.top.combat.enemies[0].distance;
+ p.run(pressureConfig.firstEnemyDelay+100);const oldDistance=old.top.combat.enemies[0].distance;
  p.click(75,55);p.run(5000);assert.equal(old.top.combat.enemies[0].distance,oldDistance);
  p.click(375,875);p.click(530,765);
  assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
@@ -952,8 +945,11 @@ test('v0.60-B 暂停冻结两个Side，重开只留下新Side与新棋盘对象'
 
 test('v0.60-C HUD显示共享wave及双方独立HP，积怪时仍按计划出怪',()=>{
  const p=pve();assert.equal(p.game.sides.bottom.progress,null);assert.equal(p.game.sides.top.progress,null);
- p.run(13000);assert.equal(p.text(625,55),'第 2 波');assert.ok(p.game.sides.bottom.combat.enemies.length>0);
- p.run(2000);for(const s of Object.values(p.game.sides))assert.ok(s.combat.enemies.some(e=>e.spawnEventId===6));
+ // Freeze movement only in this fixture so an empty board survives to wave2.
+ const speed=combatConfig.enemy.moveSpeed;combatConfig.enemy.moveSpeed=0;
+ try { p.run(waveStartForWave(2)); } finally { combatConfig.enemy.moveSpeed=speed; }
+ assert.equal(p.text(625,55),'第 2 波');assert.ok(p.game.sides.bottom.combat.enemies.length>0);
+ for(const s of Object.values(p.game.sides))assert.ok(s.combat.enemies.some(e=>e.spawnEventId===6));
  for(const [id,count]of [['bottom',1],['top',2]])for(let i=0;i<count;i++){
   const s=p.game.sides[id],e=s.combat.spawnEnemy();e.distance=s.combat.path.totalLength-.001;
  }
@@ -1000,4 +996,17 @@ test('v0.61-A top保持正常武将等级/镜像但隐藏EXP，bottom保留EXP�
  assert.equal(bars(-1).length,0);assert.equal(bars(1).length,2);assert.ok(bars(1).some(d=>d[3]>0&&d[3]<138));
  const point=boardProjection(testMap,750,'top').point({x:top.origin.x,y:top.origin.y+15});
  assert.equal(p.text(point.x,point.y),'Lv.2');assert.equal(top.currentExp,10);
+});
+
+test('v0.62-A HUD tracks highest started wave while the preceding wave is still spawning',()=>{
+ const saved={...pressureConfig};let p;
+ try{
+  Object.assign(pressureConfig,{firstEnemyDelay:100,waveStartInterval:200,initialCount:4,
+   countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100});
+  p=pve();
+ }finally{Object.assign(pressureConfig,saved);}
+ p.run(300);assert.equal(p.text(625,55),'第 2 波');
+ assert.equal(p.game.sides.bottom.combat.enemies.length,4);
+ p.run(100);assert.equal(p.game.sides.bottom.combat.enemies.length,6);
+ assert.equal(p.text(625,55),'第 2 波');
 });

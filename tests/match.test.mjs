@@ -5,7 +5,7 @@ registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+=
 const { Match }=await import('../src/match/Match.ts');
 const { MatchTimeline }=await import('../src/match/MatchTimeline.ts');
 const { testMap }=await import('../src/config/maps.ts');
-const { waveConfig,getWaveHpMultiplier }=await import('../src/config/waves.ts');
+const { pressureConfig, enemyHpForWave, enemyCountForWave, spawnIntervalForWave, waveStartForWave }=await import('../src/config/pressure.ts');
 const { combatConfig }=await import('../src/config/combat.ts');
 const { heroGrowth }=await import('../src/config/heroes.ts');
 const { createInventory,setEquipped,createLoadout }=await import('../src/systems/equipment.ts');
@@ -14,7 +14,7 @@ function loadout(...ids){const inv=createInventory();for(const id of ids)setEqui
 function advance(match,ms){const result={bottom:[],top:[]};for(let left=ms;left>0;left-=10){
  const batch=match.update(Math.min(10,left));for(const id of ['bottom','top'])result[id].push(...batch[id]);
 }return result;}
-function quiet(...ids){const kit=loadout(...ids);return new Match(testMap,kit,kit,{...waveConfig,spawnInterval:1e9});}
+function quiet(...ids){const kit=loadout(...ids);return new Match(testMap,kit,kit,{...pressureConfig,firstEnemyDelay:1e9});}
 function leaks(match,id,count){for(let n=0;n<count;n++){
  const side=match.sides[id],enemy=side.combat.spawnEnemy();enemy.distance=side.combat.path.totalLength-.001;
 }return match.update(combatConfig.stepMs);}
@@ -31,29 +31,19 @@ test('Match只有一条timeline；正式双边路径不创建WaveProgress；HP�
  for(const side of Object.values(m.sides)){assert.equal(side.progress,null);assert.equal(side.combat.progress,null);}
  assert.equal(m.bottomSide.combat.enemies.length,0);assert.equal(m.topSide.combat.enemies.length,0);
 });
-test('同一spawn在2秒同时产生双方独立实体，参数相同且带相同eventId',()=>{
- const m=new Match(testMap);advance(m,1990);assert.equal(m.bottomSide.combat.enemies.length,0);
- advance(m,10);const a=m.bottomSide.combat.enemies[0],b=m.topSide.combat.enemies[0];
+test('同一spawn在9.5秒同时产生双方独立实体，参数相同且带相同eventId',()=>{
+ const m=new Match(testMap);advance(m,9499);assert.equal(m.bottomSide.combat.enemies.length,0);
+ advance(m,1);const a=m.bottomSide.combat.enemies[0],b=m.topSide.combat.enemies[0];
  assert.notEqual(a,b);assert.deepEqual(a,b);assert.equal(a.spawnEventId,1);assert.equal(a.id,1);
  assert.equal(a.maxHp,combatConfig.enemy.maxHp);assert.equal(a.moveSpeed,combatConfig.enemy.moveSpeed);
 });
-test('过渡20波schedule沿用数量/HP曲线；每波末次计划出怪后3秒进入下一波',()=>{
- const t=new MatchTimeline();assert.equal(t.waveStarts.length,20);
- let start=0;for(let w=1;w<=20;w++){
-  const events=t.events.filter(e=>e.wave===w);assert.equal(events.length,waveConfig.enemyCounts[w-1]);
-  assert.equal(t.waveStarts[w-1],start);assert.equal(events[0].atMs,start+2000);
-  events.forEach((e,i)=>{assert.equal(e.atMs,start+(i+1)*2000);assert.equal(e.hpMultiplier,getWaveHpMultiplier(w,waveConfig));});
-  start=events.at(-1).atMs+3000;
- }
- assert.equal(t.events[0].atMs,2000);assert.equal(t.waveStarts[1],13000);
-});
 for(const fast of ['bottom','top'])test(`${fast}清场不改变另一方的出怪时间，积怪不阻止wave2`,()=>{
- const config={...waveConfig,enemyCounts:[2,2],spawnInterval:100,waveDelay:50};
+ const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:250,initialCount:2,countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100};
  const m=new Match(testMap,undefined,undefined,config),slow=fast==='bottom'?'top':'bottom';
  advance(m,100);m.sides[fast].combat.enemies.length=0;
  advance(m,100);assert.equal(m.sides[slow].combat.enemies.length,2);
- m.sides[fast].combat.enemies.length=0;advance(m,50);assert.equal(m.timeline.wave,2);
- advance(m,100);assert.equal(m.sides[slow].combat.enemies.length,3);
+ m.sides[fast].combat.enemies.length=0;advance(m,150);assert.equal(m.timeline.wave,2);
+ assert.equal(m.sides[slow].combat.enemies.length,3);
  assert.equal(m.sides[fast].combat.enemies.length,1);
  assert.equal(m.sides[fast].combat.enemies[0].spawnEventId,3);
  assert.equal(m.sides[slow].combat.enemies.at(-1).spawnEventId,3);
@@ -84,10 +74,10 @@ test('同一渲染帧的不同逻辑步死亡不扩成平局窗口；首个已�
  }
  m.update(250);assert.equal(m.result,'top');assert.equal(m.health.top,3);
 });
-test('20波刷完双方存活且清空时保持running，不擅自判胜负',()=>{
- const m=new Match(testMap,undefined,undefined,{...waveConfig,enemyCounts:Array(20).fill(1),spawnInterval:100,waveDelay:50});
+test('跨过20波仍继续出怪，双方存活时不判最终波胜利',()=>{
+ const m=new Match(testMap,undefined,undefined,{...pressureConfig,firstEnemyDelay:100,waveStartInterval:150,initialCount:1,countPerStage:0,countStepEvery:100,pulseExtraCount:0});
  advance(m,4000);for(const side of Object.values(m.sides))side.combat.enemies.length=0;
- advance(m,500);assert.equal(m.timeline.wave,20);assert.equal(m.timeline.finished,true);
+ advance(m,500);assert.ok(m.timeline.wave>20);assert.ok(m.bottomSide.combat.enemies.length>0);
  assert.equal(m.status,'running');assert.equal(m.result,null);assert.deepEqual(m.health,{bottom:3,top:3});
 });
 for(const killer of ['bottom','top'])test(`${killer}击杀只奖励本方$1和参战EXP，相同enemyId不串线`,()=>{
@@ -112,9 +102,9 @@ test('pause冻结timeline、双边战斗/HP/EXP/生产/CD/铁饭碗；resume续�
  advance(m,2000);assert.ok([...m.topSide.farmers.states.values()][0].reward);
 });
 test('出怪/漏怪截止点附近pause不越过截止点，恢复后双方各执行一次',()=>{
- const m=new Match(testMap);advance(m,1990);m.pause();advance(m,5000);
+ const m=new Match(testMap);advance(m,9499);m.pause();advance(m,5000);
  assert.equal(m.bottomSide.combat.enemies.length,0);assert.equal(m.topSide.combat.enemies.length,0);
- m.resume();advance(m,10);for(const side of Object.values(m.sides)){
+ m.resume();advance(m,1);for(const side of Object.values(m.sides)){
   assert.equal(side.combat.enemies.length,1);side.combat.enemies[0].distance=side.combat.path.totalLength-.001;
  }
  m.pause();const before=snapshot(m);advance(m,5000);assert.equal(snapshot(m),before);
@@ -140,7 +130,7 @@ test('result冻结双边所有runtime与操作，待领取收益和旧引用不�
  assert.equal(snapshot(m),frozen);
 });
 test('result后不消费未来timeline事件、不移动残存敌人或弹道',()=>{
- const m=new Match(testMap);advance(m,2000);leaks(m,'bottom',3);
+ const m=new Match(testMap);advance(m,9500);leaks(m,'bottom',3);
  const time=m.timeline.elapsedMs,enemy={...m.topSide.combat.enemies[0]};advance(m,60000);
  assert.equal(m.timeline.elapsedMs,time);assert.deepEqual(m.topSide.combat.enemies[0],enemy);
  assert.equal(m.topSide.combat.enemies.length,1);
@@ -174,7 +164,7 @@ test('小美释放中尚未命中的目标在pause/result不继续受伤，旧Li
  assert.equal(fresh.bottomSide.heroes.links.size,0);
 });
 test('连续销毁重建Match清空双方旧敌人/弹道/技能/参与/农民/CD/强化并保留loadout',()=>{
- const kit=loadout('farmer','haste_edict','iron_rice_bowl');let m=new Match(testMap,kit,kit,{...waveConfig,spawnInterval:1e9});
+ const kit=loadout('farmer','haste_edict','iron_rice_bowl');let m=new Match(testMap,kit,kit,{...pressureConfig,firstEnemyDelay:1e9});
  for(let round=0;round<4;round++){
   for(const side of Object.values(m.sides)){
    const link=hero(side);side.heroes.grantHaste('xiaomei');side.heroes.recordDamage(1,link,1);
@@ -182,7 +172,7 @@ test('连续销毁重建Match清空双方旧敌人/弹道/技能/参与/农民/C
   }
   advance(m,12000);m.pause();const old=m,oldSides=m.sides;
   const collect=()=>oldSides.bottom.collectFarmerReward(oldSides.bottom.board.tiles[6].unit,1);
-  old.destroy();old.destroy();m=new Match(testMap,kit,kit,{...waveConfig,spawnInterval:1e9});
+  old.destroy();old.destroy();m=new Match(testMap,kit,kit,{...pressureConfig,firstEnemyDelay:1e9});
   old.resume();old.update(20000);assert.equal(collect(),false);
   assert.equal(old.status,'destroyed');assert.deepEqual(m.health,{bottom:3,top:3});assert.equal(m.timeline.elapsedMs,0);
   assert.equal(m.status,'running');assert.equal(m.result,null);
@@ -195,4 +185,45 @@ test('连续销毁重建Match清空双方旧敌人/弹道/技能/参与/农民/C
    assert.deepEqual(s.recruitment.loadout,kit);
   }
  }
+});
+
+test('9.5-second preparation runs recruitment, Farmer, passive and item clocks without enemies',()=>{
+ const m=new Match(testMap,loadout('farmer','iron_rice_bowl','upgrade_talisman'));
+ const s=m.bottomSide,f=put(s,{kind:'farmer',type:'农',level:1},6);
+ assert.equal(s.recruit(()=>0),true);assert.equal(s.recruitment.money,10);
+ advance(m,9499);assert.equal(s.combat.enemies.length,0);assert.equal(m.topSide.combat.enemies.length,0);
+ assert.ok(m.timeline.elapsedMs>9400);assert.equal(s.activeItems.slots[0].remainingMs,10517);
+ assert.equal(s.passives.ironRiceSeconds,9);assert.equal(s.farmers.states.get(f).reward,null);
+ const clock=m.timeline.elapsedMs;m.pause();advance(m,5000);assert.equal(m.timeline.elapsedMs,clock);
+ m.resume();advance(m,1);assert.equal(s.combat.enemies.length,1);
+ advance(m,500);assert.equal(s.recruitment.money,12); // actual iron-rice reward, no unconditional income
+ advance(m,2000);assert.ok(s.farmers.states.get(f).reward);
+});
+
+test('restart begins a fresh 9.5-second delay; old Match cannot advance or pollute it',()=>{
+ const old=new Match(testMap);advance(old,9499);old.destroy();const fresh=new Match(testMap);
+ assert.equal(fresh.timeline.elapsedMs,0);assert.equal(fresh.timeline.wave,1);
+ old.resume();advance(old,20000);assert.equal(fresh.timeline.elapsedMs,0);
+ advance(fresh,9499);assert.equal(fresh.bottomSide.combat.enemies.length,0);
+ advance(fresh,1);assert.equal(fresh.bottomSide.combat.enemies[0].spawnEventId,1);
+ assert.equal(fresh.topSide.combat.enemies[0].spawnEventId,1);
+});
+
+test('overlapping waves fan out identical HP/speed/events even with one side cleared',()=>{
+ const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:200,initialCount:4,
+  countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100};
+ const m=new Match(testMap,undefined,undefined,config);
+ advance(m,200);m.bottomSide.combat.enemies.length=0;advance(m,100);
+ assert.equal(m.timeline.wave,2);
+ assert.deepEqual(m.bottomSide.combat.enemies.map(e=>e.spawnEventId),[3,4]);
+ assert.deepEqual(m.topSide.combat.enemies.map(e=>e.spawnEventId),[1,2,3,4]);
+ for(const eventId of [3,4]){
+  const a=m.bottomSide.combat.enemies.find(e=>e.spawnEventId===eventId);
+  const b=m.topSide.combat.enemies.find(e=>e.spawnEventId===eventId);
+  assert.notEqual(a,b);assert.equal(a.maxHp,b.maxHp);assert.equal(a.moveSpeed,55);assert.equal(a.moveSpeed,b.moveSpeed);
+  assert.equal(a.distance,b.distance); // same spawn logical step and movement
+ }
+ assert.equal(m.bottomSide.combat.enemies[1].maxHp,enemyHpForWave(2,config));
+ advance(m,100);assert.equal(m.topSide.combat.enemies.filter(e=>e.spawnEventId===5).length,1);
+ assert.equal(m.topSide.combat.enemies.filter(e=>e.spawnEventId===6).length,1);
 });

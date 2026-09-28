@@ -1,7 +1,7 @@
 import type { BoardMap } from '../config/maps';
 import { combatConfig } from '../config/combat';
-import { waveConfig } from '../config/waves';
-import type { WaveConfig } from '../config/waves';
+import { pressureConfig } from '../config/pressure';
+import type { PressureConfig } from '../config/pressure';
 import type { Loadout } from '../systems/equipment';
 import { PlayerSide } from '../systems/PlayerSide';
 import type { CombatEvent } from '../combat/CombatSimulation';
@@ -26,7 +26,7 @@ export class Match {
   private runtimeElapsedMs = 0;
   private readonly controllers = new Map<SideId, MatchController>();
 
-  constructor(map: BoardMap, bottomLoadout?: Loadout, topLoadout?: Loadout, config: WaveConfig = waveConfig) {
+  constructor(map: BoardMap, bottomLoadout?: Loadout, topLoadout?: Loadout, config: PressureConfig = pressureConfig) {
     this.bottomSide = new PlayerSide('bottom', map, bottomLoadout, { automaticWaves: false });
     this.topSide = new PlayerSide('top', map, topLoadout, { automaticWaves: false });
     this.sides = { bottom: this.bottomSide, top: this.topSide };

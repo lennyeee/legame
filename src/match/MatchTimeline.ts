@@ -1,5 +1,7 @@
-import { waveConfig, getWaveHpMultiplier } from '../config/waves';
-import type { WaveConfig } from '../config/waves';
+import { combatConfig } from '../config/combat';
+import { pressureConfig, validatePressureConfig, enemyHpForWave, enemyCountForWave,
+  spawnIntervalForWave, waveStartForWave } from '../config/pressure';
+import type { PressureConfig } from '../config/pressure';
 
 export interface SpawnEvent {
   id: number;
@@ -8,41 +10,76 @@ export interface SpawnEvent {
   hpMultiplier: number;
 }
 
-// 过渡schedule：沿用每波数量/HP/2秒间隔，最后一次计划出怪后固定等3秒。
-// 时间表创建后不再读取敌人数或清场结果；v0.62可以替换数据生成而保留消费入口。
+interface SpawningWave {
+  wave: number;
+  startMs: number;
+  count: number;
+  spawned: number;
+  interval: number;
+  hpMultiplier: number;
+  nextAtMs: number;
+}
+
+// 只保存仍在出怪的波次游标；不保留历史事件或未来无限schedule。
+// 每波启动时首怪立即到期，首波启动时间独立由firstEnemyDelay决定。
 export class MatchTimeline {
-  readonly events: readonly SpawnEvent[];
-  readonly waveStarts: readonly number[];
   elapsedMs = 0;
   wave = 1;
-  private cursor = 0;
+  private readonly config: Readonly<PressureConfig>;
+  private readonly spawning: SpawningWave[] = [];
+  private nextWave = 1;
+  private nextWaveAtMs: number;
+  private nextEventId = 1;
 
-  constructor(config: WaveConfig = waveConfig) {
-    const events: SpawnEvent[] = [];
-    const starts: number[] = [];
-    let start = 0;
-    config.enemyCounts.forEach((count, index) => {
-      starts.push(start);
-      for (let n = 1; n <= count; n++) {
-        events.push(Object.freeze({ id: events.length + 1, atMs: start + n * config.spawnInterval,
-          wave: index + 1, hpMultiplier: getWaveHpMultiplier(index + 1, config) }));
-      }
-      start += count * config.spawnInterval + config.waveDelay;
-    });
-    this.events = Object.freeze(events);
-    this.waveStarts = Object.freeze(starts);
+  constructor(config: PressureConfig = pressureConfig) {
+    validatePressureConfig(config);
+    this.config = Object.freeze({ ...config });
+    this.nextWaveAtMs = waveStartForWave(1, this.config);
   }
-
-  get finished(): boolean { return this.cursor === this.events.length; }
 
   advance(deltaMs: number): SpawnEvent[] {
     if (!Number.isFinite(deltaMs) || deltaMs <= 0) return [];
-    this.elapsedMs += deltaMs;
-    while (this.wave < this.waveStarts.length && this.elapsedMs + 1e-8 >= this.waveStarts[this.wave]!) this.wave++;
-    const due: SpawnEvent[] = [];
-    while (this.cursor < this.events.length && this.events[this.cursor]!.atMs <= this.elapsedMs + 1e-8) {
-      due.push(this.events[this.cursor++]!);
+    const target = this.elapsedMs + deltaMs;
+    if (!Number.isFinite(target) || target > Number.MAX_SAFE_INTEGER || target === this.elapsedMs) {
+      throw new RangeError('Timeline exceeds safe clock precision');
     }
+    const due: SpawnEvent[] = [];
+    for (;;) {
+      // 时间相同时按波号升序，保证大delta和多个小delta产生一致的事件顺序。
+      let earliest: SpawningWave | undefined;
+      for (const active of this.spawning) {
+        if (!earliest || active.nextAtMs < earliest.nextAtMs
+          || (active.nextAtMs === earliest.nextAtMs && active.wave < earliest.wave)) earliest = active;
+      }
+      if (this.nextWaveAtMs <= target + 1e-8 && (!earliest || this.nextWaveAtMs <= earliest.nextAtMs)) {
+        const wave = this.nextWave;
+        const nextStart = waveStartForWave(wave + 1, this.config);
+        if (nextStart <= this.nextWaveAtMs) throw new RangeError('Unsafe wave cadence');
+        this.spawning.push({ wave, startMs: this.nextWaveAtMs, nextAtMs: this.nextWaveAtMs,
+          count: enemyCountForWave(wave, this.config), spawned: 0,
+          interval: spawnIntervalForWave(wave, this.config),
+          hpMultiplier: enemyHpForWave(wave, this.config) / combatConfig.enemy.maxHp });
+        this.wave = wave;
+        this.nextWave++;
+        this.nextWaveAtMs = nextStart;
+        continue;
+      }
+      if (!earliest || earliest.nextAtMs > target + 1e-8) break;
+      if (!Number.isSafeInteger(this.nextEventId)) throw new RangeError('Unsafe spawn event ID');
+      due.push({ id: this.nextEventId++, atMs: earliest.nextAtMs, wave: earliest.wave,
+        hpMultiplier: earliest.hpMultiplier });
+      earliest.spawned++;
+      if (earliest.spawned === earliest.count) {
+        this.spawning.splice(this.spawning.indexOf(earliest), 1);
+      } else {
+        const nextAtMs = earliest.startMs + earliest.spawned * earliest.interval;
+        if (!Number.isFinite(nextAtMs) || nextAtMs > Number.MAX_SAFE_INTEGER || nextAtMs <= earliest.nextAtMs) {
+          throw new RangeError('Unsafe spawn interval');
+        }
+        earliest.nextAtMs = nextAtMs;
+      }
+    }
+    this.elapsedMs = target;
     return due;
   }
 }
