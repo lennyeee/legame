@@ -15,10 +15,13 @@ import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
 import { AIController } from '../controllers/AIController';
 import type { BattleSetup } from '../flow/battleSetup';
+import { LeIntroView } from '../ui/LeIntroView';
+import { pressureConfig } from '../config/pressure';
 
 export class GameScene extends Phaser.Scene {
   match: Match | null = null;
   battleSetup: BattleSetup | null = null;
+  presentationPhase: 'INTRO' | 'RUNNING' | null = null;
   get sides() { return this.match?.sides ?? null; }
   constructor() {
     super('GameScene');
@@ -28,14 +31,17 @@ export class GameScene extends Phaser.Scene {
     this.input.enabled = true;
     this.battleSetup = data.setup;
     const match = new Match(testMap, data.setup.playerLoadout, data.setup.opponentLoadout);
+    const firstEnemyDelay = pressureConfig.firstEnemyDelay;
     this.match = match;
+    this.presentationPhase = 'INTRO';
     const { bottomSide, topSide } = match;
     match.bindController('top', new AIController(topSide));
     const state = bottomSide.recruitment;
     const loadout = state.loadout;
     const moneyText = label(this, 170, 55, '', 32);
     const waveText = label(this, 625, 55, '', 28);
-    drawBoard(this, testMap);
+    drawBoard(this, testMap, false);
+    const leIntro = new LeIntroView(this, testMap);
     const boardScene = boardDisplayScene(this, testMap, 'bottom');
     const goal = testMap.path[testMap.path.length - 1]!;
     const healthText = label(boardScene, goal.x, goal.y + 24, '', 24, '#a85c4d');
@@ -119,6 +125,8 @@ export class GameScene extends Phaser.Scene {
       const before = state.money;
       const wasInsufficient = before < recruitmentPrice(state);
       const events = match.update(delta, deployment.draggedTile);
+      leIntro.update(match.timeline.elapsedMs);
+      if (match.timeline.elapsedMs >= firstEnemyDelay) this.presentationPhase = 'RUNNING';
       battle.render(events.bottom, match.timeline.elapsedMs);
       topBattle.render(events.top, match.timeline.elapsedMs);
       if (state.money !== before) {
@@ -139,8 +147,11 @@ export class GameScene extends Phaser.Scene {
       match.destroy();
       farmerView.destroy();
       topFarmerView.destroy();
+      leIntro.destroy();
+      this.scene.stop('MatchingScene');
       this.match = null;
       this.battleSetup = null;
+      this.presentationPhase = null;
     });
     const resumeInput = (): void => { match.resume(); this.input.enabled = match.running; };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));

@@ -11,10 +11,11 @@ export class ReadyScene extends Phaser.Scene {
   startState: 'READY' | 'STARTING' | 'MATCHING' = 'READY';
   private inventory: InventoryItem[] = [];
   private openingItems = false;
+  private lockForMatching: (() => void) | null = null;
 
   constructor() { super('ReadyScene'); }
 
-  create(data: { inventory?: InventoryItem[]; loadout?: Loadout } = {}): void {
+  create(data: { inventory?: InventoryItem[]; loadout?: Loadout; autoMatch?: boolean } = {}): void {
     this.inventory = data.inventory ?? inventoryFromLoadout(data.loadout);
     this.openingItems = false;
     this.startState = 'READY';
@@ -27,7 +28,7 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 375, 565, '角色 · 地图展示区', 24, '#8b8272');
     const button = this.add.rectangle(375, 765, 330, 86, 0x697e67)
       .setInteractive({ useHandCursor: true });
-    label(this, 375, 765, '开始对战', 30, '#fffaf0');
+    const buttonText = label(this, 375, 765, '开始对战', 30, '#fffaf0');
     const itemsButton = this.add.rectangle(375, 885, 250, 72, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 375, 885, '道具', 28, '#fffaf0');
     itemsButton.on('pointerdown', () => {
@@ -40,6 +41,14 @@ export class ReadyScene extends Phaser.Scene {
       event.stopPropagation();
       this.requestStartGame();
     });
+    this.lockForMatching = () => {
+      button.disableInteractive();
+      itemsButton.disableInteractive();
+      buttonText.setText('正在寻找对手…').setFontSize(26);
+      itemsButton.setAlpha(0.5);
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.lockForMatching = null; });
+    if (data.autoMatch) this.requestStartGame();
   }
 
   requestStartGame(): void {
@@ -52,6 +61,7 @@ export class ReadyScene extends Phaser.Scene {
   private startMatch(): void {
     if (this.startState !== 'STARTING') return;
     this.startState = 'MATCHING';
-    this.scene.start('MatchingScene', { loadout: createLoadout(this.inventory) });
+    this.lockForMatching?.();
+    this.scene.launch('MatchingScene', { loadout: createLoadout(this.inventory) });
   }
 }

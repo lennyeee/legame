@@ -5,7 +5,7 @@ import { battleLayout, boardDisplay, boardToScreen, HALF_HEIGHT } from '../confi
 import { BATTLEFIELD_DIVIDER_PX, boardDisplayScene, boardProjection } from './boardDisplay';
 import type { DisplaySide } from './boardDisplay';
 
-export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
+export function drawBoard(scene: Phaser.Scene, map: BoardMap, showGoal = true): void {
   const center = boardToScreen(scene.scale.width / 2, map.mirrorY);
   scene.add.rectangle(center.x, center.y, battleLayout.width * boardDisplay.scale,
     HALF_HEIGHT * 2 * boardDisplay.scale + BATTLEFIELD_DIVIDER_PX, 0xeee9dc).setStrokeStyle(2, 0xd9d1c0);
@@ -43,8 +43,10 @@ export function drawBoard(scene: Phaser.Scene, map: BoardMap): void {
     const entry = nodes[0]!;
     const goal = nodes[nodes.length - 1]!;
     label(field, entry.x, entry.y, '入口', 20, '#6b583c');
-    field.add.circle(goal.x, goal.y, 30, 0x697e67);
-    label(field, goal.x, goal.y, '乐', 32, '#fffaf0');
+    if (showGoal) {
+      field.add.circle(goal.x, goal.y, 30, 0x697e67);
+      label(field, goal.x, goal.y, '乐', 32, '#fffaf0');
+    }
   };
 
   drawHalf('top');

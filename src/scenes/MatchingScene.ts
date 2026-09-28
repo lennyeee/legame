@@ -10,9 +10,9 @@ export interface MatchingData {
   createOpponentLoadout?: () => Loadout;
 }
 
-// 只有表现时钟；VS 完成之前不创建任何 Match runtime。
+// HOME 保持在下面；此场景只拥有本局 setup 和可销毁的 VS 转场。
 export class MatchingScene extends Phaser.Scene {
-  phase: 'MATCHING' | 'VS' | 'FINISHED' = 'MATCHING';
+  phase: 'MATCHING' | 'VS_ENTER' | 'VS_HOLD' | 'VS_EXIT' | 'FINISHED' = 'MATCHING';
   setup: BattleSetup | null = null;
   private cancelFlow: (() => void) | null = null;
 
@@ -24,33 +24,70 @@ export class MatchingScene extends Phaser.Scene {
     const setup = createBattleSetup(data.loadout, random, data.createOpponentLoadout);
     this.setup = setup;
     this.phase = 'MATCHING';
-    this.add.rectangle(375, 667, 750, 1334, 0xf7f3e8);
-    const title = label(this, 375, 620, '正在寻找对手…', 36);
+    this.scene.bringToTop();
     let valid = true;
-    let transitioned = false;
-    let vsTimer: Phaser.Time.TimerEvent | null = null;
-    const profile = (value: DisplayProfile, y: number): void => {
-      this.add.circle(375, y, 48, 0x697e67);
-      label(this, 375, y, String(value.avatarVariant + 1), 30, '#fffaf0');
-      label(this, 375, y + 85, value.nickname, 32);
+    let launched = false;
+    const timers: Phaser.Time.TimerEvent[] = [];
+    const tweens: Phaser.Tweens.Tween[] = [];
+    const objects: Phaser.GameObjects.GameObject[] = [];
+    const wait = (duration: number, next: () => void): void => {
+      timers.push(this.time.delayedCall(duration, () => { if (valid) next(); }));
     };
-    const timer = this.time.delayedCall(matchingDuration(random), () => {
-      if (!valid || transitioned || this.phase !== 'MATCHING') return;
-      this.phase = 'VS';
-      title.setText('VS').setPosition(375, 667);
-      profile(setup.opponentProfile, 360);
-      profile(setup.playerProfile, 900);
-      vsTimer = this.time.delayedCall(flowConfig.vsMs, () => {
-        if (!valid || transitioned) return;
-        transitioned = true;
-        this.phase = 'FINISHED';
-        this.scene.start('GameScene', { setup });
+    const animate = (config: Phaser.Types.Tweens.TweenBuilderConfig): void => {
+      tweens.push(this.tweens.add(config));
+    };
+    const panel = (profile: DisplayProfile, y: number): Phaser.GameObjects.Container => {
+      const container = this.add.container(375, y, [
+        this.add.rectangle(0, 0, 750, 667, 0xeee9dc).setStrokeStyle(2, 0xc2bcae),
+        this.add.circle(0, -35, 48, 0x697e67),
+        label(this, 0, -35, String(profile.avatarVariant + 1), 30, '#fffaf0'),
+        label(this, 0, 60, profile.nickname, 32),
+      ]).setSize(750, 667).setInteractive();
+      // 只遮挡面板仍占据的位置，散开后露出的区域可传递到 GameScene。
+      container.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => event.stopPropagation());
+      objects.push(container);
+      return container;
+    };
+    wait(matchingDuration(random), () => {
+      this.phase = 'VS_ENTER';
+      const shade = this.add.rectangle(375, 667, 750, 1334, 0x191b17, 0.18);
+      const top = panel(setup.opponentProfile, -333.5);
+      const bottom = panel(setup.playerProfile, 1667.5);
+      const vs = label(this, 375, 667, 'VS', 58).setAlpha(0);
+      objects.push(shade, vs);
+      animate({ targets: top, y: 333.5, duration: flowConfig.vsEnterMs, ease: 'Cubic.Out' });
+      animate({ targets: vs, alpha: 1, duration: flowConfig.vsEnterMs });
+      animate({ targets: bottom, y: 1000.5, duration: flowConfig.vsEnterMs, ease: 'Cubic.Out',
+        onComplete: () => {
+          if (!valid) return;
+          this.phase = 'VS_HOLD';
+          wait(flowConfig.vsHoldMs, () => {
+            if (launched) return;
+            launched = true;
+            this.phase = 'VS_EXIT';
+            // 先启动下层战斗，再揭幕；Match 从此刻开始，完全不等待乐到位。
+            this.scene.launch('GameScene', { setup });
+            this.scene.bringToTop();
+            this.scene.stop('ReadyScene');
+            shade.destroy();
+            animate({ targets: top, y: -333.5, duration: flowConfig.vsExitMs, ease: 'Cubic.InOut' });
+            animate({ targets: vs, alpha: 0, duration: flowConfig.vsExitMs });
+            animate({ targets: bottom, y: 1667.5, duration: flowConfig.vsExitMs, ease: 'Cubic.InOut',
+              onComplete: () => {
+                if (!valid) return;
+                this.phase = 'FINISHED';
+                this.scene.stop();
+              },
+            });
+          });
+        },
       });
     });
     const cancel = (): void => {
       valid = false;
-      timer.remove(false);
-      vsTimer?.remove(false);
+      for (const timer of timers) timer.remove(false);
+      for (const tween of tweens) { tween.stop(); tween.remove(); }
+      for (const object of objects) object.destroy();
       this.setup = null;
       if (this.cancelFlow === cancel) this.cancelFlow = null;
     };

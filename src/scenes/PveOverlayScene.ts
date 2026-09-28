@@ -28,11 +28,11 @@ export class PveOverlayScene extends Phaser.Scene {
     let confirming = false;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { handled = true; confirming = false; });
     // 离开战斗统一停止旧场景，保留玩家 loadout。
-    const leaveMatch = (destination: 'MatchingScene' | 'ReadyScene'): void => {
+    const leaveMatch = (rematch: boolean): void => {
       if (handled) return;
       handled = true;
       this.scene.stop('GameScene');
-      this.scene.start(destination, { loadout: data.loadout });
+      this.scene.start('ReadyScene', { loadout: data.loadout, autoMatch: rematch });
     };
     if (paused) {
       const homeButton = this.add.rectangle(375, 875, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
@@ -56,7 +56,7 @@ export class PveOverlayScene extends Phaser.Scene {
           title.setText('已暂停');
           for (const [control, text] of menu) { control.setVisible(true).setInteractive({ useHandCursor: true }); text.setVisible(true); }
         });
-        confirmButton.on('pointerdown', () => { if (confirming) leaveMatch('ReadyScene'); });
+        confirmButton.on('pointerdown', () => { if (confirming) leaveMatch(false); });
       });
       homeButton.on('pointerdown', confirmAction);
     }
@@ -68,7 +68,7 @@ export class PveOverlayScene extends Phaser.Scene {
         this.scene.resume('GameScene');
         this.scene.stop();
       } else {
-        leaveMatch('MatchingScene');
+        leaveMatch(true);
       }
     });
   }

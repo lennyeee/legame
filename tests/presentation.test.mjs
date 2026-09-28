@@ -47,12 +47,15 @@ const { farmerRewardVisual } = await import('../src/config/farmer.ts');
 const { FarmerView } = await import('../src/ui/FarmerView.ts');
 const { skillConfigs } = await import('../src/config/skills.ts');
 const { default: Clock } = await import('../node_modules/phaser/src/time/Clock.js');
+const { default: TweenManager } = await import('../node_modules/phaser/src/tweens/TweenManager.js');
+const { LeIntroView } = await import('../src/ui/LeIntroView.ts');
+const { buildPath, pointOnPath } = await import('../src/combat/path.ts');
 
 test('匹配时间使用独立可注入表现随机，范围为2000～3000ms',()=>{
  assert.equal(matchingDuration(()=>0),2000);
  assert.equal(matchingDuration(()=>0.5),2500);
  assert.ok(matchingDuration(()=>0.999999)<3000);
- assert.equal(flowConfig.vsMs,1800);
+ assert.equal(flowConfig.vsEnterMs,400);assert.equal(flowConfig.vsHoldMs,1400);assert.equal(flowConfig.vsExitMs,500);
 });
 
 test('对手资料安全池、头像和装备快照确定生成，不消费gameplay RNG',()=>{
@@ -85,6 +88,9 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   const ready = new ReadyScene();
   const matching = new MatchingScene();
   let matchingActive = false;
+  let gameActive = false;
+  const sceneOrder = [];
+  const queued = [];
   const setupHistory = [];
   const items = new ItemsScene();
   let itemsActive = false;
@@ -110,6 +116,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
       proxy = new Proxy(target, { get(t, key) {
         if (key in t) return t[key];
         if (key === 'setText') return value => { t.text = value; return proxy; };
+        if (key === 'setSize') return (width,height)=>{t.width=width;t.height=height;return proxy;};
         if (key === 'setPosition') return (x,y) => {t.x=x;t.y=y;return proxy;};
         if (key === 'setAlpha') return value => {t.alpha=value;return proxy;};
         if (key === 'setStrokeStyle') return (...args) => {t.stroke=args;return proxy;};
@@ -123,7 +130,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
         if (key === 'getBounds') return () => ({x:t.x-t.width/2,y:t.y-t.height/2,width:t.width,height:t.height,
           contains: (px, py) => Math.abs(px-t.x) <= t.width/2 && Math.abs(py-t.y) <= t.height/2 });
         if (key === 'clear') return () => { t.draws = []; return proxy; };
-        if (key === 'destroy') return () => { t.text = ''; t.visible = false; t.interactive = false; t.draws = []; return proxy; };
+        if (key === 'destroy') return () => { t.children?.forEach(child=>child.destroy());t.removeAllListeners(); t.text = ''; t.visible = false; t.interactive = false; t.draws = []; return proxy; };
         if (key === 'lineStyle' || key === 'moveTo' || key === 'lineTo' || key === 'strokePath' || key === 'fillCircle' || key === 'fillRect' || key === 'fillRoundedRect' || key === 'strokeRect' || key === 'lineBetween') return (...args) => { t.draws.push([key, ...args]); return proxy; };
         return () => proxy;
       } });
@@ -135,17 +142,23 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     scene.game = { events: globalEvents };
     scene.scale = { width: 750 };
     scene.add = Object.fromEntries(['rectangle', 'circle', 'ellipse', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
+    scene.add.circle=(x,y,radius,color)=>object('circle',x,y,radius,radius,color);
+    scene.add.container = (x,y,children=[])=>{const parent=object('container',x,y);parent.children=children;return parent;};
     scene.add.text = (x, y, text, style) => { const textObject=object('text', x, y).setText(text);textObject.style=style;return textObject; };
     scene.sys = { events: new EventEmitter() };
     scene.time = new Clock(scene);
+    scene.tweens = new TweenManager(scene);
+    scene.tweens.getDelta = ()=>10;
   }
   function shutdown(scene) {
     scene.events.emit('shutdown');
     scene.time.shutdown();
+    scene.tweens.shutdown();
     for (const item of objects.get(scene)) item.removeAllListeners();
   }
   game.scene = {
     pause: () => { active = false; },
+    stop: key=>{if(key==='MatchingScene'&&matchingActive){shutdown(matching);matchingActive=false;}},
     launch: (_key, data) => { prepare(overlay); overlayActive = true; overlay.create(data); },
   };
   ready.scene = {
@@ -153,18 +166,17 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
       if (key === 'ItemsScene') {
         shutdown(ready);readyActive=false;itemsActive=true;prepare(items);items.create(data);return;
       }
-      assert.equal(key, 'MatchingScene');
-      shutdown(ready);readyActive=false;
-      startMatching(data);
+      assert.fail('HOME starts only ItemsScene directly');
     },
   };
+  ready.scene.launch=(key,data)=>{assert.equal(key,'MatchingScene');startMatching(data);};
   items.scene = { start: (key,data) => {
     assert.equal(key,'ReadyScene');shutdown(items);itemsActive=false;readyActive=true;prepare(ready);ready.create(data);
   } };
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
-    stop: key => { if (key === 'GameScene') shutdown(game); else { shutdown(overlay); overlayActive = false; } },
-    start: (key,data) => { if(key==='ReadyScene'){shutdown(overlay);overlayActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);return;} assert.equal(key, 'MatchingScene'); shutdown(overlay);overlayActive=false;startMatching(data); },
+    stop: key => { if (key === 'GameScene') {shutdown(game);gameActive=false;} else { shutdown(overlay); overlayActive = false; } },
+    start: (key,data) => {assert.equal(key,'ReadyScene');shutdown(overlay);overlayActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);},
   };
   function startMatching(data) {
     active=true;matchingActive=true;prepare(matching);
@@ -173,29 +185,41 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     if(autoFlow) finishFlow();
   }
   function finishFlow() {
-    while(matchingActive) tick();
+    // Existing battle tests fast-forward presentation without spending match preparation time.
+    while(matchingActive) tick(true);
   }
-  matching.scene={start:(key,data)=>{
-    assert.equal(key,'GameScene');startCount++;shutdown(matching);matchingActive=false;
-    prepare(game);active=true;createGame(data);
-  }};
-  function tick() {
+  matching.scene={
+    launch:(key,data)=>{assert.equal(key,'GameScene');startCount++;sceneOrder.push('launchGame');
+      prepare(game);active=true;gameActive=true;createGame(data);},
+    bringToTop:()=>sceneOrder.push('matchingOnTop'),
+    stop:key=>{queued.push(()=>{
+      if(key==='ReadyScene'){if(readyActive)shutdown(ready);readyActive=false;}
+      else if(matchingActive){shutdown(matching);matchingActive=false;}
+    });},
+  };
+  function tick(flowOnly=false) {
     now+=10;
-    if(!active)return;
-    const scene=matchingActive?matching:itemsActive?items:readyActive?ready:game;
-    scene.time.preUpdate();scene.time.update(now,10);scene.events.emit('update',now,10);
+    const scenes=[...(readyActive?[ready]:[]),...(itemsActive?[items]:[]),
+      ...(gameActive&&active&&!flowOnly?[game]:[]),...(matchingActive?[matching]:[])];
+    for(const scene of scenes){
+      scene.time.preUpdate();scene.time.update(now,10);scene.tweens.step();scene.events.emit('update',now,10);
+    }
+    while(queued.length)queued.shift()();
   }
   prepare(ready);
   ready.create();
   if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    const scene = matchingActive ? matching : itemsActive ? items : readyActive ? ready : overlayActive ? overlay : game;
+    let scene=overlayActive?overlay:itemsActive?items:gameActive?game:ready;
+    const cover=matchingActive&&objects.get(matching).find(o=>o.kind==='container'&&o.interactive&&o.visible&&o.getBounds().contains(x,y));
+    if(cover)scene=matching;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
     target?.emit('pointerdown', { id: 1, x, y, primaryDown: true }, 0, 0, { stopPropagation() {} });
   };
   const drag = (from, to) => {
-    if (!active || matchingActive || overlayActive || readyActive || itemsActive) return;
+    if (!active || !gameActive || overlayActive || itemsActive) return;
+    if(matchingActive&&objects.get(matching).some(o=>o.kind==='container'&&o.interactive&&o.visible&&o.getBounds().contains(...from)))return;
     const p = { id: 1, primaryDown: true, x: from[0], y: from[1] };
     game.input.emit('pointerdown', p);
     game.input.emit('pointermove', { ...p, x: to[0], y: to[1] });
@@ -207,30 +231,47 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, isActive: () => active && !matchingActive && !readyActive && !itemsActive,
+  return { game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
 
 // 使用真实漏怪进入指定结算，避免再依赖已退役的单边清场胜利条件。
-test('HOME到匹配及VS均无Match，VS完成才创建战斗且重复开始安全',()=>{
- const p=pve(false,20,false);
+function untilPhase(p,phase,limit=4000){
+ let elapsed=0;while(p.matching.phase!==phase&&elapsed<limit){p.run(10);elapsed+=10;}
+ assert.equal(p.matching.phase,phase);return elapsed;
+}
+
+test('HOME内匹配保持视觉和配置锁定，VS散开时才创建战斗且重复开始安全',()=>{
+ const p=pve(false,20,false),homeObjects=p.objects.get(p.ready);
  assert.equal(p.game.match,null);p.click(375,765);
  for(let i=0;i<10;i++)p.ready.requestStartGame();
  assert.equal(p.matching.phase,'MATCHING');assert.equal(p.startCount(),0);
- assert.equal(p.text(375,620,p.matching),'正在寻找对手…');
+ assert.equal(p.text(375,765,p.ready),'正在寻找对手…');
+ assert.equal(p.objects.get(p.ready),homeObjects);assert.equal(p.text(375,440,p.ready),'乐 GAME');
+ assert.equal(homeObjects.find(o=>o.kind==='rectangle'&&o.x===375&&o.y===765).interactive,false);
+ assert.equal(homeObjects.find(o=>o.kind==='rectangle'&&o.x===375&&o.y===885).interactive,false);
+ p.click(375,885);assert.equal(p.objects.has(p.items),false);
  const setup=p.matching.setup;
  p.run(1990);assert.equal(p.matching.phase,'MATCHING');assert.equal(p.game.match,null);
- p.run(10);assert.equal(p.matching.phase,'VS');assert.equal(p.game.match,null);
- assert.equal(p.matching.setup,setup);
- assert.equal(p.text(375,445,p.matching),setup.opponentProfile.nickname);
- assert.equal(p.text(375,985,p.matching),setup.playerProfile.nickname);
- p.run(1790);assert.equal(p.game.match,null);
- p.run(10);assert.equal(p.startCount(),1);assert.equal(p.game.battleSetup,setup);
- assert.equal(p.game.match.timeline.elapsedMs,0);assert.equal(p.game.match.timeline.config.firstEnemyDelay,9500);
+ p.run(10);assert.equal(p.matching.phase,'VS_ENTER');assert.equal(p.game.match,null);
+ const panels=p.objects.get(p.matching).filter(o=>o.kind==='container');
+ assert.equal(panels[0].y,-333.5);assert.equal(panels[1].y,1667.5);
+ assert.equal(panels[0].children.find(o=>o.kind==='text'&&o.y===60).text,setup.opponentProfile.nickname);
+ assert.equal(panels[1].children.find(o=>o.kind==='text'&&o.y===60).text,setup.playerProfile.nickname);
+ const enter=untilPhase(p,'VS_HOLD');assert.ok(enter>=400&&enter<=430);
+ assert.equal(panels[0].y,333.5);assert.equal(panels[1].y,1000.5);
+ p.run(1390);assert.equal(p.game.match,null);
+ p.run(10);assert.equal(p.matching.phase,'VS_EXIT');assert.equal(p.startCount(),1);
+ assert.equal(p.game.battleSetup,setup);assert.equal(p.game.match.timeline.elapsedMs,0);
+ assert.equal(p.game.presentationPhase,'INTRO');assert.equal(p.game.input.enabled,true);
+ assert.equal(p.sceneOrder.at(-2),'launchGame');assert.equal(p.sceneOrder.at(-1),'matchingOnTop');
  assert.equal(p.game.sides.bottom.recruitment.money,20);
  assert.deepEqual(p.game.sides.bottom.recruitment.slots,Array(5).fill(null));
- p.run(9490);assert.equal(p.game.sides.bottom.combat.enemies.length,0);
- p.run(20);assert.equal(p.game.sides.bottom.combat.enemies.length,1);
+ p.run(200);assert.ok(p.game.match.timeline.elapsedMs>=180);
+ assert.ok(panels[0].y<333.5);assert.ok(panels[1].y>1000.5);
+ const exit=untilPhase(p,'FINISHED');assert.ok(exit>=300&&exit<=340);
+ assert.equal(p.matching.setup,null);assert.ok(panels.every(o=>!o.visible&&!o.interactive));
+ assert.equal(p.matching.tweens.tweens.length,0);assert.equal(p.matching.time._active.length,0);
 });
 
 test('MatchingScene只生成一次AI装备，GameScene消费原setup而不再次生成',()=>{
@@ -238,9 +279,9 @@ test('MatchingScene只生成一次AI装备，GameScene消费原setup而不再次
  const p=pve(false,20,false,{createOpponentLoadout:()=>{created++;return top;}});
  p.click(375,765);const setup=p.matching.setup;
  assert.equal(created,1);
- p.run(2000);assert.equal(created,1);
+ p.run(2000);assert.equal(created,1);untilPhase(p,'VS_HOLD');
  const random=Math.random;
- try{Math.random=()=>{throw new Error('进入GameScene不可再次生成AI装备');};p.run(1800);}
+ try{Math.random=()=>{throw new Error('进入GameScene不可再次生成AI装备');};p.run(1400);}
  finally{Math.random=random;}
  assert.equal(created,1);assert.equal(p.game.battleSetup,setup);
  assert.deepEqual(p.game.sides.top.recruitment.loadout,top);
@@ -255,8 +296,8 @@ test('MATCHING shutdown清除timer且旧匹配回调无法启动VS或GameScene',
 });
 
 test('VS shutdown后过期/重复回调不能创建旧局或重复启动新局',()=>{
- const p=pve(false,20,false);p.click(375,765);p.run(2000);
- const old=p.matching.time._pendingInsertion[0].callback;
+ const p=pve(false,20,false);p.click(375,765);p.run(2000);untilPhase(p,'VS_HOLD');
+ const old=p.matching.time._pendingInsertion[0]?.callback ?? p.matching.time._active[0].callback;
  p.shutdown(p.matching);old();assert.equal(p.startCount(),0);
  p.matching.create({presentationRandom:()=>0});
  p.finishFlow();const match=p.game.match;
@@ -301,6 +342,112 @@ function finishMatch(p, win, survivorLeaks=0) {
  }
  p.run(20);
 }
+
+function beginReveal(p){
+ p.click(375,765);p.run(2000);untilPhase(p,'VS_HOLD');p.run(flowConfig.vsHoldMs);
+ assert.equal(p.matching.phase,'VS_EXIT');assert.equal(p.game.match.timeline.elapsedMs,0);
+}
+
+const leTokens=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='乐'&&o.visible);
+const closePoint=(actual,expected)=>{
+ assert.ok(Math.abs(actual.x-expected.x)<0.001);
+ assert.ok(Math.abs(actual.y-expected.y)<0.001);
+};
+
+test('揭幕只阻挡仍被面板覆盖的区域，露出后INTRO立即可来财和拖动',()=>{
+ const p=pve(false,20,false);beginReveal(p);
+ assert.equal(p.game.input.enabled,true);assert.equal(p.game.match.running,true);
+ p.click(375,1158);assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,0);
+ p.run(400);assert.equal(p.matching.phase,'VS_EXIT');
+ const random=Math.random;
+ try{Math.random=()=>0;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);}
+ finally{Math.random=random;}
+ assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,1);
+ assert.equal(p.game.sides.bottom.board.tiles[0].unit.type,'刀');
+ assert.equal(p.game.presentationPhase,'INTRO');assert.equal(p.game.sides.bottom.recruitment.money,10);
+});
+
+test('INTRO期间AI按原规则运行，不等待乐7秒到位',()=>{
+ const p=pve();p.run(2000);
+ assert.ok(p.game.sides.top.recruitment.successfulRecruits>0);
+ assert.equal(p.game.presentationPhase,'INTRO');assert.equal(p.game.sides.top.combat.enemies.length,0);
+});
+
+test('双方乐从各自入口同时出发，文本正向且没有重复终点乐',()=>{
+ const p=pve(),tokens=leTokens(p);assert.equal(tokens.length,2);
+ for(const [index,side]of ['bottom','top'].entries()){
+  closePoint(tokens[index],boardProjection(testMap,750,side).point(testMap.path[0]));
+  assert.equal(tokens[index].scale,1.125);assert.equal(tokens[index].style.fontSize,'32px');
+ }
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='circle'&&o.color===0x697e67&&o.width===30).length,2);
+ assert.equal(p.game.sides.bottom.combat.enemies.length,0);assert.equal(p.game.sides.top.combat.enemies.length,0);
+});
+
+test('乐3500ms沿完整路径半程，7000ms归位后使用原对象且无视觉跳变',()=>{
+ const p=pve(),tokens=leTokens(p),path=buildPath(testMap.path);
+ p.run(3500);
+ const mid=pointOnPath(path,path.totalLength/2);
+ for(const [index,side]of ['bottom','top'].entries())closePoint(tokens[index],boardProjection(testMap,750,side).point(mid));
+ p.run(3500);
+ for(const [index,side]of ['bottom','top'].entries())closePoint(tokens[index],boardProjection(testMap,750,side).point(testMap.path.at(-1)));
+ const positions=tokens.map(o=>({x:o.x,y:o.y}));p.run(1000);
+ assert.deepEqual(leTokens(p),tokens);assert.deepEqual(tokens.map(o=>({x:o.x,y:o.y})),positions);
+ assert.equal(p.game.presentationPhase,'INTRO');
+});
+
+test('暂停冻结Match、AI和乐进度，恢复后从原位置继续',()=>{
+ const p=pve();p.run(2500);p.click(75,55);
+ const elapsed=p.game.match.timeline.elapsedMs,positions=leTokens(p).map(o=>({x:o.x,y:o.y}));
+ const top=JSON.stringify(p.game.sides.top.recruitment);
+ p.run(5000);assert.equal(p.game.match.timeline.elapsedMs,elapsed);
+ assert.deepEqual(leTokens(p).map(o=>({x:o.x,y:o.y})),positions);
+ assert.equal(JSON.stringify(p.game.sides.top.recruitment),top);
+ p.click(375,765);p.run(1000);assert.ok(p.game.match.timeline.elapsedMs>elapsed);
+ assert.notDeepEqual(leTokens(p).map(o=>({x:o.x,y:o.y})),positions);
+});
+
+test('乐为纯表现，不成为索敌/漏怪/击杀/EXP对象，9500ms仍从Match零点出兵',()=>{
+ const p=pve(),side=p.game.sides.bottom;
+ side.recruitment.slots[0]={kind:'heroLetter',type:'小',level:1};
+ side.recruitment.slots[1]={kind:'heroLetter',type:'美',level:1};
+ side.drop({kind:'slot',index:0},{kind:'tile',index:0});side.drop({kind:'slot',index:1},{kind:'tile',index:1});
+ p.run(7000);assert.equal(side.combat.enemies.length,0);assert.equal(side.combat.projectiles.length,0);
+ assert.equal(side.heroes.links.size,1);assert.equal([...side.heroes.links.values()][0].currentExp,0);
+ assert.equal(side.recruitment.money,20);assert.deepEqual(p.game.match.health,{bottom:3,top:3});
+ assert.equal(side.combat.nextEnemyId,1);assert.equal(p.game.presentationPhase,'INTRO');
+ p.run(2490);assert.equal(side.combat.enemies.length,0);assert.equal(p.game.presentationPhase,'INTRO');
+ p.run(10);assert.equal(side.combat.nextEnemyId,2);assert.equal(p.game.presentationPhase,'RUNNING');
+ assert.ok(Math.abs(p.game.match.timeline.elapsedMs-9500)<0.001);
+});
+
+test('LeIntroView只读取给定进度，不注册timer/tween，destroy清除表现对象',()=>{
+ const p=pve(false),count=p.objects.get(p.ready).length;
+ const view=new LeIntroView(p.ready,testMap);view.update(3500);
+ assert.equal(p.ready.time._pendingInsertion.length,0);assert.equal(p.ready.tweens.tweens.length,0);
+ const objects=p.objects.get(p.ready).slice(count);assert.equal(objects.length,4);
+ view.destroy();assert.ok(objects.every(o=>!o.visible));assert.equal(p.game.match,null);
+});
+
+test('VS滑入中shutdown停止tween，旧完成回调不能进入停留或创建Match',()=>{
+ const p=pve(false,20,false);p.click(375,765);p.run(2000);
+ const callback=p.matching.tweens.tweens.at(-1).callbacks.onComplete.func;
+ const objects=p.objects.get(p.matching);p.shutdown(p.matching);callback();
+ assert.equal(p.game.match,null);assert.equal(p.startCount(),0);
+ assert.equal(p.matching.tweens.tweens.length,0);assert.equal(p.matching.time._pendingInsertion.length,0);
+ assert.ok(objects.every(o=>!o.visible));
+});
+
+test('揭幕期间退出旧战斗同时清理VS，旧回调和旧乐不能影响后续新局',()=>{
+ const p=pve(false,20,false);beginReveal(p);p.run(200);
+ const callback=p.matching.tweens.tweens.at(-1).callbacks.onComplete.func;
+ const tokens=leTokens(p),match=p.game.match;
+ p.shutdown(p.game);callback();
+ assert.equal(match.status,'destroyed');assert.equal(p.game.match,null);
+ assert.ok(tokens.every(o=>!o.visible));assert.equal(p.matching.tweens.tweens.length,0);
+ p.ready.create();p.ready.requestStartGame();p.finishFlow();
+ const fresh=p.game.match;callback();assert.equal(p.game.match,fresh);assert.equal(p.startCount(),2);
+ assert.equal(leTokens(p).length,2);assert.equal(fresh.timeline.elapsedMs,0);
+});
 
 // 渲染测试自己明确布置所需阵容；正式GameScene不再预置单位。
 function topRenderFixture(p) {

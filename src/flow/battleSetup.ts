@@ -19,7 +19,8 @@ export const localPlayerProfile: DisplayProfile = Object.freeze({
   id: 'local-player', nickname: '乐玩家', avatarVariant: 0,
 });
 export const flowConfig = {
-  matchingMinMs: 2000, matchingMaxMs: 3000, vsMs: 1800,
+  matchingMinMs: 2000, matchingMaxMs: 3000,
+  vsEnterMs: 400, vsHoldMs: 1400, vsExitMs: 500, leIntroMs: 7000,
   nicknames: ['小麦', '晚风', '橘子汽水', '山间月', '小团子', '晴天'],
   avatarVariants: 4,
 } as const;
