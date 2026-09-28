@@ -80,29 +80,11 @@ export class PveOverlayScene extends Phaser.Scene {
     let handled = false;
     // 立即拦截输入，但400ms内不改变最终战场画面。
     this.add.rectangle(375, 667, 750, 1334, 0x353d36, 0).setInteractive();
-    const leave = (rematch: boolean): void => {
+    const timer = this.time.delayedCall(resultPresentation.delayMs, () => {
       if (handled) return;
       handled = true;
       this.scene.stop('GameScene');
-      this.scene.start('ReadyScene', { loadout: data.loadout, autoMatch: rematch });
-    };
-    const timer = this.time.delayedCall(resultPresentation.delayMs, () => {
-      if (handled) return;
-      this.add.rectangle(375, 667, 750, 1334, 0x353d36, 0.65);
-      this.add.rectangle(375, 620, 600, 730, 0xf5f0e5);
-      label(this, 375, 350, snapshot.result === 'win' ? '胜利' : snapshot.result === 'lose' ? '失败' : '平局', 58);
-      label(this, 375, 440, `第 ${snapshot.waveReached} 波`, 30);
-      label(this, 375, 500, `击杀 ${snapshot.playerKills}`, 30);
-      label(this, 375, 560, `来财 ${snapshot.playerSuccessfulRecruits} 次`, 30);
-      label(this, 375, 620, `剩余 $${snapshot.playerRemainingMoney}`, 30);
-      if (snapshot.result === 'win') label(this, 375, 680, `乐：${'♥'.repeat(snapshot.playerRemainingHp)}`, 30);
-      label(this, 375, 720, `本局金币 +${matchCoinReward(snapshot)}`, 24);
-      const rematch = this.add.rectangle(375, 765, 330, 86, 0x697e67).setInteractive({ useHandCursor: true });
-      label(this, 375, 765, '再来一局', 30, '#fffaf0');
-      const home = this.add.rectangle(375, 875, 250, 68, 0xe1ddcf).setInteractive({ useHandCursor: true });
-      label(this, 375, 875, '返回主页', 26);
-      rematch.on('pointerdown', () => leave(true));
-      home.on('pointerdown', () => leave(false));
+      this.scene.start('ResultScene', Object.freeze({ snapshot, coinReward: matchCoinReward(snapshot) }));
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       handled = true;

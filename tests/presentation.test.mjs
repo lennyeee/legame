@@ -34,6 +34,8 @@ const { createBattleSetup, matchingDuration, flowConfig } = await import('../src
 const { createLoadout, createInventory } = await import('../src/systems/equipment.ts');
 const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
 const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
+const { ResultScene } = await import('../src/scenes/ResultScene.ts');
+const { ShopScene } = await import('../src/scenes/ShopScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { pressureConfig, waveStartForWave } = await import('../src/config/pressure.ts');
 const { gameConfig } = await import('../src/config/game.ts');
@@ -103,6 +105,8 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   let itemsActive = false;
   const overlay = new PveOverlayScene();
   for(const scene of [game,ready,items])scene.playerProgress=progress;
+  const result = new ResultScene(), shop = new ShopScene();shop.playerProgress=progress;
+  let resultActive=false,shopActive=false;
   let active = true;
   let overlayActive = false;
   let readyActive = true;
@@ -171,6 +175,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   };
   ready.scene = {
     start: (key, data) => {
+      if (key === 'ShopScene') {shutdown(ready);readyActive=false;shopActive=true;prepare(shop);shop.create();return;}
       if (key === 'ItemsScene') {
         shutdown(ready);readyActive=false;itemsActive=true;prepare(items);items.create(data);return;
       }
@@ -184,8 +189,10 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
     stop: key => { if (key === 'GameScene') {shutdown(game);gameActive=false;} else { shutdown(overlay); overlayActive = false; } },
-    start: (key,data) => {assert.equal(key,'ReadyScene');shutdown(overlay);overlayActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);},
+    start: (key,data) => {shutdown(overlay);overlayActive=false;if(key==='ResultScene'){prepare(result);resultActive=true;result.create(data);return;}assert.equal(key,'ReadyScene');readyActive=true;active=true;prepare(ready);ready.create(data);},
   };
+  result.scene={start:(key,data)=>{assert.equal(key,'ReadyScene');shutdown(result);resultActive=false;readyActive=true;active=true;prepare(ready);ready.create(data);}};
+  shop.scene={start:(key,data)=>{assert.equal(key,'ReadyScene');shutdown(shop);shopActive=false;readyActive=true;prepare(ready);ready.create(data);}};
   function startMatching(data) {
     active=true;matchingActive=true;prepare(matching);
     matching.create({...data,presentationRandom:()=>0,...matchingOptions});
@@ -208,7 +215,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   function tick(flowOnly=false) {
     now+=10;
     const scenes=[...(readyActive?[ready]:[]),...(itemsActive?[items]:[]),
-      ...(gameActive&&active&&!flowOnly?[game]:[]),...(matchingActive?[matching]:[]),...(overlayActive?[overlay]:[])];
+      ...(gameActive&&active&&!flowOnly?[game]:[]),...(matchingActive?[matching]:[]),...(overlayActive?[overlay]:[]),...(resultActive?[result]:[]),...(shopActive?[shop]:[])];
     for(const scene of scenes){
       scene.time.preUpdate();scene.time.update(now,10);scene.tweens.step();scene.events.emit('update',now,10);
     }
@@ -219,7 +226,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    let scene=overlayActive?overlay:itemsActive?items:gameActive?game:ready;
+    let scene=resultActive?result:overlayActive?overlay:shopActive?shop:itemsActive?items:gameActive?game:ready;
     const cover=matchingActive&&objects.get(matching).find(o=>o.kind==='container'&&o.interactive&&o.visible&&o.getBounds().contains(x,y));
     if(cover)scene=matching;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
@@ -239,7 +246,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { progress, game, ready, matching, setupHistory, finishFlow, shutdown, items, overlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
+  return { progress, result, shop, get overlay(){return resultActive?result:overlay;}, game, ready, matching, setupHistory, finishFlow, shutdown, items, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
 
@@ -251,7 +258,7 @@ function untilPhase(p,phase,limit=4000){
 
 test('HOME内匹配保持视觉和配置锁定，VS散开时才创建战斗且重复开始安全',()=>{
  const p=pve(false,20,false),homeObjects=p.objects.get(p.ready);
- assert.equal(p.game.match,null);p.click(375,765);
+ assert.equal(p.game.match,null);p.click(375,p.result.resultSnapshot?1070:765);
  for(let i=0;i<10;i++)p.ready.requestStartGame();
  assert.equal(p.matching.phase,'MATCHING');assert.equal(p.startCount(),0);
  assert.equal(p.text(375,765,p.ready),'正在寻找对手…');
@@ -285,7 +292,7 @@ test('HOME内匹配保持视觉和配置锁定，VS散开时才创建战斗且�
 test('MatchingScene只生成一次AI装备，GameScene消费原setup而不再次生成',()=>{
  let created=0;const top=createLoadout([]);
  const p=pve(false,20,false,{createOpponentLoadout:()=>{created++;return top;}});
- p.click(375,765);const setup=p.matching.setup;
+ p.click(375,p.result.resultSnapshot?1070:765);const setup=p.matching.setup;
  assert.equal(created,1);
  p.run(2000);assert.equal(created,1);untilPhase(p,'VS_HOLD');
  const random=Math.random;
@@ -296,7 +303,7 @@ test('MatchingScene只生成一次AI装备，GameScene消费原setup而不再次
 });
 
 test('MATCHING shutdown清除timer且旧匹配回调无法启动VS或GameScene',()=>{
- const p=pve(false,20,false);p.click(375,765);
+ const p=pve(false,20,false);p.click(375,p.result.resultSnapshot?1070:765);
  const callback=p.matching.time._pendingInsertion[0].callback;
  p.shutdown(p.matching);callback();
  assert.equal(p.matching.setup,null);assert.equal(p.startCount(),0);assert.equal(p.game.match,null);
@@ -304,7 +311,7 @@ test('MATCHING shutdown清除timer且旧匹配回调无法启动VS或GameScene',
 });
 
 test('VS shutdown后过期/重复回调不能创建旧局或重复启动新局',()=>{
- const p=pve(false,20,false);p.click(375,765);p.run(2000);untilPhase(p,'VS_HOLD');
+ const p=pve(false,20,false);p.click(375,p.result.resultSnapshot?1070:765);p.run(2000);untilPhase(p,'VS_HOLD');
  const old=p.matching.time._pendingInsertion[0]?.callback ?? p.matching.time._active[0].callback;
  p.shutdown(p.matching);old();assert.equal(p.startCount(),0);
  p.matching.create({presentationRandom:()=>0});
@@ -313,8 +320,8 @@ test('VS shutdown后过期/重复回调不能创建旧局或重复启动新局',
 });
 
 test('玩家装备跨HOME/匹配/VS/战斗保留，道具往返不创建Match',()=>{
- const p=pve(false,20,false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);
- assert.equal(p.game.match,null);p.click(375,765);
+ const p=pve(false,20,false);p.click(375,885);p.click(155,920);p.click(375,835);p.click(375,1200);
+ assert.equal(p.game.match,null);p.click(375,p.result.resultSnapshot?1070:765);
  const setup=p.matching.setup;assert.equal(setup.playerLoadout.passive[0].id,'farmer');
  p.finishFlow();assert.deepEqual(p.game.sides.bottom.recruitment.loadout,setup.playerLoadout);
 });
@@ -324,9 +331,9 @@ test('连续三次result再匹配创建全新对手/Match/Side/Timeline并清理
  for(let i=0;i<3;i++){
   const old=p.game.match,setup=p.game.battleSetup,clock=p.game.time;
   finishMatch(p,false);
-  const oldResult=p.objects.get(p.overlay).find(o=>o.interactive&&o.x===375&&o.y===765)
+  const oldResult=p.objects.get(p.overlay).find(o=>o.interactive&&o.x===375&&o.y===1070)
     .listeners('pointerdown')[0];
-  p.click(375,765);p.click(375,765);
+  p.click(375,p.result.resultSnapshot?1070:765);p.click(375,p.result.resultSnapshot?1070:765);
   assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
   assert.equal(p.startCount(),i+1);assert.equal(p.matching.phase,'MATCHING');
   assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.globalEvents.listenerCount('blur'),0);
@@ -352,7 +359,7 @@ function finishMatch(p, win, survivorLeaks=0, showPanel=true) {
 }
 
 function beginReveal(p){
- p.click(375,765);p.run(2000);untilPhase(p,'VS_HOLD');p.run(flowConfig.vsHoldMs);
+ p.click(375,p.result.resultSnapshot?1070:765);p.run(2000);untilPhase(p,'VS_HOLD');p.run(flowConfig.vsHoldMs);
  assert.equal(p.matching.phase,'VS_EXIT');assert.equal(p.game.match.timeline.elapsedMs,0);
 }
 
@@ -410,7 +417,7 @@ test('暂停冻结Match、AI和乐进度，恢复后从原位置继续',()=>{
  p.run(5000);assert.equal(p.game.match.timeline.elapsedMs,elapsed);
  assert.deepEqual(leTokens(p).map(o=>({x:o.x,y:o.y})),positions);
  assert.equal(JSON.stringify(p.game.sides.top.recruitment),top);
- p.click(375,765);p.run(1000);assert.ok(p.game.match.timeline.elapsedMs>elapsed);
+ p.click(375,p.result.resultSnapshot?1070:765);p.run(1000);assert.ok(p.game.match.timeline.elapsedMs>elapsed);
  assert.notDeepEqual(leTokens(p).map(o=>({x:o.x,y:o.y})),positions);
 });
 
@@ -437,7 +444,7 @@ test('LeIntroView只读取给定进度，不注册timer/tween，destroy清除表
 });
 
 test('VS滑入中shutdown停止tween，旧完成回调不能进入停留或创建Match',()=>{
- const p=pve(false,20,false);p.click(375,765);p.run(2000);
+ const p=pve(false,20,false);p.click(375,p.result.resultSnapshot?1070:765);p.run(2000);
  const callback=p.matching.tweens.tweens.at(-1).callbacks.onComplete.func;
  const objects=p.objects.get(p.matching);p.shutdown(p.matching);callback();
  assert.equal(p.game.match,null);assert.equal(p.startCount(),0);
@@ -467,29 +474,29 @@ function topRenderFixture(p) {
 
 test('背包详情、装卸返回、单局被动栏及连续重开保留loadout',()=>{
   const p=pve(false);assert.equal(p.text(375,885,p.ready),'道具');p.click(375,885);
-  p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,620,p.items),'农民');
-  p.click(155,630);assert.equal(p.text(375,510,p.items),'农民');assert.equal(p.text(375,565,p.items),'类型：被动道具');
-  assert.equal(p.text(375,655,p.items),'携带后，征兵时有概率出现农民。部署后的农民不会攻击，会周期性生产美金。');
-  const description=p.objects.get(p.items).find(o=>o.kind==='text'&&o.y===655);
+  p.run(30000);assert.equal(p.objects.has(p.game),false);assert.equal(p.text(155,910,p.items),'农民');
+  p.click(155,920);assert.equal(p.text(375,480,p.items),'农民');assert.equal(p.text(375,540,p.items),'类型：被动道具');
+  assert.equal(p.text(375,635,p.items),'携带后，征兵时有概率出现农民。部署后的农民不会攻击，会周期性生产美金。');
+  const description=p.objects.get(p.items).find(o=>o.kind==='text'&&o.y===635);
   assert.equal(description.advancedWrap,true);assert.equal(description.wrapWidth,490);
   assert.equal(description.fixedWidth,500);assert.ok(description.fixedWidth<590);
   const shade=p.objects.get(p.items).findLast(o=>o.kind==='rectangle'&&o.width===750);
   shade.emit('pointerdown');assert.equal(p.objects.get(p.items).some(o=>o.text==='装备'&&o.visible),false);
-  p.click(155,630);p.click(375,815);assert.equal(p.text(125,410,p.items),'农民');
-  p.click(155,630);assert.ok(p.objects.get(p.items).some(o=>o.text==='卸下'&&o.visible));p.click(375,815);
-  assert.equal(p.text(125,410,p.items),'—');p.click(155,630);p.click(375,815);
+  p.click(155,920);p.click(375,835);assert.equal(p.text(125,410,p.items),'农民');
+  p.click(155,920);assert.ok(p.objects.get(p.items).some(o=>o.text==='卸下'&&o.visible));p.click(375,835);
+  assert.equal(p.text(125,410,p.items),'—');p.click(155,920);p.click(375,835);
   p.click(375,1200);assert.equal(p.ready.startState,'READY');p.click(375,885);
-  assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,765);
-  p.click(75, 55);p.run(10000);assert.equal(p.text(120,1110),'农民');p.click(375,765);
+  assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);
+  p.click(75, 55);p.run(10000);assert.equal(p.text(120,1110),'农民');p.click(375,p.result.resultSnapshot?1070:765);
   for(let round=0;round<3;round++){
     assert.equal(p.text(120,1110),'农民');assert.equal(p.text(630,1262),'—');
     for(const x of [80,670])assert.notEqual(p.objects.get(p.game).find(o=>o.kind==='rectangle'&&o.x===x&&o.y===1018).interactive,true);
     p.run(1000);assert.equal(p.text(170, 55),'$ 20');
-    finishMatch(p,false);assert.equal(p.text(375,350,p.overlay),'失败');p.click(375,765);
+    finishMatch(p,false);assert.equal(p.text(375,250,p.overlay),'失败');p.click(375,p.result.resultSnapshot?1070:765);
     assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(625, 55),'第 1 波');
   }
-  finishMatch(p,true);assert.equal(p.text(375,350,p.overlay),'胜利');
-  p.click(375,765);assert.equal(p.text(120,1110),'农民');
+  finishMatch(p,true);assert.equal(p.text(375,250,p.overlay),'胜利');
+  p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.text(120,1110),'农民');
 });
 
 test('未装备农民开局被动栏为空',()=>{
@@ -518,7 +525,7 @@ test('初始READY无对局控制器和计时器，长时间等待无敌人/资�
 test('开始后统一初始化一次，重复请求无效，无条件收入保持关闭且波次正常启动', () => {
   const p = pve(false);
   p.run(60000);
-  p.click(375,765);
+  p.click(375,p.result.resultSnapshot?1070:765);
   for (let i=0;i<10;i++) p.ready.requestStartGame();
   assert.equal(p.ready.startState, 'MATCHING');
   assert.equal(p.isActive(), true);
@@ -539,7 +546,7 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   assert.equal(p.text(170, 55), '$ 10');
   assert.equal(p.text(164.0625,577.0625), '');
   p.click(75, 55);assert.equal(p.text(375,565,p.overlay),'已暂停');
-  p.click(375,765);assert.equal(p.isActive(),true);
+  p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.isActive(),true);
 });
 
 test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
@@ -592,18 +599,18 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       const paused=p.snapshot();
       p.run(5000);p.drag([248.4375,574.0625],[183,1018]);
       assert.equal(p.snapshot(),paused);
-      p.click(375,765);finishMatch(p,win);
-      assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
+      p.click(375,p.result.resultSnapshot?1070:765);finishMatch(p,win);
+      assert.equal(p.text(375,250,p.overlay),win?'胜利':'失败');
       const ended=p.snapshot();p.run(5000);p.drag([248.4375,574.0625],[183,1018]);
       assert.equal(p.snapshot(),ended);
-      p.click(375,765);
+      p.click(375,p.result.resultSnapshot?1070:765);
       assert.equal(linkedBorder(),false);
       assert.equal(p.objects.get(p.game).some(o => o.y > 532 && ['小','美','Zz'].includes(o.text)),false);
       assert.equal(p.game.events.listenerCount('update'),1);
       p.run(2000);
       assert.equal(p.objects.get(p.game).some(o=>o.kind==='graphics'&&o.scale>0&&o.draws.some(d=>d[0]==='lineBetween')),false);
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
-      p.run(30000);p.click(375,765);
+      p.run(30000);p.click(375,p.result.resultSnapshot?1070:765);
     }
   } finally { Math.random=random;heroCombat.damage=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
 });
@@ -623,14 +630,14 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
       .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===156&&d[2]===635&&d[4]===3);
     assert.ok(expBars().some(d=>d[3]>0));
     p.click(75, 55);const paused=p.snapshot();p.run(10000);p.drag([279,1018],[248.4375,574.0625]);
-    assert.equal(p.snapshot(),paused);p.click(375,765);
+    assert.equal(p.snapshot(),paused);p.click(375,p.result.resultSnapshot?1070:765);
     Math.random = () => 15.5 / 20;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(10);
     assert.equal(p.text(206.25,593.9375),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
     p.drag([248.4375,574.0625],[183,1018]);p.run(10);
     assert.equal(expBars().length,0);assert.equal(p.text(164.0625,555.6875),'Zz');
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
     p.run(30000);const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
-    p.click(375,765);assert.equal(expBars().length,0);
+    p.click(375,p.result.resultSnapshot?1070:765);assert.equal(expBars().length,0);
     assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'&&o.y>532),false);
     Math.random=()=>15.5/20;p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
   } finally { Math.random=random; combatConfig.enemy.maxHp = enemyHp; }
@@ -648,16 +655,16 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
     const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible&&o.y>532);
     p.run(9500);assert.equal(flashes().length,0);
     p.click(75, 55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
-    p.click(375,765);
+    p.click(375,p.result.resultSnapshot?1070:765);
     let seen=false;
     for(let ms=0;ms<6000&&!seen;ms+=10){p.run(10);seen=flashes().length>0;}
     assert.equal(seen,true);
     p.click(75, 55);const casting=p.snapshot();p.run(5000);assert.equal(p.snapshot(),casting);
-    p.click(375,765);p.run(500);assert.equal(flashes().length,0);
+    p.click(375,p.result.resultSnapshot?1070:765);p.run(500);assert.equal(flashes().length,0);
     combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
     p.drag([248.4375,574.0625],[183,1018]);finishMatch(p,false);
-    assert.equal(p.text(375,350,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
-    p.click(375,765);assert.equal(flashes().length,0);p.run(10000);assert.equal(flashes().length,0);
+    assert.equal(p.text(375,250,p.overlay),'失败');const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
+    p.click(375,p.result.resultSnapshot?1070:765);assert.equal(flashes().length,0);p.run(10000);assert.equal(flashes().length,0);
   } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
 });
 
@@ -674,16 +681,16 @@ for (const [name,left,right,cd] of [['阿饼',17.5,18.5,14000],['小六',15.5,19
       // 观察真实成长后的首次发动，不假定击杀升级前后的CD完全相同。
       p.run(1000);p.click(75, 55);const paused=p.snapshot();
       p.run(30000);p.drag([248.4375,574.0625],[183,1018]);assert.equal(p.snapshot(),paused);
-      p.click(375,765);
+      p.click(375,p.result.resultSnapshot?1070:765);
       let seen=false;
       for(let ms=0;ms<cd+1500&&!seen;ms+=10){p.run(10);seen=flashes().length>0;}
       assert.equal(seen,true);
       p.click(75, 55);const casting=p.snapshot();p.run(20000);assert.equal(p.snapshot(),casting);
       combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp;
-      p.click(375,765);p.drag([248.4375,574.0625],[183,1018]);p.run(10);assert.equal(flashes().length,0);
-      finishMatch(p,false);assert.equal(p.text(375,350,p.overlay),'失败');
+      p.click(375,p.result.resultSnapshot?1070:765);p.drag([248.4375,574.0625],[183,1018]);p.run(10);assert.equal(flashes().length,0);
+      finishMatch(p,false);assert.equal(p.text(375,250,p.overlay),'失败');
       const ended=p.snapshot();p.run(20000);assert.equal(p.snapshot(),ended);
-      p.click(375,765);p.run(1000);assert.equal(flashes().length,0);
+      p.click(375,p.result.resultSnapshot?1070:765);p.run(1000);assert.equal(flashes().length,0);
       assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.game.time._active.length,0);
       assert.equal(p.objects.get(p.game).some(o=>o.y>532&&(o.text===name||o.text==='Zz')),false);
     } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
@@ -709,7 +716,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   p.drag([164.0625,574.0625], [248.4375,574.0625]);
   assert.equal(p.snapshot(), paused);
   assert.equal(p.game.match.timeline.elapsedMs, elapsed);
-  p.click(375, 765);
+  p.click(375,p.result.resultSnapshot?1070:765);
   assert.equal(p.isActive(), true);
   assert.equal(p.game.input.enabled, true);
   assert.equal(p.snapshot(), paused);
@@ -721,7 +728,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   for (let i = 0; i < 3; i++) {
     p.click(75, 55);
     p.run(5000);
-    p.click(375, 765);
+    p.click(375,p.result.resultSnapshot?1070:765);
     assert.equal(p.game.time._active.length, 0);
     assert.equal(p.game.events.listenerCount('update'),1);
   }
@@ -753,15 +760,15 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       p.drag([183,1018], [501.5625,661.4375]);
       p.run(2500);finishMatch(p,win,win?1:0);
       assert.equal(p.isActive(), false);
-      assert.equal(p.text(375,350,p.overlay), win ? '胜利' : '失败');
-      if (win) assert.equal(p.text(375,680,p.overlay), '乐：♥♥');
-      assert.equal(p.text(375, 765, p.overlay), '再来一局');
+      assert.equal(p.text(375,250,p.overlay), win ? '胜利' : '失败');
+      if (win) assert.equal(p.text(375,730,p.overlay), '乐：♥♥');
+      assert.equal(p.text(375,1070,p.overlay), '再来一局');
       const ended = p.snapshot();
       p.run(10000);
       p.click(375, 1158);
       assert.equal(p.snapshot(), ended);
       const oldClock = p.game.time;
-      p.click(375, 765);
+      p.click(375,p.result.resultSnapshot?1070:765);
       assert.equal(p.isActive(), true);
       assert.equal(p.startCount(), round + 2); // 每次重新匹配后才创建新战斗。
       assert.equal(oldClock._active.length, 0);
@@ -925,11 +932,11 @@ test('暂停只提供继续和返回主页，取消保持冻结，确认清理�
  const p=pve();p.run(1000);p.click(75,55);
  assert.equal(p.objects.get(p.overlay).some(o=>o.text==='重新开始'),false);
  const old=p.game.match;const frozen=p.snapshot();
- p.click(375,875);assert.equal(p.text(375,565,p.overlay),'确定返回主页？');
+ p.click(375,p.result.resultSnapshot?1190:875);assert.equal(p.text(375,565,p.overlay),'确定返回主页？');
  p.click(220,765);p.run(1000);assert.equal(p.snapshot(),frozen);assert.equal(old.status,'paused');
- p.click(375,875);p.click(530,765);assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
+ p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
  assert.equal(p.ready.startState,'READY');assert.equal(p.game.events.listenerCount('update'),0);
- p.click(375,765);assert.notEqual(p.game.match,old);assert.equal(p.game.match.timeline.elapsedMs,0);
+ p.click(375,p.result.resultSnapshot?1070:765);assert.notEqual(p.game.match,old);assert.equal(p.game.match.timeline.elapsedMs,0);
 });
 
 test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',()=>{
@@ -942,7 +949,7 @@ test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',
 
 
 function farmerGame(){
- const p=pve(false);p.click(375,885);p.click(155,630);p.click(375,815);p.click(375,1200);p.click(375,765);
+ const p=pve(false);p.click(375,885);p.click(155,920);p.click(375,835);p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);
  return p;
 }
 const farmCash=p=>p.objects.get(p.game).filter(o=>o.kind==='text'&&/^\$[0-9]+$/.test(o.text)&&o.visible&&o.y>532);
@@ -989,11 +996,11 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,555.6875),'');
   p.run(11990);p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
-  p.click(375,765);p.run(10);assert.equal(farmCash(p).length,1);
+  p.click(375,p.result.resultSnapshot?1070:765);p.run(10);assert.equal(farmCash(p).length,1);
   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
   const emit=()=>badge.emit('pointerdown',{},0,0,{stopPropagation(){}});
   p.click(75,55);const ready=p.snapshot(),money=farmMoney(p);p.run(10000);emit();assert.equal(farmMoney(p),money);assert.equal(p.snapshot(),ready);
-  p.click(375,765);p.run(4990);assert.equal(farmCash(p).length,1);
+  p.click(375,p.result.resultSnapshot?1070:765);p.run(4990);assert.equal(farmCash(p).length,1);
   const before=farmMoney(p);let stopped=false;
   badge.emit('pointerdown',{},0,0,{stopPropagation(){stopped=true;}});
   assert.equal(stopped,true);assert.equal(farmMoney(p),before+1);emit();assert.equal(farmMoney(p),before+1);assert.equal(farmCash(p).length,0);
@@ -1003,7 +1010,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
   p.run(11990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
   p.drag([248.4375,574.0625],[183,1018]);assert.equal(farmCash(p).length,0);
   p.drag([183,1018],[248.4375,574.0625]);p.run(11990);assert.equal(farmCash(p).length,0);p.run(10);assert.equal(farmCash(p).length,1);
-  p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);
+  p.click(75,55);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);
   emit();assert.equal(farmMoney(p),20);assert.equal(p.game.events.listenerCount('update'),1);assert.equal(p.text(120,1110),'农民');
   p.run(12000);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,0);
  }finally{Math.random=random;combatConfig.enemy.moveSpeed=speed;}
@@ -1015,10 +1022,10 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   p.run(12000);
   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
-  finishMatch(p,win);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
+  finishMatch(p,win);assert.equal(p.text(375,250,p.overlay),win?'胜利':'失败');
   const ended=p.snapshot(),money=farmMoney(p);p.run(30000);badge?.emit('pointerdown',{},0,0,{stopPropagation(){}});
   assert.equal(p.snapshot(),ended);assert.equal(farmMoney(p),money);
-   p.click(375,765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.text(120,1110),'农民');
+   p.click(375,p.result.resultSnapshot?1070:765);assert.equal(farmCash(p).length,0);assert.equal(farmMoney(p),20);assert.equal(p.text(120,1110),'农民');
   p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));
   assert.equal(p.game.events.listenerCount('update'),1);
  }finally{Math.random=random;}
@@ -1027,8 +1034,8 @@ for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益�
 
 function equippedV56() {
  const p=pve(false, 100);p.click(375,885);
- for(const x of [155,300,445]){p.click(x,630);p.click(375,815);}
- p.click(375,1200);p.click(375,765);return p;
+ for(const [x,y] of [[155,920],[300,920],[155,630]]){p.click(x,y);p.click(375,835);}
+ p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);return p;
 }
 function dropUpgrade(p,x,y,eventType='pointerup') {
  p.click(80,1018);
@@ -1042,7 +1049,7 @@ test('升级符真实输入：50秒CD、暂停冻结、非法释放/移出保留
   assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
   p.click(375,1158);dropUpgrade(p,183,1018);assert.equal(p.text(80,1018),'升级符\n50s');
   p.run(7000);assert.equal(p.text(80,1018),'升级符\n43s');p.click(75,55);const frozen=p.snapshot();p.run(30000);
-  assert.equal(p.snapshot(),frozen);p.click(375,765);p.run(42990);assert.equal(p.text(80,1018),'升级符\n1s');p.run(10);
+  assert.equal(p.snapshot(),frozen);p.click(375,p.result.resultSnapshot?1070:765);p.run(42990);assert.equal(p.text(80,1018),'升级符\n1s');p.run(10);
   assert.equal(p.text(80,1018),'升级符\n可用');dropUpgrade(p,375,50);assert.equal(p.text(80,1018),'升级符\n可用');
   dropUpgrade(p,183,1018,'pointerupoutside');assert.equal(p.text(80,1018),'升级符\n可用');
   p.click(80,1018);assert.equal(p.text(80,1018),'升级符\n拖动中');const money=farmMoney(p);p.click(375,1158);assert.equal(farmMoney(p),money);
@@ -1054,7 +1061,7 @@ test('升级符真实输入：50秒CD、暂停冻结、非法释放/移出保留
   assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(375,1264),'道具使用成功');
   assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
   p.run(50000);p.click(80,1018);p.click(75,55);assert.equal(p.text(80,1018),'升级符\n可用');
-  p.run(1000);p.click(375,765);p.game.input.emit('pointerup',{id:1,x:279,y:1018});assert.equal(p.text(80,1018),'升级符\n可用');
+  p.run(1000);p.click(375,p.result.resultSnapshot?1070:765);p.game.input.emit('pointerup',{id:1,x:279,y:1018});assert.equal(p.text(80,1018),'升级符\n可用');
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 test('回主页取消保持暂停；确认清理计时器/技能/农民收益/主动CD并保留装备，连续返回不重复循环',()=>{
@@ -1068,15 +1075,15 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
    }
    p.run(12000);assert.equal(farmCash(p).length,1);
    const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height),clock=p.game.time;
-   p.click(75,55);assert.equal(p.text(375,875,p.overlay),'返回主页');p.click(375,875);
+   p.click(75,55);assert.equal(p.text(375,875,p.overlay),'返回主页');p.click(375,p.result.resultSnapshot?1190:875);
    assert.equal(p.text(375,565,p.overlay),'确定返回主页？');assert.equal(p.text(375,655,p.overlay),'当前对局进度将丢失。');
    const frozen=p.snapshot();p.run(30000);p.click(220,765);assert.equal(p.text(375,565,p.overlay),'已暂停');assert.equal(p.isActive(),false);
-   p.run(10000);assert.equal(p.snapshot(),frozen);p.click(375,875);p.click(530,765);
+   p.run(10000);assert.equal(p.snapshot(),frozen);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);
    assert.equal(p.ready.startState,'READY');assert.equal(p.text(375,765,p.ready),'开始对战');
    assert.equal(clock._active.length,0);assert.equal(clock._pendingInsertion.length,0);
    assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.events.listenerCount('resume'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);assert.equal(p.globalEvents.listenerCount('blur'),0);
    assert.equal(farmCash(p).length,0);const homepage=p.snapshot();p.run(60000);assert.equal(p.snapshot(),homepage);
-   p.click(375,885);assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,765);
+   p.click(375,885);assert.equal(p.text(125,410,p.items),'农民');p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);
    assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1110),'农民');assert.equal(p.text(120,1186),'招贤榜');
    assert.equal(farmMoney(p),100);badge.emit('pointerdown',{},0,0,{stopPropagation(){}});assert.equal(farmMoney(p),100);
    assert.equal(p.text(625,55),'第 1 波');assert.equal(p.text(670.3125,941.5625),'♥♥♥');
@@ -1087,16 +1094,16 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
 });
 for(const win of [true,false])test('升级符在'+(win?'胜利':'失败')+'后停止CD且重开重新充能',()=>{
  const p=equippedV56();p.run(5000);finishMatch(p,win);
-  assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
-  p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1186),'招贤榜');
-  p.run(5000);p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(p.text(80,1018),'升级符\n50s');
+  assert.equal(p.text(375,250,p.overlay),win?'胜利':'失败');const frozen=p.snapshot();p.run(30000);assert.equal(p.snapshot(),frozen);
+  p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(120,1186),'招贤榜');
+  p.run(5000);p.click(75,55);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.text(80,1018),'升级符\n50s');
   assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),100);
 });
 
 
 function equippedV57(){const p=pve(false);p.click(375,885);
- for(const [x,y] of [[155,630],[590,630],[155,750]]){p.click(x,y);p.click(375,815);}
- p.click(375,1200);p.click(375,765);return p;
+ for(const [x,y] of [[155,920],[300,630],[445,630]]){p.click(x,y);p.click(375,835);}
+ p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);return p;
 }
 function dragActive(p,slot,x,y){p.click(slot,1018);p.game.input.emit('pointermove',{id:1,x,y,primaryDown:true});p.game.input.emit('pointerup',{id:1,x,y,primaryDown:false});}
 test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除收益；如律令暂停冻结且失败不耗CD',()=>{
@@ -1106,29 +1113,29 @@ test('v0.57两主动槽拖放：点金手无CD及时刷新钱，卖农民移除�
   Math.random=()=>.99;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(12000);assert.equal(farmCash(p).length,1);
   const money=farmMoney(p);dragActive(p,80,164.0625,574.0625);assert.equal(farmMoney(p),money+1);assert.equal(farmCash(p).length,0);
   dragActive(p,80,279,1018);assert.equal(farmMoney(p),money+2);assert.equal(p.text(80,1018),'点金手\n可用');
-  p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);p.click(375,765);p.run(12000);
+  p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);p.click(375,p.result.resultSnapshot?1070:765);p.run(12000);
   assert.equal(p.text(670,1018),'急急如\n律令\n可用');dragActive(p,670,375,1018);assert.equal(p.text(670,1018),'急急如\n律令\n可用'); // 农民非法
   Math.random=()=>0;p.click(375,1158);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n20s');
   p.run(20000);dragActive(p,670,183,1018);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
   p.drag([183,1018],[164.0625,574.0625]);dragActive(p,670,164.0625,574.0625);assert.equal(p.text(670,1018),'急急如\n律令\n可用');
-   p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),20);
-  p.click(75,55);p.click(375,875);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
-   p.click(375,765);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(farmMoney(p),20);
+   p.click(75,55);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(farmMoney(p),20);
+  p.click(75,55);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);assert.equal(p.game.events.listenerCount('update'),0);assert.equal(p.game.input.listenerCount('pointerup'),0);
+   p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');assert.equal(farmMoney(p),20);
    assert.equal(p.game.events.listenerCount('update'),1);p.run(1000);assert.equal(farmMoney(p),20);assert.equal(p.game.time._active.length,0);
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}
 });
 for(const win of [true,false])test('v0.57结算'+(win?'胜利':'失败')+'停止两道具，重开清空单位和强化',()=>{
- const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
+ const p=equippedV57();p.run(5000);finishMatch(p,win);assert.equal(p.text(375,250,p.overlay),win?'胜利':'失败');
  const snapshot=p.snapshot();p.run(30000);dragActive(p,80,183,1018);assert.equal(p.snapshot(),snapshot);
- p.click(375,765);assert.equal(farmMoney(p),20);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
+ p.click(375,p.result.resultSnapshot?1070:765);assert.equal(farmMoney(p),20);assert.equal(p.text(670,1018),'急急如\n律令\n20s');assert.equal(p.text(80,1018),'点金手\n可用');
  assert.equal(p.objects.get(p.game).some(o=>o.y>532&&o.text.startsWith('Lv.')),false);
 });
 
 
 test('v0.571 每张背包卡片及详情均明确区分主动/被动',()=>{
  const p=pve(false);p.click(375,885);
- for(const [x,y,category] of [[155,630,'被动'],[300,630,'被动'],[445,630,'主动'],[590,630,'主动'],[155,750,'主动']]){
-  assert.equal(p.text(x,y+30,p.items),category);p.click(x,y);
+ for(const [x,y,category] of [[155,920,'被动'],[300,920,'被动'],[155,630,'主动'],[300,630,'主动'],[445,630,'主动']]){
+  assert.equal(p.text(x,y+25,p.items),category);p.click(x,y);
   assert.ok(p.objects.get(p.items).some(o=>o.visible&&o.text==='类型：'+category+'道具'));
   const shade=p.objects.get(p.items).findLast(o=>o.kind==='rectangle'&&o.width===750);shade.emit('pointerdown');
  }
@@ -1136,11 +1143,11 @@ test('v0.571 每张背包卡片及详情均明确区分主动/被动',()=>{
 
 test('没有被动不自动涨钱；铁饭碗只在装备局内每10秒发$2，暂停冻结，重开后重新计时',()=>{
  const plain=pve();plain.run(10000);assert.equal(plain.text(170,55),'$ 20');
- const p=pve(false);p.click(375,885);p.click(300,750);p.click(375,815);p.click(375,1200);p.click(375,765);
+ const p=pve(false);p.click(375,885);p.click(445,920);p.click(375,835);p.click(375,1200);p.click(375,p.result.resultSnapshot?1070:765);
  assert.equal(p.text(170,55),'$ 20');p.run(9990);assert.equal(p.text(170,55),'$ 20');
  p.click(75,55);p.run(30000);assert.equal(p.text(170,55),'$ 20');
- p.click(375,765);p.run(10);assert.equal(p.text(170,55),'$ 22');
- p.run(4000);p.click(75,55);p.click(375,875);p.click(530,765);p.click(375,765);
+ p.click(375,p.result.resultSnapshot?1070:765);p.run(10);assert.equal(p.text(170,55),'$ 22');
+ p.run(4000);p.click(75,55);p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);
  assert.equal(p.text(170,55),'$ 20');p.run(9990);assert.equal(p.text(170,55),'$ 20');
  p.run(10);assert.equal(p.text(170,55),'$ 22');
 });
@@ -1243,7 +1250,7 @@ test('v0.60-B 暂停冻结两个Side，返回主页后新匹配只留下新Side�
  const p=pve(),old=p.game.sides;
  p.run(pressureConfig.firstEnemyDelay+100);const oldDistance=old.top.combat.enemies[0].distance;
  p.click(75,55);p.run(5000);assert.equal(old.top.combat.enemies[0].distance,oldDistance);
- p.click(375,875);p.click(530,765);p.click(375,765);
+ p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);
  assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
  assert.equal(old.top.combat.enemies.length,0);assert.equal(old.bottom.combat.enemies.length,0);
  assert.equal(p.game.sides.top.board.tiles[0].unit,null);
@@ -1274,9 +1281,9 @@ test('v0.60-C 同步漏怪显示平局；旧update回调在重开后不能再运
  for(const s of Object.values(old.sides))for(let i=0;i<3;i++){
   const e=s.combat.spawnEnemy();e.distance=s.combat.path.totalLength-.001;
  }
- p.run(420);assert.equal(p.text(375,350,p.overlay),'平局');assert.equal(old.result,'draw');
+ p.run(420);assert.equal(p.text(375,250,p.overlay),'平局');assert.equal(old.result,'draw');
  const ended=p.snapshot();old.update(250);p.run(5000);assert.equal(p.snapshot(),ended);
- p.click(375,765);const fresh=p.game.match;assert.notEqual(fresh,old);
+ p.click(375,p.result.resultSnapshot?1070:765);const fresh=p.game.match;assert.notEqual(fresh,old);
  assert.equal(old.status,'destroyed');assert.deepEqual(fresh.health,{bottom:3,top:3});
  const initial=p.snapshot();callbacks.forEach(fn=>fn(20000,250));assert.equal(p.snapshot(),initial);
  assert.equal(fresh.timeline.elapsedMs,0);assert.equal(fresh.bottomSide.recruitment.money,20);
@@ -1327,37 +1334,37 @@ for(const win of [true,false])test('RESULT '+(win?'win':'lose')+' freezes immedi
  finishMatch(p,win,win?1:0,false);
  assert.equal(p.game.input.enabled,false);assert.equal(old.status,'ended');
  const snapshot=old.resultSnapshot,ended=p.snapshot(),time=old.timeline.elapsedMs;
- assert.equal(p.overlay.resultSnapshot,snapshot);assert.equal(p.text(375,350,p.overlay),undefined);
+ assert.equal(p.overlay.resultSnapshot,snapshot);assert.equal(p.text(375,250,p.overlay),undefined);
  const ui=()=>p.objects.get(p.overlay).filter(o=>o.kind==='text').map(o=>o.text);
  p.click(375,1158);p.click(75,55);p.drag([183,1018],[248,574]);
  p.run(370);assert.equal(ui().length,0);assert.equal(old.timeline.elapsedMs,time);assert.equal(p.snapshot(),ended);
- p.run(40);assert.equal(p.text(375,350,p.overlay),win?'胜利':'失败');
- assert.equal(p.text(375,440,p.overlay),'第 '+snapshot.waveReached+' 波');
- assert.equal(p.text(375,500,p.overlay),'击杀 '+snapshot.playerKills);
- assert.equal(p.text(375,560,p.overlay),'来财 '+snapshot.playerSuccessfulRecruits+' 次');
- assert.equal(p.text(375,620,p.overlay),'剩余 $'+snapshot.playerRemainingMoney);
+ p.run(40);assert.equal(p.text(375,250,p.overlay),win?'胜利':'失败');
+ assert.equal(p.text(375,410,p.overlay),'第 '+snapshot.waveReached+' 波');
+ assert.equal(p.text(375,490,p.overlay),'击杀 '+snapshot.playerKills);
+ assert.equal(p.text(375,570,p.overlay),'来财 '+snapshot.playerSuccessfulRecruits+' 次');
+ assert.equal(p.text(375,650,p.overlay),'剩余 $'+snapshot.playerRemainingMoney);
  assert.equal(ui().some(t=>t.startsWith('乐：')),win);
- if(win)assert.equal(p.text(375,680,p.overlay),'乐：♥♥');
- assert.equal(ui().includes('已暂停'),false);p.run(5000);assert.equal(p.snapshot(),ended);
+ if(win)assert.equal(p.text(375,730,p.overlay),'乐：♥♥');
+ assert.equal(ui().includes('已暂停'),false);const resultUi=ui();p.run(5000);assert.deepEqual(ui(),resultUi);assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);
 });
 
 test('RESULT draw has stats and both actions but no HP row',()=>{
  const p=pve();for(const side of Object.values(p.game.sides))for(let n=0;n<3;n++){
   const e=side.combat.spawnEnemy();e.distance=side.combat.path.totalLength-.001;
  }
- p.run(420);assert.equal(p.text(375,350,p.overlay),'平局');
+ p.run(420);assert.equal(p.text(375,250,p.overlay),'平局');
  assert.equal(p.objects.get(p.overlay).some(o=>o.kind==='text'&&o.text.startsWith('乐：')),false);
- assert.equal(p.text(375,765,p.overlay),'再来一局');assert.equal(p.text(375,875,p.overlay),'返回主页');
+ assert.equal(p.text(375,1070,p.overlay),'再来一局');assert.equal(p.text(375,1190,p.overlay),'返回主页');
 });
 
 test('RESULT home destroys old runtime, clears snapshot binding and restores both HOME controls',()=>{
- const p=pve();finishMatch(p,false);const old=p.game.match,kit=old.bottomSide.recruitment.loadout;
- const callbacks=p.game.events.listeners('update');p.click(375,875);
+ const p=pve(),old=p.game.match,kit=old.bottomSide.recruitment.loadout;finishMatch(p,false);
+ const callbacks=p.game.events.listeners('update');p.click(375,p.result.resultSnapshot?1190:875);
  assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);assert.equal(p.overlay.resultSnapshot,null);
  assert.equal(p.text(375,765,p.ready),'开始对战');assert.equal(p.text(375,885,p.ready),'道具');
  assert.equal(p.overlay.time._active.length,0);assert.equal(p.game.events.listenerCount('update'),0);
  callbacks.forEach(fn=>fn(10000,250));p.run(1000);assert.equal(p.game.match,null);
- p.click(375,765);assert.notEqual(p.game.match,old);assert.deepEqual(p.game.match.bottomSide.recruitment.loadout,kit);
+ p.click(375,p.result.resultSnapshot?1070:765);assert.notEqual(p.game.match,old);assert.deepEqual(p.game.match.bottomSide.recruitment.loadout,kit);
  assert.equal(p.game.match.resultSnapshot,null);assert.deepEqual(p.game.match.kills,{bottom:0,top:0});
 });
 
@@ -1366,8 +1373,8 @@ test('five RESULT/rematch cycles replace Match, opponent, statistics, Le views a
  for(let round=0;round<5;round++){
   const old=p.game.match,setup=p.game.battleSetup,objects=p.objects.get(p.game),updates=p.game.events.listeners('update');
   p.click(375,1158);finishMatch(p,round%2===0);
-  const snapshot=old.resultSnapshot,button=p.objects.get(p.overlay).findLast(o=>o.kind==='rectangle'&&o.x===375&&o.y===765);
-  const oldActions=button.listeners('pointerdown');p.click(375,765);
+  const snapshot=old.resultSnapshot,button=p.objects.get(p.overlay).findLast(o=>o.kind==='rectangle'&&o.x===375&&o.y===1070);
+  const oldActions=button.listeners('pointerdown');p.click(375,p.result.resultSnapshot?1070:765);
   const fresh=p.game.match;assert.notEqual(fresh,old);assert.equal(old.status,'destroyed');
   assert.notEqual(p.game.battleSetup.opponentProfile.id,setup.opponentProfile.id);
   assert.equal(p.overlay.resultSnapshot,null);assert.notEqual(fresh.resultSnapshot,snapshot);assert.equal(fresh.resultSnapshot,null);
@@ -1393,47 +1400,47 @@ function freshProgress(){let raw=null;const storage={getItem:()=>raw,setItem:(_k
 
 test('v0.64 new HOME shows zero progress, owned-only inventory and default frugal loadout',()=>{
  const {progress,storage}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});
- assert.equal(p.text(555,110,p.ready),'金币：0');assert.equal(p.text(375,170,p.ready),'对局 0 · 胜利 0 · 最高波次 0');
+ assert.equal(p.text(555,110,p.ready),'🪙 0');assert.equal(p.text(375,170,p.ready),'对局 0 · 胜利 0 · 最高波次 0');
  assert.equal(p.game.match,null);assert.equal(p.setupHistory.length,0);assert.equal(progress.hasSeenWelcome(),false);
- p.click(375,885);assert.equal(p.text(375,100,p.items),'道具');assert.equal(p.text(155,620,p.items),'勤俭持家');
+ p.click(375,885);assert.equal(p.text(375,100,p.items),'道具');assert.equal(p.text(155,910,p.items),'勤俭持家');
  const cards=p.objects.get(p.items).filter(o=>o.kind==='rectangle'&&o.width===116);assert.equal(cards.length,1);
- assert.equal(p.text(375,315,p.items),'暂无');
+ assert.equal(p.text(375,630,p.items),'暂无');
  const ownedTexts=p.objects.get(p.items).filter(o=>o.kind==='text').map(o=>o.text);
  for(const def of itemDefinitions.filter(d=>d.id!=='frugal_home'))assert.equal(ownedTexts.includes(def.name),false);
- p.click(155,630);p.click(375,815);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,[]);
+ p.click(155,920);p.click(375,835);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,[]);
  p.click(375,1200);assert.deepEqual(p.ready.inventory.filter(i=>i.equipped),[]);
- p.click(375,885);p.click(155,630);p.click(375,815);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,['frugal_home']);
+ p.click(375,885);p.click(155,920);p.click(375,835);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,['frugal_home']);
 });
 
 test('v0.64 welcome requires first start intent, locks HOME and starts exactly one matching after claim',()=>{
  const {progress,storage}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});
  const random=Math.random;try{Math.random=()=>{throw Error('welcome must not use gameplay RNG');};p.ready.requestStartGame();}finally{Math.random=random;}
  assert.equal(p.ready.startState,'WELCOME');assert.equal(p.game.match,null);assert.equal(p.setupHistory.length,0);
- assert.equal(p.text(375,470,p.ready),'恭喜！你中大奖了！');assert.equal(progress.save.coins,0);
+ assert.equal(p.text(375,360,p.ready),'恭喜！');assert.equal(progress.save.coins,0);
  const before=progress.save;assert.deepEqual(before.ownedItemIds,['frugal_home']);assert.deepEqual(before.equippedPassiveItemIds,['frugal_home']);
  assert.equal(new PlayerProgress(storage).hasSeenWelcome(),true);
  for(let n=0;n<10;n++){p.ready.requestStartGame();p.click(375,885);}
  assert.equal(p.objects.has(p.items),false);assert.equal(p.setupHistory.length,0);
- const claim=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===790),callbacks=claim.listeners('pointerdown');
- p.click(375,790);callbacks.forEach(fn=>fn({},0,0,{stopPropagation(){}}));
+ const claim=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===1030),callbacks=claim.listeners('pointerdown');
+ p.click(375,1030);callbacks.forEach(fn=>fn({},0,0,{stopPropagation(){}}));
  assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,1);assert.equal(p.startCount(),0);
  assert.equal(progress.save.coins,0);assert.deepEqual(progress.save.ownedItemIds,['frugal_home']);
  p.finishFlow();assert.equal(p.startCount(),1);assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
- finishMatch(p,false);p.click(375,875);p.click(375,765);assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,2);
+ finishMatch(p,false);p.click(375,p.result.resultSnapshot?1190:875);p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,2);
 });
 
 test('v0.64 shutdown during welcome invalidates old claim handler; reset/force reset re-enable presentation',()=>{
- const {progress}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});p.click(375,765);
- const callbacks=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===790).listeners('pointerdown');
+ const {progress}=freshProgress(),p=pve(false,20,false,{playerProgress:progress});p.click(375,p.result.resultSnapshot?1070:765);
+ const callbacks=p.objects.get(p.ready).findLast(o=>o.kind==='rectangle'&&o.y===1030).listeners('pointerdown');
  p.shutdown(p.ready);callbacks.forEach(fn=>fn({},0,0,{stopPropagation(){}}));assert.equal(p.setupHistory.length,0);
  progress.reset();const fresh=pve(false,20,false,{playerProgress:progress});fresh.click(375,765);assert.equal(fresh.ready.startState,'WELCOME');
 });
 
 test('v0.64 loaded welcome event skips gift; rematch also bypasses gift without changing intro flow',()=>{
  const {progress,storage}=freshProgress();progress.markWelcomeSeen();const loaded=new PlayerProgress(storage);
- const p=pve(false,20,true,{playerProgress:loaded});p.click(375,765);assert.equal(p.startCount(),1);
+ const p=pve(false,20,true,{playerProgress:loaded});p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.startCount(),1);
  assert.equal(p.objects.get(p.ready).some(o=>o.text==='立即领取'),false);
- const old=p.game.match;finishMatch(p,true);p.click(375,765);assert.equal(p.startCount(),2);assert.notEqual(p.game.match,old);
+ const old=p.game.match;finishMatch(p,true);p.click(375,p.result.resultSnapshot?1070:765);assert.equal(p.startCount(),2);assert.notEqual(p.game.match,old);
  assert.equal(p.game.presentationPhase,'INTRO');assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
 });
 
@@ -1441,21 +1448,111 @@ test('v0.64 formal result commits once and displays coins; HOME refreshes perman
  const {progress,storage}=freshProgress();progress.markWelcomeSeen();const p=pve(true,20,true,{playerProgress:progress});
  const snapshot=()=>p.objects.get(p.game).filter(o=>o.kind==='text').map(o=>o.text);
  assert.equal(snapshot().some(t=>t.includes('金币')),false);
- finishMatch(p,true);const result=p.game.match.resultSnapshot;
+ finishMatch(p,true);const result=p.result.resultSnapshot;
  assert.equal(progress.save.coins,3);assert.equal(progress.save.stats.matchesPlayed,1);assert.equal(progress.save.stats.wins,1);
- assert.equal(p.text(375,720,p.overlay),'本局金币 +3');
- p.shutdown(p.overlay);p.game.scene.launch('PveOverlayScene',{mode:'victory',snapshot:result,loadout:p.game.sides.bottom.recruitment.loadout});
+ assert.equal(p.text(375,840,p.overlay),'本局金币 +3');
+ p.shutdown(p.result);p.result.create({snapshot:result,coinReward:3});
  p.run(410);assert.equal(progress.save.coins,3);assert.equal(progress.save.stats.matchesPlayed,1);
- p.click(375,875);assert.equal(p.text(555,110,p.ready),'金币：3');assert.equal(p.text(375,170,p.ready),'对局 1 · 胜利 1 · 最高波次 1');
+ p.click(375,p.result.resultSnapshot?1190:875);assert.equal(p.text(555,110,p.ready),'🪙 3');assert.equal(p.text(375,170,p.ready),'对局 1 · 胜利 1 · 最高波次 1');
  assert.deepEqual(new PlayerProgress(storage).save,progress.save);
- p.click(375,765);finishMatch(p,false);assert.equal(progress.save.coins,4);assert.equal(progress.save.stats.matchesPlayed,2);assert.equal(progress.save.stats.wins,1);
- p.click(375,765);assert.equal(progress.save.coins,4);assert.equal(p.game.match.bottomSide.recruitment.money,20);
+ p.click(375,p.result.resultSnapshot?1070:765);finishMatch(p,false);assert.equal(progress.save.coins,4);assert.equal(progress.save.stats.matchesPlayed,2);assert.equal(progress.save.stats.wins,1);
+ p.click(375,p.result.resultSnapshot?1070:765);assert.equal(progress.save.coins,4);assert.equal(p.game.match.bottomSide.recruitment.money,20);
 });
 
 test('v0.64 start loadout cannot promote forged scene-owned flags into permanent ownership',()=>{
  const {progress}=freshProgress();progress.markWelcomeSeen();const p=pve(false,20,true,{playerProgress:progress});
  const farmer=p.ready.inventory.find(i=>i.id==='farmer');farmer.owned=true;farmer.equipped=true;
- p.click(375,765);assert.equal(progress.save.ownedItemIds.includes('farmer'),false);
+ p.click(375,p.result.resultSnapshot?1070:765);assert.equal(progress.save.ownedItemIds.includes('farmer'),false);
  assert.equal(p.game.match.bottomSide.recruitment.loadout.passive.some(i=>i.id==='farmer'),false);
  assert.deepEqual(p.game.match.bottomSide.recruitment.loadout.passive,[{id:'frugal_home',level:1}]);
+});
+
+function shopProgress(seed={}) {
+ let raw=JSON.stringify({...defaultPlayerSave(),...seed});
+ const storage={getItem:()=>raw,setItem:(_key,value)=>{raw=value;}};
+ return {storage,progress:new PlayerProgress(storage,undefined,()=>0)};
+}
+
+test('v0.65 SHOP uses persistent shelf, disables unaffordable purchase and does not refresh on visits',()=>{
+ const {progress}=shopProgress(),p=pve(false,20,false,{playerProgress:progress}),before=progress.save;
+ p.click(375,985);assert.equal(p.text(375,210,p.shop),'金币：0');
+ assert.equal(p.text(375,320,p.shop),'再完成 2 局刷新货架');
+ assert.equal(p.objects.get(p.shop).filter(o=>o.kind==='rectangle'&&o.width===190).length,3);
+ p.click(155,595);assert.equal(p.text(375,480,p.shop),'农民');assert.equal(p.text(375,750,p.shop),'金币 12');
+ assert.equal(p.text(375,835,p.shop),'金币不足');p.click(375,835);assert.deepEqual(progress.save,before);
+ p.click(635,430);p.click(375,1190);p.click(375,985);assert.deepEqual(progress.save,before);
+});
+
+test('v0.65 purchase updates wallet and sold label without restock or auto-equip; duplicate callbacks are safe',()=>{
+ const {progress,storage}=shopProgress({coins:30}),p=pve(false,20,false,{playerProgress:progress});
+ const shelf=progress.save.shop.shelfItemIds;p.click(375,985);p.click(155,595);
+ const button=p.objects.get(p.shop).findLast(o=>o.kind==='rectangle'&&o.y===835),callbacks=button.listeners('pointerdown');
+ p.click(375,835);callbacks.forEach(fn=>fn());assert.equal(progress.save.coins,18);
+ assert.equal(p.text(155,680,p.shop),'✓ 已购买');assert.equal(p.text(375,210,p.shop),'金币：18');
+ assert.deepEqual(progress.save.shop.shelfItemIds,shelf);assert.deepEqual(progress.save.equippedPassiveItemIds,['frugal_home']);
+ assert.deepEqual(new PlayerProgress(storage).save,progress.save);
+ p.click(155,595);assert.equal(p.objects.get(p.shop).findLast(o=>o.kind==='text'&&o.visible&&o.y===835).text,'已购买');p.click(375,835);assert.equal(progress.save.coins,18);
+});
+
+test('v0.65 fewer than three shelf cards and final purchase immediately show complete collection',()=>{
+ const owned=itemDefinitions.filter(d=>d.id!=='farmer').map(d=>d.id);
+ const {progress}=shopProgress({coins:12,ownedItemIds:owned}),p=pve(false,20,false,{playerProgress:progress});
+ p.click(375,985);assert.equal(p.objects.get(p.shop).filter(o=>o.kind==='rectangle'&&o.width===190).length,1);
+ p.click(155,595);p.click(375,835);assert.equal(p.text(375,820,p.shop),'已全部收集');
+ assert.equal(p.text(155,680,p.shop),'✓ 已购买');
+});
+
+test('v0.65 equipped rectangle edges have input, empty slots do not, and both paths use the same detail',()=>{
+ const {progress,storage}=shopProgress(),p=pve(false,20,false,{playerProgress:progress});p.click(375,885);
+ const slot=p.objects.get(p.items).find(o=>o.kind==='rectangle'&&o.x===125&&o.y===410);
+ assert.equal(slot.interactive,true);assert.ok(slot.getBounds().contains(81,445));
+ slot.emit('pointerdown',{x:81,y:445});assert.equal(p.text(375,480,p.items),'勤俭持家');assert.equal(p.text(375,835,p.items),'卸下');
+ p.click(375,835);assert.equal(slot.interactive,false);assert.deepEqual(new PlayerProgress(storage).save.equippedPassiveItemIds,[]);
+ p.click(155,920);assert.equal(p.objects.get(p.items).filter(o=>o.kind==='text'&&o.visible&&o.text==='勤俭持家'&&o.y===480).length,1);
+ p.click(375,835);assert.equal(slot.interactive,true);assert.deepEqual(progress.save.equippedPassiveItemIds,['frugal_home']);
+ const empty=p.objects.get(p.items).find(o=>o.kind==='rectangle'&&o.x===325&&o.y===270);assert.equal(empty.interactive,false);
+});
+
+test('v0.65 inventory full feedback preserves both active equipment slots',()=>{
+ const {progress}=shopProgress({ownedItemIds:itemDefinitions.map(d=>d.id),equippedActiveItemIds:['upgrade_talisman','golden_hand']}),
+ p=pve(false,20,false,{playerProgress:progress});p.click(375,885);p.click(445,630);p.click(375,835);
+ assert.equal(p.text(375,835,p.items),'主动道具栏已满，请先卸下一件。');
+ assert.deepEqual(progress.save.equippedActiveItemIds,['upgrade_talisman','golden_hand']);
+ assert.ok(p.objects.get(p.items).some(o=>o.kind==='rectangle'&&o.height===2&&o.y===795));
+});
+
+test('v0.65 RESULT is full-screen after 400ms, old Match destroyed, rewards never committed by page',()=>{
+ const {progress}=shopProgress();progress.markWelcomeSeen();const p=pve(true,20,true,{playerProgress:progress}),old=p.game.match;
+ finishMatch(p,true,0,false);p.run(390);assert.notEqual(old.status,'destroyed');assert.equal(p.result.resultSnapshot,null);
+ p.run(20);assert.equal(old.status,'destroyed');assert.equal(p.game.match,null);assert.ok(Object.isFrozen(p.result.resultSnapshot));
+ const page=p.objects.get(p.result),background=page.find(o=>o.kind==='rectangle'&&o.width===750);
+ assert.equal(background.height,1334);assert.equal(p.text(375,840,p.result),'本局金币 +3');
+ for(const y of [1070,1190]){const button=page.find(o=>o.kind==='rectangle'&&o.y===y);assert.ok(button.y+button.height/2<1334);assert.ok(button.y-button.height/2>900);}
+ const before=progress.save;p.run(1000);assert.deepEqual(progress.save,before);assert.equal(progress.save.shop.matchesTowardRefresh,1);
+ p.click(375,1190);assert.equal(p.game.match,null);assert.deepEqual(progress.save,before);
+});
+
+test('v0.65 welcome uses enlarged colorful typography and joke price remains presentation only',()=>{
+ const {progress}=shopProgress(),p=pve(false,20,false,{playerProgress:progress});p.click(375,765);
+ const objects=p.objects.get(p.ready),headline=objects.find(o=>o.text==='恭喜！');
+ assert.ok(Number.parseInt(headline.style.fontSize)>=80);
+ const panel=objects.find(o=>o.kind==='rectangle'&&o.width===650);assert.equal(panel.height,850);
+ assert.ok(objects.some(o=>o.text==='价值998金币'));assert.equal(progress.save.coins,0);
+ assert.ok(new Set(objects.filter(o=>o.kind==='text'&&o.visible).map(o=>o.style.color)).size>=4);
+ p.click(375,1030);assert.equal(p.ready.startState,'MATCHING');assert.equal(p.setupHistory.length,1);
+ assert.equal(progress.save.coins,0);assert.deepEqual(progress.save.ownedItemIds,['frugal_home']);
+});
+
+test('v0.65 newly registered owned items paginate without changing inventory lists or save schema',()=>{
+ const extra=Array.from({length:12},(_,i)=>({id:`future_${i}`,name:`道具${i}`,category:'passive',description:'测试扩展',shopPrice:6,shopEligible:true}));
+ itemDefinitions.push(...extra);
+ try{
+  const {progress}=shopProgress({ownedItemIds:itemDefinitions.map(d=>d.id)}),p=pve(false,20,false,{playerProgress:progress});
+  p.click(375,885);assert.equal(p.text(375,1120,p.items),'1 / 3');
+  const cards=()=>p.objects.get(p.items).filter(o=>o.kind==='rectangle'&&o.visible&&o.width===116&&o.y>=920);
+  assert.equal(cards().length,8);assert.ok(cards().every(o=>o.y+o.height/2<1120));
+  p.click(515,1120);assert.equal(p.text(375,1120,p.items),'2 / 3');
+  p.click(155,920);assert.equal(p.text(375,480,p.items),'道具0');p.click(375,835);
+  assert.ok(progress.save.equippedPassiveItemIds.includes('future_0'));
+ }finally{itemDefinitions.splice(-extra.length);}
 });

@@ -4,6 +4,8 @@ import { PveOverlayScene } from './scenes/PveOverlayScene';
 import { ReadyScene } from './scenes/ReadyScene';
 import { ItemsScene } from './scenes/ItemsScene';
 import { MatchingScene } from './scenes/MatchingScene';
+import { ResultScene } from './scenes/ResultScene';
+import { ShopScene } from './scenes/ShopScene';
 import './style.css';
 
 new Phaser.Game({
@@ -16,5 +18,5 @@ new Phaser.Game({
     width: 750,
     height: 1334,
   },
-  scene: [ReadyScene, MatchingScene, GameScene, PveOverlayScene, ItemsScene],
+  scene: [ReadyScene, MatchingScene, GameScene, PveOverlayScene, ItemsScene, ResultScene, ShopScene],
 });

@@ -28,7 +28,7 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 100, 110, '乐', 30, '#fffaf0');
     label(this, 245, 110, localPlayerProfile.nickname, 28);
     const save = progress.save;
-    label(this, 555, 110, `金币：${save.coins}`, 26);
+    label(this, 555, 110, `🪙 ${save.coins}`, 26);
     label(this, 375, 170, `对局 ${save.stats.matchesPlayed} · 胜利 ${save.stats.wins} · 最高波次 ${save.stats.highestWave}`, 22);
     this.add.rectangle(375, 440, 600, 450, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
     label(this, 375, 440, '乐 GAME', 58);
@@ -48,9 +48,17 @@ export class ReadyScene extends Phaser.Scene {
       event.stopPropagation();
       this.requestStartGame();
     });
+    const shopButton = this.add.rectangle(375, 985, 250, 72, 0x697e67).setInteractive({ useHandCursor: true });
+    label(this, 375, 985, '商店', 28, '#fffaf0');
+    shopButton.on('pointerdown', () => {
+      if (this.startState !== 'READY' || this.openingItems) return;
+      this.openingItems = true;
+      this.scene.start('ShopScene');
+    });
     this.lockForMatching = () => {
       button.disableInteractive();
       itemsButton.disableInteractive();
+      shopButton.disableInteractive();
       buttonText.setText('正在寻找对手…').setFontSize(26);
       itemsButton.setAlpha(0.5);
     };
@@ -65,19 +73,24 @@ export class ReadyScene extends Phaser.Scene {
       this.startState = 'WELCOME';
       progress.markWelcomeSeen(); // 已展示即记录；不以ownership或对局数推断。
       const shade = this.add.rectangle(375, 667, 750, 1334, 0x353d36, 0.65).setDepth(20).setInteractive();
-      const panel = this.add.rectangle(375, 640, 600, 490, 0xfffcf4).setDepth(21).setInteractive();
+      const panel = this.add.rectangle(375, 665, 650, 850, 0xfff4c4).setDepth(21).setInteractive();
       panel.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => event.stopPropagation());
-      const title = label(this, 375, 470, '恭喜！你中大奖了！', 36).setDepth(22);
-      const gift = label(this, 375, 540, '免费送你一个道具！勤俭持家', 26).setDepth(22);
-      const description = label(this, 375, 640, itemDefinitions.find(def => def.id === 'frugal_home')!.description, 24)
+      const title = label(this, 375, 360, '恭喜！', 86, '#e73338').setDepth(22);
+      const gift = label(this, 375, 500, '你中大奖了！', 54, '#3a5bcc').setDepth(22);
+      const banner = label(this, 375, 600, '免费送你一个道具！', 34, '#d45b10').setDepth(22);
+      const name = label(this, 375, 690, '勤俭持家', 48, '#21804c').setDepth(22);
+      const joke = label(this, 375, 885, '价值998金币', 25, '#8b8272').setDepth(22);
+      const strike = this.add.rectangle(375, 885, 190, 2, 0x8b8272).setDepth(22);
+      const free = label(this, 375, 940, '免费送！0金币！', 40, '#d52759').setDepth(22);
+      const description = label(this, 375, 795, itemDefinitions.find(def => def.id === 'frugal_home')!.description, 24)
         .setWordWrapWidth(490, true).setDepth(22);
-      const claim = this.add.rectangle(375, 790, 300, 76, 0x697e67).setDepth(22).setInteractive({ useHandCursor: true });
-      const claimText = label(this, 375, 790, '立即领取', 28, '#fffaf0').setDepth(23);
+      const claim = this.add.rectangle(375, 1030, 380, 90, 0x697e67).setDepth(22).setInteractive({ useHandCursor: true });
+      const claimText = label(this, 375, 1030, '立即领取', 36, '#fffaf0').setDepth(23);
       claim.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
         event.stopPropagation();
         if (this.startState !== 'WELCOME') return;
         this.startState = 'STARTING';
-        [shade, panel, title, gift, description, claim, claimText].forEach(object => object.destroy());
+        [shade, panel, title, gift, banner, name, joke, strike, free, description, claim, claimText].forEach(object => object.destroy());
         this.startMatch();
       });
       return;
