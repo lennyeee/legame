@@ -441,7 +441,7 @@ test('current enemy progress and count increase pressure without changing action
  const raw=candidates(s),state=currentStateSnapshot(s,raw.map(c=>c.value),false);
  assert.equal(state.livingEnemyCount,5);assert.equal(state.readiness,'LOW');
  const ai=aiFor(s);ai.update(1);assert.equal(ai.pending.remainingMs,aiConfig.timing.initialReactionMs.min-1);
- assert.equal(s.combat.enemies[0].maxHp,90);
+ assert.equal(s.combat.enemies[0].maxHp,10);
 });
 
 test('Farmer pending reward stays ahead of current combat construction and is collected via shared operation',()=>{

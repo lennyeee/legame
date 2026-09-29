@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { registerHooks } from 'node:module';
+registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
+const { combatConfig,getCombatStats }=await import('../src/config/combat.ts');
+const { CombatSimulation }=await import('../src/combat/CombatSimulation.ts');
+const { createBoardState }=await import('../src/systems/board.ts');
+const { createRecruitmentState }=await import('../src/systems/recruitment.ts');
+const { CELL_SIZE }=await import('../src/config/layout.ts');
+const speeds=[1.25,1.88,2.62,3.41,4.27];
+const damage={刀:[3,4.5,6.3,8.19,10.24],枪:[2,3,4.2,5.46,6.82],弓:[2,3,4.2,5.46,6.82],骑:[2,3,4.2,5.46,6.82]};
+for(const type of Object.keys(damage))for(let level=1;level<=5;level++)test(`${type} Lv${level}: exact damage, attacks/sec, interval and cell-based range`,()=>{
+  const stats=getCombatStats({type,level});
+  assert.equal(stats.damage,damage[type][level-1]);
+  assert.equal(stats.attackInterval,1000/speeds[level-1]);
+  assert.ok(Math.abs(1000/stats.attackInterval-speeds[level-1])<1e-12);
+  const cells=type==='弓'?[2.5,2.75,3,3.25,3.5][level-1]:{刀:1.5,枪:2.5,骑:2}[type];
+  assert.equal(CELL_SIZE,75);assert.equal(stats.range,cells*CELL_SIZE);
+});
+for(const bonusType of ['none','attack'])test(`Lv2 decimal knife damage reaches actual HP without integer rounding (${bonusType})`,()=>{
+  const map={name:'fractional damage',mirrorY:0,cellSize:75,path:[{x:0,y:0},{x:1000,y:0}],cells:[{x:400,y:50,unlocked:true}]};
+  const board=createBoardState(map),wallet=createRecruitmentState();
+  board.tiles[0].unit={type:'刀',level:2};board.tiles[0].bonusType=bonusType;
+  const sim=new CombatSimulation(map,board,wallet);const enemy=sim.spawnEnemy();
+  enemy.hp=enemy.maxHp=100;enemy.moveSpeed=0;enemy.distance=450;
+  let events=[];
+  for(let i=0;i<100&&!events.some(e=>e.kind==='hit');i++)events.push(...sim.update(combatConfig.stepMs));
+  const expected=bonusType==='attack'?4.5*1.2:4.5;
+  assert.equal(events.filter(e=>e.kind==='attack').length,1);
+  assert.ok(Math.abs(100-enemy.hp-expected)<1e-10);
+});
+test('ordinary enemy anchor uses45px/s, HP10, $1 reward; four Lv1 knife hits kill wave1',()=>{
+  assert.equal(combatConfig.enemy.moveSpeed,.6*CELL_SIZE);
+  assert.equal(combatConfig.enemy.maxHp,10);assert.equal(combatConfig.enemy.killReward,1);
+  const map={name:'wave1 anchor',mirrorY:0,cellSize:75,path:[{x:0,y:0},{x:1000,y:0}],cells:[{x:400,y:50,unlocked:true}]};
+  const board=createBoardState(map),wallet=createRecruitmentState();board.tiles[0].unit={type:'刀',level:1};
+  const sim=new CombatSimulation(map,board,wallet),enemy=sim.spawnEnemy();enemy.moveSpeed=0;enemy.distance=450;
+  let events=[];for(let i=0;i<200;i++)events.push(...sim.update(combatConfig.stepMs));
+  assert.equal(events.filter(e=>e.kind==='attack').length,4);assert.equal(enemy.hp,0);
+  assert.equal(events.filter(e=>e.kind==='kill').length,1);assert.equal(wallet.money,21);
+});

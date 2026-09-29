@@ -98,20 +98,20 @@ test('普通兵伤害、真实攻击频率和实际索敌半径分别提高20%',
   for (const kind of ['attack', 'attackSpeed', 'range']) {
     const { board } = combatCase('刀', kind);
     const stats = applyTileBonuses(base, board, [0]);
-    assert.equal(stats.damage, kind === 'attack' ? Math.round(base.damage * 1.2) : base.damage);
+    assert.equal(stats.damage, kind === 'attack' ? base.damage * 1.2 : base.damage);
     assert.equal(stats.attackInterval, kind === 'attackSpeed' ? base.attackInterval / 1.2 : base.attackInterval);
     assert.equal(stats.range, kind === 'range' ? base.range * 1.2 : base.range);
   }
   const plain = combatCase(), attack = combatCase('刀', 'attack');
-  run(plain.sim, 500); run(attack.sim, 500);
+  run(plain.sim, 800); run(attack.sim, 800);
   assert.equal(1000 - plain.enemy.hp, base.damage);
-  assert.equal(1000 - attack.enemy.hp, Math.round(base.damage * 1.2));
+  assert.ok(Math.abs(1000 - attack.enemy.hp - base.damage * 1.2) < 1e-9);
   const slow = combatCase(), fast = combatCase('刀', 'attackSpeed');
-  assert.equal(run(slow.sim, 400).filter(e => e.kind === 'attack').length, 0);
-  assert.equal(run(fast.sim, 400).filter(e => e.kind === 'attack').length, 1);
-  const out = combatCase('刀', 'none', 210), inRange = combatCase('刀', 'range', 210);
-  assert.equal(run(out.sim, 600).filter(e => e.kind === 'attack').length, 0);
-  assert.equal(run(inRange.sim, 600).filter(e => e.kind === 'attack').length, 1);
+  assert.equal(run(slow.sim, 700).filter(e => e.kind === 'attack').length, 0);
+  assert.equal(run(fast.sim, 700).filter(e => e.kind === 'attack').length, 1);
+  const out = combatCase('刀', 'none', 240), inRange = combatCase('刀', 'range', 240);
+  assert.equal(run(out.sim, 800).filter(e => e.kind === 'attack').length, 0);
+  assert.equal(run(inRange.sim, 800).filter(e => e.kind === 'attack').length, 1);
 });
 
 test('格子强化随当前占格变化，移动、交换、合成不写入普通单位或农民', () => {
@@ -120,22 +120,22 @@ test('格子强化随当前占格变化，移动、交换、合成不写入普�
   const original = { type: '刀', level: 1 };
   board.tiles[0].unit = original;
   const base = getCombatStats(original);
-  assert.equal(applyTileBonuses(base, board, [0]).damage, Math.round(base.damage * 1.2));
+  assert.equal(applyTileBonuses(base, board, [0]).damage, base.damage * 1.2);
   assert.equal(applyDrop(board, wallet, tile(0), tile(1)), 'move');
   assert.equal(board.tiles[1].unit, original);
   assert.equal(applyTileBonuses(base, board, [1]).damage, base.damage);
   const newcomer = { type: '枪', level: 1 }; wallet.slots[0] = newcomer;
   assert.equal(applyDrop(board, wallet, slot(0), tile(0)), 'move');
   assert.equal(applyTileBonuses(getCombatStats(newcomer), board, [0]).damage,
-    Math.round(getCombatStats(newcomer).damage * 1.2));
+    getCombatStats(newcomer).damage * 1.2);
   assert.equal(applyDrop(board, wallet, tile(0), tile(1)), 'swap');
-  assert.equal(applyTileBonuses(base, board, [0]).damage, Math.round(base.damage * 1.2));
+  assert.equal(applyTileBonuses(base, board, [0]).damage, base.damage * 1.2);
   assert.equal(applyTileBonuses(getCombatStats(newcomer), board, [1]).damage, getCombatStats(newcomer).damage);
   wallet.slots[0] = { type: '刀', level: 1 };
   assert.equal(applyDrop(board, wallet, slot(0), tile(0)), 'merge');
   assert.equal(board.tiles[0].unit.level, 2);
   assert.equal(applyTileBonuses(getCombatStats(board.tiles[0].unit), board, [0]).damage,
-    Math.round(getCombatStats(board.tiles[0].unit).damage * 1.2));
+    getCombatStats(board.tiles[0].unit).damage * 1.2);
   assert.equal(original.hasteEnhanced, undefined);
   wallet.slots[0] = { kind: 'farmer', type: '农', level: 1 };
   assert.equal(applyDrop(board, wallet, slot(0), tile(1)), 'swap');

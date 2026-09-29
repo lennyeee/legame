@@ -1,76 +1,73 @@
-// v0.62-B first calibration — awaiting human v0.62-C playtest.
-// HP承担韧性，数量缓慢增长，密度/启动间隔承担持续压力；不是最终平衡。
-export const pressureConfig = {
-  baseHealth: 3,
-  firstEnemyDelay: 9500,
-  waveStartInterval: 12000,
-  stageLength: 3,
-  initialHp: 120,
-  hpPerStage: 0.9,
-  hpPerStep: 0.4,
-  hpStageCurve: 0.45,
-  initialCount: 5,
-  countPerStage: 1,
-  countStageEvery: 3,
-  countStepEvery: 100,
-  maxCount: 32,
-  initialSpawnInterval: 1800,
-  intervalReductionPerStage: 35,
-  minimumSpawnInterval: 800,
-  pulseEvery: 6,
-  pulseExtraCount: 1,
+export interface WavePressure { hp: number; count: number; spawnInterval?: number }
+export interface PressureConfig {
+  baseHealth: number;
+  firstEnemyDelay: number;
+  spawnInterval: number;
+  waves: readonly WavePressure[];
+  extension: { hpPerWave: number; hpIncrementGrowth: number; countPerWave: number };
+  // 仅供历史对照/隔离测试显式覆盖；正式配置按count × spawnInterval衔接。
+  waveStartInterval?: number;
+}
+
+export const pressureConfig: PressureConfig = {
+  baseHealth: 3, firstEnemyDelay: 9500, spawnInterval: 1500,
+  waves: [
+    { hp: 10, count: 10 }, { hp: 18, count: 11 }, { hp: 28, count: 12 },
+    { hp: 40, count: 13 }, { hp: 54, count: 15 }, { hp: 70, count: 16 },
+    { hp: 88, count: 18 }, { hp: 108, count: 19 }, { hp: 130, count: 20 },
+    { hp: 154, count: 21 }, { hp: 180, count: 22 }, { hp: 208, count: 23 },
+    { hp: 238, count: 24 }, { hp: 270, count: 25 }, { hp: 304, count: 26 },
+  ],
+  // 第16波增36HP，之后每波增量再+2；数量每波+1，无最终波。
+  extension: { hpPerWave: 36, hpIncrementGrowth: 2, countPerWave: 1 },
 };
 
-export type PressureConfig = typeof pressureConfig;
-
 export function validatePressureConfig(config: PressureConfig): void {
-  for (const [key, value] of Object.entries(config)) {
-    if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) {
-      throw new RangeError(`Invalid pressure parameter: ${key}`);
-    }
-  }
-  for (const key of ['baseHealth', 'stageLength', 'initialCount', 'countPerStage', 'countStepEvery',
-    'countStageEvery', 'maxCount', 'pulseEvery', 'pulseExtraCount'] as const) {
-    if (!Number.isSafeInteger(config[key])) throw new RangeError(`Invalid integer: ${key}`);
-  }
-  if (config.baseHealth < 1 || config.stageLength < 1 || config.initialHp < 1 || config.initialCount < 1
-    || config.countStepEvery < 1 || config.countStageEvery < 1 || config.pulseEvery < 1 || config.maxCount < config.initialCount
-    || config.waveStartInterval < 1 || config.minimumSpawnInterval < 1
-    || config.initialSpawnInterval < config.minimumSpawnInterval) {
-    throw new RangeError('Pressure cadence/count/HP must remain positive');
+  const positive = (n: number): boolean => Number.isSafeInteger(n) && n > 0;
+  if (!positive(config.baseHealth) || !Number.isSafeInteger(config.firstEnemyDelay) || config.firstEnemyDelay < 0
+    || !positive(config.spawnInterval) || !config.waves.length
+    || config.waves.some(w => !positive(w.hp) || !positive(w.count)
+      || (w.spawnInterval !== undefined && !positive(w.spawnInterval)))
+    || !positive(config.extension.hpPerWave) || !positive(config.extension.countPerWave)
+    || !Number.isSafeInteger(config.extension.hpIncrementGrowth) || config.extension.hpIncrementGrowth < 0
+    || (config.waveStartInterval !== undefined && !positive(config.waveStartInterval))) {
+    throw new RangeError('Invalid pressure HP/count/cadence');
   }
 }
 
-function stageForWave(wave: number, config: PressureConfig): { stage: number; step: number } {
+function extensionStep(wave: number, config: PressureConfig): number {
   if (!Number.isSafeInteger(wave) || wave < 1) throw new RangeError('Wave must be a positive safe integer');
-  return { stage: Math.floor((wave - 1) / config.stageLength), step: (wave - 1) % config.stageLength };
+  return Math.max(0, wave - config.waves.length);
 }
+const safeValue = (n: number): number => Math.min(Number.MAX_SAFE_INTEGER, n);
 
 export function enemyHpForWave(wave: number, config: PressureConfig = pressureConfig): number {
-  const { stage, step } = stageForWave(wave, config);
-  // 阶段二次项（非指数）；极端数值封顶于安全整数。
-  return Math.max(1, Math.min(Number.MAX_SAFE_INTEGER,
-    Math.round(config.initialHp * (1 + config.hpPerStage * stage + config.hpStageCurve * stage ** 2 + config.hpPerStep * step))));
+  const k = extensionStep(wave, config), last = config.waves.at(-1)!;
+  return k === 0 ? config.waves[wave - 1]!.hp : safeValue(last.hp + config.extension.hpPerWave * k
+    + config.extension.hpIncrementGrowth * k * (k - 1) / 2);
 }
-
 export function enemyCountForWave(wave: number, config: PressureConfig = pressureConfig): number {
-  const { stage, step } = stageForWave(wave, config);
-  const pulse = wave % config.pulseEvery === 0 ? config.pulseExtraCount : 0;
-  // 限制单波实体压力，不限制波数；高阶段HP仍持续增长。
-  return Math.min(config.maxCount,
-    config.initialCount + config.countPerStage * Math.floor(stage / config.countStageEvery)
-    + Math.floor(step / config.countStepEvery) + pulse);
+  const k = extensionStep(wave, config);
+  return k === 0 ? config.waves[wave - 1]!.count
+    : safeValue(config.waves.at(-1)!.count + config.extension.countPerWave * k);
 }
-
 export function spawnIntervalForWave(wave: number, config: PressureConfig = pressureConfig): number {
-  const { stage } = stageForWave(wave, config);
-  return Math.max(config.minimumSpawnInterval, config.initialSpawnInterval - config.intervalReductionPerStage * stage);
+  extensionStep(wave, config);
+  return config.waves[wave - 1]?.spawnInterval ?? config.spawnInterval;
 }
-
+export function waveDurationForWave(wave: number, config: PressureConfig = pressureConfig): number {
+  return config.waveStartInterval ?? enemyCountForWave(wave, config) * spawnIntervalForWave(wave, config);
+}
 export function waveStartForWave(wave: number, config: PressureConfig = pressureConfig): number {
-  stageForWave(wave, config);
-  const time = config.firstEnemyDelay + (wave - 1) * config.waveStartInterval;
-  // 没有最终波。超过JS安全时钟时显式拒绝，不静默溢出或重复派发。
-  if (!Number.isFinite(time) || time > Number.MAX_SAFE_INTEGER) throw new RangeError('Timeline exceeds safe clock precision');
+  extensionStep(wave, config);
+  let duration = 0;
+  if (config.waveStartInterval !== undefined) duration = (wave - 1) * config.waveStartInterval;
+  else {
+    for (let i = 1; i <= Math.min(wave - 1, config.waves.length); i++) duration += waveDurationForWave(i, config);
+    const k = Math.max(0, wave - 1 - config.waves.length);
+    duration += config.spawnInterval * (k * config.waves.at(-1)!.count + config.extension.countPerWave * k * (k + 1) / 2);
+  }
+  const time = config.firstEnemyDelay + duration;
+  if (!Number.isSafeInteger(time)) throw new RangeError('Timeline exceeds safe clock precision');
   return time;
 }

@@ -46,9 +46,9 @@ test('固定间隔出兵；全部生成但未清空时不能进入下一波', ()
 });
 
 test('真实攻击完成1至20波，5/10/15波不胜利，20波清空后才胜利', () => {
-  const { sim, progress, board, wallet } = setup();
+  const { sim, progress, board, wallet } = setup(waveConfig, { maxHp: 1, moveSpeed: 0 });
   // 高等级兵快速清场，仍通过真实索敌、伤害和奖励链路验证整局。
-  board.tiles[0].unit = { type: '骑', level: 30 };
+  board.tiles[0].unit = { type: '骑', level: 5 };
   const observed = new Map();
   const spawn = sim.spawnEnemy.bind(sim);
   sim.spawnEnemy = multiplier => {
@@ -73,7 +73,7 @@ test('真实攻击完成1至20波，5/10/15波不胜利，20波清空后才胜�
   assert.deepEqual([...clearedMilestones], [5,10,15]);
   waveConfig.enemyCounts.forEach((count, index) => {
     assert.equal(observed.get(index + 1).length, count);
-    assert.ok(observed.get(index + 1).every(hp => hp === Math.round(combatConfig.enemy.maxHp * getWaveHpMultiplier(index + 1, waveConfig))));
+    assert.ok(observed.get(index + 1).every(hp => hp === Math.max(1, Math.round(sim.config.enemy.maxHp * getWaveHpMultiplier(index + 1, waveConfig)))));
   });
   assert.equal(progress.status, 'victory');
   assert.equal(progress.wave, 20);
@@ -136,7 +136,7 @@ test('提前清空当前已生成敌人不跳过本波剩余出兵', () => {
 test('20波数量和HP持续增强，四阶段参数可预测且无Boss', () => {
   assert.equal(waveConfig.enemyCounts.length, 20);
   assert.deepEqual([1,5,6,10,11,15,16,20].map(w => waveConfig.enemyCounts[w-1]), [5,9,12,16,19,23,26,30]);
-  assert.deepEqual([1,5,10,15,20].map(w => Math.round(combatConfig.enemy.maxHp * getWaveHpMultiplier(w,waveConfig))), [90,180,383,765,1328]);
+  assert.deepEqual([1,5,10,15,20].map(w => Math.round(combatConfig.enemy.maxHp * getWaveHpMultiplier(w,waveConfig))), [10,20,43,85,148]);
   for (let wave=2;wave<=20;wave++) {
     assert.ok(waveConfig.enemyCounts[wave-1]>waveConfig.enemyCounts[wave-2]);
     assert.ok(getWaveHpMultiplier(wave,waveConfig)>getWaveHpMultiplier(wave-1,waveConfig));

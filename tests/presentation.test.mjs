@@ -944,7 +944,7 @@ test('暂停只提供继续和返回主页，取消保持冻结，确认清理�
 });
 
 test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',()=>{
- for(const [type,level,expected]of [['枪',1,150],['枪',5,150],['弓',1,187.5],['弓',2,225],['弓',5,225]]){
+ for(const [type,level,expected]of [['枪',1,187.5],['枪',5,187.5],['弓',1,187.5],['弓',2,206.25],['弓',3,225],['弓',4,243.75],['弓',5,262.5]]){
    const {scene,pointer,render,range}=setup({type,level});
    scene.input.emit('pointerdown',pointer);render();assert.equal(range.radius,expected);
    scene.input.emit('pointerup',pointer);assert.equal(range.circle,false);
@@ -1252,8 +1252,10 @@ test('v0.60-B 两边同号敌人各归其战斗实例，top没有玩家输入和
 
 test('v0.60-B 暂停冻结两个Side，返回主页后新匹配只留下新Side与新棋盘对象',()=>{
  const p=pve(),old=p.game.sides;
- p.run(pressureConfig.firstEnemyDelay+100);const oldDistance=old.top.combat.enemies[0].distance;
- p.click(75,55);p.run(5000);assert.equal(old.top.combat.enemies[0].distance,oldDistance);
+ // 隔离暂停/销毁验证，不依赖低血首怪能否活过AI的第一轮攻击。
+ const enemy=old.top.combat.spawnEnemy();enemy.hp=enemy.maxHp=100000;
+ p.run(100);const oldDistance=enemy.distance;
+ p.click(75,55);p.run(5000);assert.equal(enemy.distance,oldDistance);
  p.click(375,p.result.resultSnapshot?1190:875);p.click(530,765);p.click(375,p.result.resultSnapshot?1070:765);
  assert.notEqual(p.game.sides.top,old.top);assert.notEqual(p.game.sides.bottom,old.bottom);
  assert.equal(old.top.combat.enemies.length,0);assert.equal(old.bottom.combat.enemies.length,0);
@@ -1271,7 +1273,7 @@ test('v0.60-C HUD显示共享wave及双方独立HP，积怪时仍按计划出怪
  const speed=combatConfig.enemy.moveSpeed;combatConfig.enemy.moveSpeed=0;
  try { p.run(waveStartForWave(2)); } finally { combatConfig.enemy.moveSpeed=speed; }
  assert.equal(p.text(625,55),'第 2 波');assert.ok(p.game.sides.bottom.combat.enemies.length>0);
- for(const s of Object.values(p.game.sides))assert.ok(s.combat.enemies.some(e=>e.spawnEventId===6));
+ for(const s of Object.values(p.game.sides))assert.ok(s.combat.enemies.some(e=>e.spawnEventId===11));
  for(const [id,count]of [['bottom',1],['top',2]])for(let i=0;i<count;i++){
   const s=p.game.sides[id],e=s.combat.spawnEnemy();e.distance=s.combat.path.totalLength-.001;
  }
@@ -1323,10 +1325,9 @@ test('v0.61-A top保持正常武将等级/镜像但隐藏EXP，bottom保留EXP�
 test('v0.62-A HUD tracks highest started wave while the preceding wave is still spawning',()=>{
  const saved={...pressureConfig};let p;
  try{
-  Object.assign(pressureConfig,{firstEnemyDelay:100,waveStartInterval:200,initialCount:4,
-   countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100});
+  Object.assign(pressureConfig,{firstEnemyDelay:100,waveStartInterval:200,waves:[{hp:10,count:4}],spawnInterval:100});
   p=pve();
- }finally{Object.assign(pressureConfig,saved);}
+ }finally{delete pressureConfig.waveStartInterval;Object.assign(pressureConfig,saved);}
  p.run(300);assert.equal(p.text(625,55),'第 2 波');
  assert.equal(p.game.sides.bottom.combat.enemies.length,4);
  p.run(100);assert.equal(p.game.sides.bottom.combat.enemies.length,6);

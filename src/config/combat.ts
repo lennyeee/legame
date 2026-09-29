@@ -1,6 +1,7 @@
 import { itemAttackInterval } from './itemEffects';
 import type { Unit } from '../systems/items';
-import { attackRangeCells, rangePixels } from './ranges';
+import { attackRangeCells, bowRangeCellsByLevel, rangePixels } from './ranges';
+import { clampLevel } from './levels';
 
 export interface CombatStats {
   damage: number;
@@ -8,18 +9,31 @@ export interface CombatStats {
   range: number; // 圆形攻击半径；索敌判断与敌人的受击圆相交。
 }
 
-export const unitCombatStats: Record<Unit['type'], CombatStats> = {
-  刀: { damage: 12, attackInterval: 450, range: rangePixels(attackRangeCells.刀) },
-  枪: { damage: 18, attackInterval: 1250, range: rangePixels(attackRangeCells.枪) },
-  弓: { damage: 30, attackInterval: 1700, range: rangePixels(attackRangeCells.弓) },
-  骑: { damage: 22, attackInterval: 1600, range: rangePixels(attackRangeCells.骑) },
+export const ordinaryAttackSpeeds = [1.25, 1.88, 2.62, 3.41, 4.27] as const;
+export const ordinaryDamageByLevel = {
+  刀: [3, 4.5, 6.3, 8.19, 10.24],
+  枪: [2, 3, 4.2, 5.46, 6.82],
+  弓: [2, 3, 4.2, 5.46, 6.82],
+  骑: [2, 3, 4.2, 5.46, 6.82],
+} as const;
+// 五级明确标尺；伤害保留小数，攻击间隔由每秒攻击次数换算。
+function levelStats(type: Unit['type']): readonly CombatStats[] {
+  return ordinaryDamageByLevel[type].map((damage, i) => ({ damage,
+    attackInterval: 1000 / ordinaryAttackSpeeds[i]!,
+    range: rangePixels(type === '弓' ? bowRangeCellsByLevel[i]! : attackRangeCells[type]),
+  }));
+}
+export const unitLevelStats: Record<Unit['type'], readonly CombatStats[]> = {
+  刀: levelStats('刀'), 枪: levelStats('枪'), 弓: levelStats('弓'), 骑: levelStats('骑'),
 };
+export const unitCombatStats = Object.fromEntries(
+  (Object.keys(unitLevelStats) as Unit['type'][]).map(type => [type, unitLevelStats[type][0]!]),
+) as Record<Unit['type'], CombatStats>;
 
 export const combatConfig = {
-  enemy: { maxHp: 90, moveSpeed: 55, killReward: 1, hitRadius: 20 },
+  enemy: { maxHp: 10, moveSpeed: 45, killReward: 1, hitRadius: 20 },
   stepMs: 1000 / 60,
   maxFrameMs: 250, // 切回页面时不瞬间补发大量敌人和攻击
-  growth: { damageMultiplier: 1.55, attackSpeedPerLevel: 0.08 },
   spearWidth: 32,
   arrowSpeed: 560,
   visuals: {
@@ -36,11 +50,9 @@ export const combatConfig = {
 export type CombatConfig = typeof combatConfig;
 
 export function getCombatStats(unit: Unit): CombatStats {
-  const base = unitCombatStats[unit.type];
-  const upgrades = Math.max(0, unit.level - 1);
+  const base = unitLevelStats[unit.type][clampLevel(unit.level) - 1]!;
   return {
-    damage: Math.round(base.damage * combatConfig.growth.damageMultiplier ** upgrades),
-    attackInterval: itemAttackInterval(base.attackInterval / (1 + combatConfig.growth.attackSpeedPerLevel * upgrades), unit.hasteEnhanced),
-    range: unit.type === '弓' && unit.level >= 2 ? rangePixels(attackRangeCells.弓进阶) : base.range,
+    ...base,
+    attackInterval: itemAttackInterval(base.attackInterval, unit.hasteEnhanced),
   };
 }

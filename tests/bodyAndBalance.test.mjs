@@ -46,7 +46,7 @@ for(const type of ['刀','枪','骑'])test(`${type} identity on production map w
  if(type==='刀'){
   const near=gridToWorld({column:2,row:3}),i=testMap.cells.findIndex(c=>c.x===near.x&&c.y===near.y);
   board.tiles[index].unit=null;board.tiles[i].unlocked=true;board.tiles[i].unit={type,level:1};
-  assert.ok(run(sim,500).some(e=>e.kind==='attack'));assert.ok(enemy.hp<enemy.maxHp);
+  assert.ok(run(sim,800).some(e=>e.kind==='attack'));assert.ok(enemy.hp<enemy.maxHp);
  }
 });
 
@@ -61,29 +61,29 @@ test('spear width stays32; segment/body intersection hits edges and rejects a fu
  assert.deepEqual(piercingTargets(enemies,{x:0,y:0},enemies[0],150,32).map(e=>e.id),[1,2,4]);
 });
 
-test('cavalry AOE uses the same body boundary, without enlarging its configured145 radius',()=>{
+test('cavalry AOE uses the same body boundary, without enlarging its configured150 radius',()=>{
  const {sim}=setup('骑'),range=getCombatStats({type:'骑',level:1}).range;
- assert.equal(range,145);const inside=at(sim,400+range+20),outside=at(sim,400+range+20+.01);
- run(sim,1600);assert.equal(inside.hp,10000-22);assert.equal(outside.hp,10000);
+ assert.equal(range,150);const inside=at(sim,400+range+20),outside=at(sim,400+range+20+.01);
+ run(sim,800);assert.equal(inside.hp,10000-2);assert.equal(outside.hp,10000);
 });
 
 test('bow legally acquires a body outside center range; arrow survives consistent range check and hits one target',()=>{
  const {sim}=setup('弓'),range=getCombatStats({type:'弓',level:1}).range;
  const target=at(sim,400+range+20),other=at(sim,420);
- run(sim,1700);assert.equal(sim.projectiles.length,1);assert.equal(target.hp,10000);
+ run(sim,800);assert.equal(sim.projectiles.length,1);assert.equal(target.hp,10000);
  run(sim,30);assert.equal(sim.projectiles.length,1);
- run(sim,500);assert.equal(target.hp,9970);assert.equal(other.hp,10000);
+ run(sim,500);assert.equal(target.hp,9998);assert.equal(other.hp,10000);
 });
 
 test('bow arrow cancels once the whole target body leaves range',()=>{
  const {sim}=setup('弓'),r=getCombatStats({type:'弓',level:1}).range;
- const target=at(sim,400+r+20);run(sim,1700);assert.equal(sim.projectiles.length,1);
+ const target=at(sim,400+r+20);run(sim,800);assert.equal(sim.projectiles.length,1);
  target.distance+=.01;run(sim,30);assert.equal(sim.projectiles.length,0);assert.equal(target.hp,10000);
 });
 
-test('first calibration retains unit damage/speed growth, economics, enemy speed and bounded geometry',()=>{
- assert.deepEqual(combatConfig.growth,{damageMultiplier:1.55,attackSpeedPerLevel:.08});
- assert.equal(combatConfig.enemy.moveSpeed,55);assert.equal(combatConfig.enemy.killReward,1);
+test('new calibration changes ordinary stats but retains economics and bounded geometry',()=>{
+ assert.equal(getCombatStats({type:'刀',level:1}).damage,3);
+ assert.equal(combatConfig.enemy.moveSpeed,45);assert.equal(combatConfig.enemy.killReward,1);
  assert.equal(itemEffects.upgradeCooldownMs,50000);assert.equal(itemEffects.hasteCooldownMs,20000);
  assert.equal(heroGrowth.enemyExp,5);assert.equal(combatConfig.enemy.hitRadius,20);
  assert.ok(combatConfig.visuals.enemyRadius*2>=42&&combatConfig.visuals.enemyRadius*2<=48);

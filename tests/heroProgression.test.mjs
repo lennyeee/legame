@@ -88,21 +88,21 @@ test('零伤害不记录，多次命中只记录一次，重复死亡不重复�
 });
 test('普通兵最后一击仍让实际参战武将获得完整EXP',()=>{
  const {board,sim,link}=setup();const e=enemy(sim);run(sim,2400);assert.equal(e.hp,1000-2*heroCombat.damage);
- board.tiles[4].unit={type:'弓',level:20};run(sim,1100);
+ e.hp=1;board.tiles[4].unit={type:'弓',level:5};run(sim,1100);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
 });
 test('两个武将有效参战，各得完整EXP；第三个只在范围内不得EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:690,unlocked:true},{x:247,y:690,unlocked:true},{x:195,y:610,unlocked:true},{x:247,y:610,unlocked:true},{x:195,y:650,unlocked:true}]};
  const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
  const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-2*heroCombat.damage);
- board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');board.tiles[6].unit={type:'刀',level:20};run(sim,300);
+ board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');e.hp=1;board.tiles[6].unit={type:'刀',level:5};run(sim,800);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
  assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[heroGrowth.enemyExp,heroGrowth.enemyExp,0]);
 });
 test('拆开后原敌人被普通兵击杀不发旧EXP，漏怪也无EXP',()=>{
  const {board,reserve,sim,growth}=setup();const e=enemy(sim);run(sim,1200);
  applyDrop(board,reserve,p('tile',1),p('slot',0));applyDrop(board,reserve,p('slot',0),p('tile',1));sim.update(0);
- const fresh=sim.heroLinks[0];board.tiles[4].unit={type:'弓',level:20};run(sim,1100);assert.equal(sim.enemies.length,0);assert.equal(fresh.currentExp,0);
+ const fresh=sim.heroLinks[0];e.hp=1;board.tiles[4].unit={type:'弓',level:5};run(sim,1100);assert.equal(sim.enemies.length,0);assert.equal(fresh.currentExp,0);
  const escape=enemy(sim);growth.recordDamage(escape.id,fresh,1);escape.distance=sim.path.totalLength;run(sim,20);growth.awardKill(escape.id,100);assert.equal(fresh.currentExp,0);
 });
 test('参战武将自己击杀也能得EXP，休眠字不得EXP',()=>{

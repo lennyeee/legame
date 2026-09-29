@@ -9,7 +9,7 @@ export function applyTileBonuses(stats: CombatStats, board: BoardState, tileInde
   for (const index of tileIndexes) counts[board.tiles[index]?.bonusType ?? 'none']++;
   const strength = tileBonusConfig.bonusPerTile;
   return {
-    damage: Math.round(stats.damage * (1 + counts.attack * strength)),
+    damage: stats.damage * (1 + counts.attack * strength),
     attackInterval: stats.attackInterval / (1 + counts.attackSpeed * strength),
     range: stats.range * (1 + counts.range * strength),
   };

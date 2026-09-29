@@ -33,7 +33,10 @@ export class MatchTimeline {
 
   constructor(config: PressureConfig = pressureConfig) {
     validatePressureConfig(config);
-    this.config = Object.freeze({ ...config });
+    this.config = Object.freeze({ ...config,
+      waves: Object.freeze(config.waves.map(w => Object.freeze({ ...w }))),
+      extension: Object.freeze({ ...config.extension }),
+    });
     this.nextWaveAtMs = waveStartForWave(1, this.config);
   }
 

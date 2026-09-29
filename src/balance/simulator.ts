@@ -1,6 +1,6 @@
 import { Match } from '../match/Match';
 import { testMap, gridToWorld } from '../config/maps';
-import { combatConfig, unitCombatStats } from '../config/combat';
+import { combatConfig, unitCombatStats, unitLevelStats } from '../config/combat';
 import { pressureConfig, enemyCountForWave } from '../config/pressure';
 import type { PressureConfig } from '../config/pressure';
 import { heroGrowth, heroCombat } from '../config/heroes';
@@ -140,7 +140,7 @@ export function simulateBalance(scenario: CalibrationScenario, options: Simulati
     else lockStart=null;
   }
   const result={scenario:scenario.id,name:scenario.name,formation:scenario.formation,loadout,
-    pressure:config,combat:{growth:{...combatConfig.growth},heroCombat:{...heroCombat},heroGrowth:{...heroGrowth},
+    pressure:config,combat:{ordinaryLevelStats:structuredClone(unitLevelStats),heroCombat:{...heroCombat},heroGrowth:{...heroGrowth},
       ordinaryStats:structuredClone(unitCombatStats),skills:structuredClone(skillConfigs),
       enemy:{...combatConfig.enemy},visualRadius:combatConfig.visuals.enemyRadius,
       upgradeCooldownMs:itemEffects.upgradeCooldownMs},metrics:{...analysisConfig},

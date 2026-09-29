@@ -14,16 +14,16 @@ const {mergeItems}=await import('../src/systems/items.ts');
 const {selectTarget}=await import('../src/combat/targeting.ts');
 const letter=(type,level)=>({kind:'heroLetter',type,level});
 
-test('射程以75逻辑格为基准，枪固定2格、弓仅1到2增距、其他单位不增距',()=>{
+test('射程以75逻辑格为基准，枪固定2.5格、弓逐级增距、其他单位不增距',()=>{
  assert.equal(MAX_LEVEL,5);
  for(let level=1;level<=MAX_LEVEL;level++){
-   assert.equal(getCombatStats({type:'枪',level}).range,2*CELL_SIZE);
-   assert.equal(getCombatStats({type:'弓',level}).range,(level===1?2.5:3)*CELL_SIZE);
-   assert.equal(getCombatStats({type:'刀',level}).range,90);
-   assert.equal(getCombatStats({type:'骑',level}).range,145);
+   assert.equal(getCombatStats({type:'枪',level}).range,2.5*CELL_SIZE);
+   assert.equal(getCombatStats({type:'弓',level}).range,[2.5,2.75,3,3.25,3.5][level-1]*CELL_SIZE);
+   assert.equal(getCombatStats({type:'刀',level}).range,112.5);
+   assert.equal(getCombatStats({type:'骑',level}).range,150);
    for(const hero of heroRecipes)assert.equal(getHeroStats(level).range,230,hero.id);
  }
- assert.equal(getCombatStats({type:'枪',level:5}).range*boardDisplay.scale,168.75);
+ assert.equal(getCombatStats({type:'枪',level:5}).range*boardDisplay.scale,210.9375);
 });
 test('枪弓在新射程边界内可索敌，边界外不可索敌',()=>{
  for(const [type,level]of [['枪',1],['枪',5],['弓',1],['弓',2],['弓',5]]){

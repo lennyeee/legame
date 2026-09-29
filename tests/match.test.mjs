@@ -37,8 +37,32 @@ test('同一spawn在9.5秒同时产生双方独立实体，参数相同且带相
  assert.notEqual(a,b);assert.deepEqual(a,b);assert.equal(a.spawnEventId,1);assert.equal(a.id,1);
  assert.equal(a.maxHp,enemyHpForWave(1));assert.equal(a.moveSpeed,combatConfig.enemy.moveSpeed);
 });
+test('正式新节奏在24.5秒启动wave2，不等待wave1存活敌人清空',()=>{
+ const m=new Match(testMap);
+ // 本用例隔离出怪时间，不以空阵容漏怪结束作为计时测试的前提。
+ for(const side of Object.values(m.sides)){
+  const spawn=side.combat.spawnEnemy.bind(side.combat);
+  side.combat.spawnEnemy=(...args)=>{const enemy=spawn(...args);enemy.moveSpeed=0;return enemy;};
+ }
+ advance(m,waveStartForWave(2)-10);assert.equal(m.timeline.wave,1);
+ assert.equal(m.bottomSide.combat.enemies.length,10);
+ advance(m,10);assert.equal(m.timeline.wave,2);
+ for(const side of Object.values(m.sides)){
+  assert.equal(side.combat.enemies.length,11);
+  assert.equal(side.combat.enemies[0].maxHp,10);
+  assert.equal(side.combat.enemies.at(-1).maxHp,18);
+ }
+ assert.equal(m.status,'running');m.destroy();
+});
+test('新波次计时暂停保持剩余出怪时间，恢复不补发暂停期间敌人',()=>{
+ const m=new Match(testMap);advance(m,10000);assert.equal(m.bottomSide.combat.enemies.length,1);
+ m.pause();const before=snapshot(m);advance(m,20000);assert.equal(snapshot(m),before);
+ m.resume();advance(m,990);assert.equal(m.bottomSide.combat.enemies.length,1);
+ advance(m,10);assert.equal(m.bottomSide.combat.enemies.length,2);
+ assert.equal(m.topSide.combat.enemies.length,2);assert.equal(m.timeline.wave,1);m.destroy();
+});
 for(const fast of ['bottom','top'])test(`${fast}清场不改变另一方的出怪时间，积怪不阻止wave2`,()=>{
- const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:250,initialCount:2,countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100};
+ const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:250,waves:[{hp:10,count:2}],spawnInterval:100};
  const m=new Match(testMap,undefined,undefined,config),slow=fast==='bottom'?'top':'bottom';
  advance(m,100);m.sides[fast].combat.enemies.length=0;
  advance(m,100);assert.equal(m.sides[slow].combat.enemies.length,2);
@@ -75,7 +99,7 @@ test('同一渲染帧的不同逻辑步死亡不扩成平局窗口；首个已�
  m.update(250);assert.equal(m.result,'top');assert.equal(m.health.top,3);
 });
 test('跨过20波仍继续出怪，双方存活时不判最终波胜利',()=>{
- const m=new Match(testMap,undefined,undefined,{...pressureConfig,firstEnemyDelay:100,waveStartInterval:150,initialCount:1,countPerStage:0,countStepEvery:100,pulseExtraCount:0});
+ const m=new Match(testMap,undefined,undefined,{...pressureConfig,firstEnemyDelay:100,waveStartInterval:150,waves:[{hp:10,count:1}]});
  advance(m,4000);for(const side of Object.values(m.sides))side.combat.enemies.length=0;
  advance(m,500);assert.ok(m.timeline.wave>20);assert.ok(m.bottomSide.combat.enemies.length>0);
  assert.equal(m.status,'running');assert.equal(m.result,null);assert.deepEqual(m.health,{bottom:3,top:3});
@@ -210,8 +234,7 @@ test('restart begins a fresh 9.5-second delay; old Match cannot advance or pollu
 });
 
 test('overlapping waves fan out identical HP/speed/events even with one side cleared',()=>{
- const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:200,initialCount:4,
-  countPerStage:0,countStepEvery:100,pulseExtraCount:0,initialSpawnInterval:100,minimumSpawnInterval:100};
+ const config={...pressureConfig,firstEnemyDelay:100,waveStartInterval:200,waves:[{hp:10,count:4}],spawnInterval:100};
  const m=new Match(testMap,undefined,undefined,config);
  advance(m,200);m.bottomSide.combat.enemies.length=0;advance(m,100);
  assert.equal(m.timeline.wave,2);
@@ -220,7 +243,7 @@ test('overlapping waves fan out identical HP/speed/events even with one side cle
  for(const eventId of [3,4]){
   const a=m.bottomSide.combat.enemies.find(e=>e.spawnEventId===eventId);
   const b=m.topSide.combat.enemies.find(e=>e.spawnEventId===eventId);
-  assert.notEqual(a,b);assert.equal(a.maxHp,b.maxHp);assert.equal(a.moveSpeed,55);assert.equal(a.moveSpeed,b.moveSpeed);
+  assert.notEqual(a,b);assert.equal(a.maxHp,b.maxHp);assert.equal(a.moveSpeed,45);assert.equal(a.moveSpeed,b.moveSpeed);
   assert.equal(a.distance,b.distance); // same spawn logical step and movement
  }
  assert.equal(m.bottomSide.combat.enemies[1].maxHp,enemyHpForWave(2,config));

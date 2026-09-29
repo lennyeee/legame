@@ -45,9 +45,12 @@ export const calibrationScenarios: CalibrationScenario[] = [
 
 // Frozen v0.62-A pressure for controlled comparisons using the same current Combat/body rules.
 export const referencePressure: PressureConfig = {...pressureConfig,firstEnemyDelay:9500,waveStartInterval:20000,
-  stageLength:5,initialHp:90,hpPerStage:.35,hpPerStep:.05,hpStageCurve:0,initialCount:5,countPerStage:2,countStageEvery:1,
-  countStepEvery:2,maxCount:80,initialSpawnInterval:2000,intervalReductionPerStage:150,
-  minimumSpawnInterval:500,pulseEvery:5,pulseExtraCount:2};
+  // 保留历史压力快照；100波覆盖900秒分析窗口，不参与正式对局配置。
+  waves:Array.from({length:100},(_,i)=>({
+    hp:Math.round(90*(1+.35*Math.floor(i/5)+.05*(i%5))),
+    count:Math.min(80,5+2*Math.floor(i/5)+Math.floor((i%5)/2)+((i+1)%5===0?2:0)),
+    spawnInterval:Math.max(500,2000-150*Math.floor(i/5)),
+  })),spawnInterval:500};
 
 export const analysisConfig = {
   maxElapsedMs: 900000, sampleIntervalMs: 5000,
