@@ -9,7 +9,7 @@ import { UnitView } from './unit';
 import { getHeroLinks } from '../systems/heroActivation';
 import { getHeroProgression } from '../systems/heroProgression';
 import { isHeroLetter } from '../systems/items';
-import { heroVisuals } from '../config/heroes';
+import { heroVisuals, getHeroDefinition } from '../config/heroes';
 import { tileBonusVisuals } from '../config/tileBonuses';
 import { boardGraphics, boardProjection } from './boardDisplay';
 import type { DisplaySide } from './boardDisplay';
@@ -61,7 +61,7 @@ export class DeploymentView {
       const size = this.map.cellSize;
       this.links.fillStyle(heroVisuals.fill);
       this.links.fillRect(link.origin.x - size, link.origin.y - size / 2, size * 2, size);
-      this.links.lineStyle(3, heroVisuals.color);
+      this.links.lineStyle(3, getHeroDefinition(link.heroId).cardColor==='purple'?0x9768b5:heroVisuals.color);
       this.links.strokeRect(link.origin.x - size, link.origin.y - size / 2, size * 2, size);
     }
     this.tiles.forEach((view, index) => {

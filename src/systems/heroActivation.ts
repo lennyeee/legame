@@ -19,6 +19,7 @@ export interface HeroPlacement {
 }
 
 export interface HeroLink extends HeroPlacement {
+  focus?: { targetId:number|null; stacks:number };
   hasteEnhanced?: boolean; // 从本局 heroId 强化记录派生。
   cycleId: number;
   level: number;

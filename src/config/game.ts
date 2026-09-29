@@ -1,6 +1,6 @@
 import { recruitableHeroLetters } from './heroes';
 
-export const GAME_VERSION = '0.67-A';
+export const GAME_VERSION = '0.67-B';
 
 export const gameConfig = {
   initialMoney: 20,
@@ -12,7 +12,7 @@ export const gameConfig = {
 
 export type Recruit = (typeof gameConfig.recruitmentPool)[number];
 
-// 普通兵与铲子各占 3/20，每个武将字占 1/20；只调整这里即可改变测试概率。
+// 普通兵与铲子权重各3，每种去重后的武将字权重1；只调整这里即可改变测试概率。
 export const recruitmentWeights: Record<Recruit, number> = {
   刀: 3, 枪: 3, 弓: 3, 骑: 3, 铲: 3,
   ...Object.fromEntries(recruitableHeroLetters.map(letter => [letter, 1])),

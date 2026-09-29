@@ -19,12 +19,12 @@ function setup(hero='xiaomei') {
 }
 function award(progression,link,exp){progression.recordDamage(99,link,1);progression.awardKill(99,exp);}
 
-test('Registry has eight unique stable IDs, ordered letter pairs and names; only original three available',()=>{
+test('Registry has eight unique stable IDs, ordered letter pairs and names; all eight available',()=>{
  assert.equal(heroRegistry.length,8);
  for(const key of ['id','name'])assert.equal(new Set(heroRegistry.map(h=>h[key])).size,8);
  assert.equal(new Set(heroRegistry.map(h=>h.letters.join('|'))).size,8);
- assert.deepEqual(heroRecipes.map(h=>h.id),['xiaomei','abing','xiaoliu']);
- assert.equal(GAME_VERSION,'0.67-A');
+ assert.deepEqual(heroRecipes.map(h=>h.id),['xiaomei','abing','xiaoliu','houjiang','xiaozhan','yongqi','xiaoqian','abiao']);
+ assert.equal(GAME_VERSION,'0.67-B');
  assert.throws(()=>getHeroDefinition('unknown'),/未注册/);
 });
 for(const hero of heroRegistry)test(`Registry resolves ${hero.id} with complete identity and presentation data`,()=>{
@@ -32,17 +32,17 @@ for(const hero of heroRegistry)test(`Registry resolves ${hero.id} with complete 
  assert.equal(hero.letters.length,2);assert.equal(hero.name,hero.letters.join(''));
  assert.ok(hero.description);assert.equal(hero.cardColor,['abing','xiaoliu'].includes(hero.id)?'purple':'gold');
 });
-test('planned ranges explicit; Abing A runtime230/B planned225; passive has no active cooldown',()=>{
+test('planned ranges explicit; Abing B runtime225; passive has no active cooldown',()=>{
  for(const [id,range] of [['houjiang',180],['xiaoqian',180],['abing',225],['abiao',300]])assert.equal(getHeroDefinition(id).plannedAttackRange,range);
- assert.equal(getHeroStats(1,'abing').range,230);
+ assert.equal(getHeroStats(1,'abing').range,225);
  const passive=getHeroDefinition('xiaoqian').skill;assert.equal(passive.kind,'passive');assert.equal('cooldownByLevel' in passive,false);
- assert.equal(getHeroDefinition('xiaozhan').baseAttackRange,null);
- assert.equal(getHeroDefinition('yongqi').baseAttackRange,null);
+ assert.equal(getHeroDefinition('xiaozhan').baseAttackRange,230);
+ assert.equal(getHeroDefinition('yongqi').baseAttackRange,230);
 });
-test('visual colors cannot change weights, progression or combat; future letters never enter live pool or activate',()=>{
+test('visual colors cannot change weights, progression or combat; all available letters enter live pool',()=>{
  const pool=recruitmentPool({active:[],passive:[]});
  assert.deepEqual(pool.map(p=>p.value),[...gameConfig.recruitmentPool]);
- assert.deepEqual(pool.map(p=>p.weight),[3,3,3,3,3,1,1,1,1,1]);
+ assert.deepEqual(pool.map(p=>p.weight),[3,3,3,3,3,...Array(13).fill(1)]);
  assert.deepEqual(Object.values(recruitmentWeights),pool.map(p=>p.weight));
  const before=heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id));
  const colors=heroRegistry.map(h=>h.cardColor);
@@ -51,29 +51,29 @@ test('visual colors cannot change weights, progression or combat; future letters
  assert.deepEqual(heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id)),before);
  assert.equal(heroGrowth.enemyExp,5);assert.equal(heroExpRequired(1),45);
  }finally{heroRegistry.forEach((h,i)=>h.cardColor=colors[i]);}
- for(const def of heroRegistry.filter(h=>!h.available)){
+ for(const def of heroRegistry){
   const board=createBoardState(testMap);board.tiles[0].unit=letter(def.letters[0]);board.tiles[1].unit=letter(def.letters[1]);
-  const progression=getHeroProgression(board);progression.sync();assert.equal(progression.links.size,0);
-  assert.throws(()=>getHeroStats(1,def.id),/尚未开放/);
+  const progression=getHeroProgression(board);progression.sync();assert.equal(progression.links.size,1);
+  assert.equal(getHeroStats(1,def.id).damage,10);
  }
 });
-for(const id of ['xiaomei','abing','xiaoliu'])for(const level of [1,2,3,4,5])test(`${id} Lv${level} registry migration retains ordinary and skill values`,()=>{
+for(const id of ['xiaomei','abing','xiaoliu'])for(const level of [1,2,3,4,5])test(`${id} Lv${level} registry supplies expected ordinary and skill values`,()=>{
  const hero=getHeroDefinition(id),stats=getHeroStats(level,id),skill=hero.skill;
- assert.equal(stats.damage,Math.round(10*(1+.5*(level-1))));assert.equal(stats.range,230);
+ assert.equal(stats.damage,Math.round(10*(1+.5*(level-1))));assert.equal(stats.range,id==='abing'?225:230);
  assert.equal(stats.attackInterval,1200/(1+.08*(level-1)));
  assert.equal(skillConfigs[hero.skillId],skill);
  const actual=getSkillStats(hero.skillId,level);
  const base=id==='xiaomei'?10000:id==='abing'?14000:12000;
  const minimum=id==='xiaomei'?3000:id==='abing'?4000:3500;
  assert.equal(skill.cooldownByLevel.length,5);assert.equal(skill.effectByLevel.length,5);
- assert.equal(actual.cooldown,Math.max(minimum,base/(1+.08*(level-1))));
+ assert.equal(actual.cooldown,id==='abing'?12000-(level-1)*500:Math.max(minimum,base/(1+.08*(level-1))));
  assert.equal(actual.damage,id==='xiaomei'?Math.round(100*(1+.5*(level-1))):0);
  if(id==='xiaoliu'){assert.equal(skill.effectByLevel[level-1].attacks,7);assert.equal(skill.effectByLevel[level-1].speedMultiplier,3+.2*(level-1));}
 });
 test('independent skill table can express non-formula growth without changing other heroes',()=>{
  const skill=getHeroDefinition('xiaomei').skill,descriptor=Object.getOwnPropertyDescriptor(skill,'cooldownByLevel');
  try{Object.defineProperty(skill,'cooldownByLevel',{value:[9000,8800,8500,8100,7800],configurable:true});
- assert.equal(getSkillStats(skill.id,3).cooldown,8500);assert.equal(getSkillStats('abing_execute',3).cooldown,14000/1.16);
+ assert.equal(getSkillStats(skill.id,3).cooldown,8500);assert.equal(getSkillStats('abing_burst',3).cooldown,11000);
  }finally{Object.defineProperty(skill,'cooldownByLevel',descriptor);}
 });
 for(const [level,required] of [[1,45],[2,70],[3,105],[4,140]])test(`Lv${level} EXP boundary ${required}, upgrade writes both letters with overflow`,()=>{

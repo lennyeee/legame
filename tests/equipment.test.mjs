@@ -40,5 +40,5 @@ test('重开loadout复制，新背包重置，征兵池没有农民',()=>{
  const original=createLoadout(inventory),fresh=copyLoadout(original);
  assert.deepEqual(fresh,original);assert.notEqual(fresh,original);assert.notEqual(fresh.passive[0],original.passive[0]);
  assert.deepEqual(createLoadout(createInventory()).passive,[]);
- assert.deepEqual(gameConfig.recruitmentPool,['刀','枪','弓','骑','铲','小','美','阿','饼','六']);
+ assert.deepEqual(gameConfig.recruitmentPool,['刀','枪','弓','骑','铲','小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪']);
 });

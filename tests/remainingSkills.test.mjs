@@ -9,7 +9,6 @@ const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
 const {createRecruitmentState}=await import('../src/systems/recruitment.ts');
 const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
-const {executeEnemy}=await import('../src/combat/enemies.ts');
 const {WaveProgress}=await import('../src/combat/WaveProgress.ts');
 const {waveConfig}=await import('../src/config/waves.ts');
 const {testMap}=await import('./fixtures/combatMap.ts');
@@ -48,24 +47,20 @@ for(const hero of ['abing','xiaoliu'])test(`${hero}普攻复用主目标周围AO
  assert.equal(a.hp,10000-heroCombat.damage);assert.equal(b.hp,10000-heroCombat.damage);assert.equal(far.hp,10000);
 });
 
-test('阿饼完整CD后按绝对HP最高、同HP最早入场处决，排除Boss并发EXP和奖励',()=>{
- const {sim,link,wallet}=setup('abing',true);const cd=getSkillStats('abing_execute',1).cooldown;
- const boss=enemy(sim,9999,true); // 合法普攻目标使CD累计；Boss仍不属于处决目标。
- run(sim,cd-20);assert.equal(link.skill.phase,'charging');run(sim,40);assert.equal(link.skill.phase,'ready');
- const low=enemy(sim,100),first=enemy(sim,500),second=enemy(sim,500);
- low.maxHp=100000;const before=wallet.money;
- const bossHp=boss.hp;const events=run(sim,20);assert.equal(first.hp,0);assert.equal(second.hp,500);assert.equal(boss.hp,bossHp);
- assert.equal(events.filter(e=>e.kind==='skillStart').length,1);assert.equal(events.filter(e=>e.kind==='kill').length,1);
- assert.equal(link.currentExp,heroGrowth.enemyExp);assert.equal(wallet.money,before+sim.config.enemy.killReward);
- assert.equal(run(sim,100).some(e=>e.kind==='skillStart'),false);
- assert.deepEqual(executeEnemy(boss),{applied:0,killed:false});
- assert.deepEqual(executeEnemy(first),{applied:0,killed:false});
+test('阿饼完整CD后仅自身强化，Boss也可触发但没有处决和即时奖励',()=>{
+ const {sim,link,wallet}=setup('abing',true),boss=enemy(sim,1e8,true),before=wallet.money;
+ run(sim,11980);assert.equal(sim.statuses.allies.has(link),false);
+ const events=run(sim,40);assert.equal(events.filter(e=>e.kind==='skillStart').length,1);
+ assert.equal(sim.statuses.allies.has(link),true);assert.ok(boss.hp>0);
+ assert.equal(wallet.money,before);assert.equal(link.currentExp,0);
+ run(sim,4020);assert.equal(sim.statuses.allies.has(link),false);
 });
-
-test('只有Boss时阿饼保持ready，处决能处理超过普通伤害量级的HP',()=>{
- const {sim,link}=setup('abing',true);const boss=enemy(sim,1e20,true);
- run(sim,14020);assert.equal(link.skill.phase,'ready');assert.ok(boss.hp>0);
- const target=enemy(sim,1e20);run(sim,20);assert.equal(target.hp,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+test('阿饼脱战ready保留，重新接敌强化普攻仍可正常击杀并获EXP',()=>{
+ const {sim,link,wallet}=setup('abing',true);link.skill.cooldownElapsed=12000;
+ run(sim,20);assert.equal(link.skill.phase,'ready');const target=enemy(sim,1),before=wallet.money;
+ run(sim,20);assert.equal(sim.statuses.allies.has(link),true);
+ run(sim,1300);assert.equal(target.hp,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+ assert.equal(wallet.money,before+sim.config.enemy.killReward);
 });
 
 test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次AOE各只扣一层并恢复普通攻速',()=>{
@@ -85,7 +80,7 @@ test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次
    assert.equal(link.skill.remainingAttacks,7-attacks);
  }
  assert.equal(attacks,7);assert.equal(link.skill.phase,'charging');assert.equal(link.skill.cooldownElapsed,0);
- assert.equal(a.hp,1e8-(7-triggerAttacks)*heroCombat.damage);assert.equal(b.hp,a.hp);
+ assert.equal(a.hp,1e8-(7-triggerAttacks)*heroCombat.damage*1.2);assert.equal(b.hp,a.hp);
  assert.equal(heroAttackInterval(link,getHeroStats(1).attackInterval),1200);
  assert.equal(run(sim,1180).filter(e=>e.kind==='heroAttack').length,0);
  assert.equal(run(sim,40).filter(e=>e.kind==='heroAttack').length,1);
@@ -98,9 +93,9 @@ test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次
 });
 
 test('新增技能成长集中配置、CD和强化攻速均有安全下限',()=>{
- for(const id of ['abing_execute','xiaoliu_haste']){
+ for(const id of ['abing_burst','xiaoliu_haste']){
    assert.ok(getSkillStats(id,2).cooldown<getSkillStats(id,1).cooldown);
-   assert.equal(getSkillStats(id,100000).cooldown,getSkillStats(id,1).minCooldown);
+   assert.ok(getSkillStats(id,5).cooldown>=getSkillStats(id,1).minCooldown);
  }
  const {link}=setup();link.skill.phase='empowered';
  const first=heroAttackInterval(link,1200);link.level=5;

@@ -24,7 +24,7 @@ function enemy(sim,hp=1000){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=e.maxHp=
 function grant(growth,link,exp,id=999){growth.recordDamage(id,link,1);growth.awardKill(id,exp);}
 
 test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
- const {board,reserve}=setup([3,3]);recruit(reserve,()=>15.5/20);assert.deepEqual(reserve.slots[0],letter('小'));
+ const {board,reserve}=setup([3,3]);recruit(reserve,()=>15.5/28);assert.deepEqual(reserve.slots[0],letter('小'));
  const original=board.tiles[0].unit;reserve.slots[0]=null;
  applyDrop(board,reserve,p('tile',0),p('slot',0));assert.equal(reserve.slots[0],original);assert.equal(original.level,3);
  reserve.slots[1]=letter('饼',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
@@ -116,5 +116,5 @@ test('结算停止EXP和攻击，独立新局从空状态及Lv.1开始',()=>{
  enemy(sim);run(sim,1200);const link=sim.heroLinks[0];progress.status='defeat';const before=link.currentExp;
  assert.deepEqual(run(sim,10000),[]);assert.equal(link.currentExp,before);
  growth.clear();assert.equal(growth.links.size,0);const freshBoard=createBoardState(testMap),freshReserve=createRecruitmentState();
- assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>15.5/20);assert.equal(freshReserve.slots[0].level,1);
+ assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>15.5/28);assert.equal(freshReserve.slots[0].level,1);
 });

@@ -22,17 +22,17 @@ function setup(hero='xiaomei',map){
  const board=createBoardState(map),wallet=createRecruitmentState();const recipe=heroRecipes.find(r=>r.id===hero);
  board.tiles[0].unit=letter(recipe.letters[0]);board.tiles[1].unit=letter(recipe.letters[1]);
  const sim=new CombatSimulation(map,board,wallet);sim.update(0);
- // Boss 可作为普攻目标，但不是小美/阿饼的合法技能目标，用于验证 Ready 等待。
+ // Boss 可作为普攻目标，但不是小美的合法技能目标，用于验证 Ready 等待。
  if(defaultMap)enemy(sim,100000,true);
  return {board,wallet,sim,link:sim.heroLinks[0]};
 }
 function run(sim,ms,suspended=null){const events=[];for(let t=0;t<ms;t+=10)events.push(...sim.update(Math.min(10,ms-t),suspended));return events;}
 function enemy(sim,hp=1000,boss=false){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=hp;e.maxHp=Math.max(hp,1000);e.isBoss=boss;return e;}
 
-test('正式稳定ID及五种字池，旧配方消失、小只出现一次',()=>{
- assert.deepEqual(heroRecipes.map(r=>r.id),['xiaomei','abing','xiaoliu']);
- assert.deepEqual(heroRecipes.map(r=>r.name),['小美','阿饼','小六']);
- assert.deepEqual(gameConfig.recruitmentPool,['刀','枪','弓','骑','铲','小','美','阿','饼','六']);
+test('正式稳定ID及十三种字池，旧配方消失、小只出现一次',()=>{
+ assert.deepEqual(heroRecipes.map(r=>r.id),['xiaomei','abing','xiaoliu','houjiang','xiaozhan','yongqi','xiaoqian','abiao']);
+ assert.deepEqual(heroRecipes.map(r=>r.name),['小美','阿饼','小六','侯将','肖战','永琪','小倩','阿彪']);
+ assert.deepEqual(gameConfig.recruitmentPool,['刀','枪','弓','骑','铲','小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪']);
  assert.equal(gameConfig.recruitmentPool.filter(x=>x==='小').length,1);
 });
 test('同一个共享小的等级依次传播给美和六，同字升级仍同步清EXP',()=>{
@@ -127,7 +127,7 @@ test(`${hero} 普攻射程内充能、攻击间隔继续充能、脱战保留进
  assert.equal(link.skill.phase,'charging');
 });
 
-for(const hero of ['xiaomei','abing'])
+for(const hero of ['xiaomei'])
 test(`${hero} Ready时没有合法技能目标会等待，目标出现后沿用原有选敌规则`,()=>{
  const {sim,link}=setup(hero,testMap),boss=enemy(sim,100000,true);
  run(sim,link.skill.cooldownDuration);

@@ -19,7 +19,7 @@ test('Farmer new weight gives the expected independent five-slot probabilities, 
  assert.equal(pool().some(e=>e.value==='农'),false);assert.equal(pool('hero_recruitment').some(e=>e.value==='农'),false);
  const plain=pool('farmer'),boosted=pool('farmer','hero_recruitment');
  assert.equal(farmerConfig.recruitmentWeight,4);
- for(const [entries,base] of [[plain,20],[boosted,25]]){
+ for(const [entries,base] of [[plain,28],[boosted,41]]){
   assert.equal(entries.find(e=>e.value==='农').weight,4);
   assert.equal(entries.reduce((sum,e)=>sum+e.weight,0),base+4);
   const old=10/(base+10),p=4/(base+4);
@@ -28,12 +28,12 @@ test('Farmer new weight gives the expected independent five-slot probabilities, 
   assert.ok(atLeast1<1-(1-old)**5);assert.ok(atLeast2<1-(1-old)**5-5*old*(1-old)**4);
  }
  for(const entry of plain.filter(e=>e.value!=='农')){
-  const letter=['小','美','阿','饼','六'].includes(entry.value);
+  const letter=['小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪'].includes(entry.value);
   assert.equal(boosted.find(e=>e.value===entry.value).weight,entry.weight*(letter?2:1));
  }
  const state=createRecruitmentState();const inventory=createInventory();setEquipped(inventory,'farmer',true);
  const equipped=createRecruitmentState(createLoadout(inventory));equipped.money=100;
- recruit(equipped,()=>20/24);assert.ok(equipped.slots.every(i=>i?.kind==='farmer'));
+ recruit(equipped,()=>.99);assert.ok(equipped.slots.every(i=>i?.kind==='farmer'));
  assert.equal(state.loadout.passive.length,0);
 });
 function setup(){const board=createBoardState(testMap),wallet=createRecruitmentState(),production=new FarmerProduction(board,wallet);

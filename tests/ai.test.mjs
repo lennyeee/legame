@@ -507,3 +507,13 @@ test('AI operates during the 9.5-second first-enemy delay through normal paid re
  assert.equal(s.recruitment.nextCost,12);
  assert.equal(m.bottomSide.recruitment.money,20);assert.ok(m.timeline.elapsedMs>=9390);
 });
+
+const {heroRegistry}=await import('../src/config/heroes.ts');
+for(const def of heroRegistry)test(`AI uses existing shared operations to form ${def.name} from reserve`,()=>{
+ const s=side(),ai=aiFor(s);s.recruitment.money=0;
+ s.recruitment.slots[0]=letter(def.letters[1]);s.recruitment.slots[1]=letter(def.letters[0]);
+ run(ai,2400);const link=[...s.heroes.links.values()][0];
+ assert.equal(link.heroId,def.id);assert.equal(link.left.type,def.letters[0]);assert.equal(link.right.type,def.letters[1]);
+ assert.equal(s.recruitment.money,0);assert.equal(s.board.tiles.filter(t=>t.unit).length,2);
+ assert.equal(link.skill===null,def.skill.kind==='passive');
+});

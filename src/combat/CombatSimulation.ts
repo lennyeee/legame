@@ -6,7 +6,7 @@ import type { BoardState } from '../systems/board';
 import type { Unit } from '../systems/items';
 import { isUnit } from '../systems/items';
 import { buildPath } from './path';
-import { advanceEnemy, createEnemy, damageEnemy, executeEnemy } from './enemies';
+import { advanceEnemy, createEnemy, damageEnemy } from './enemies';
 import type { Enemy } from './enemies';
 import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
@@ -14,8 +14,10 @@ import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
 import { getHeroStats, heroGrowth, getHeroDefinition } from '../config/heroes';
 import { getHeroProgression } from '../systems/heroProgression';
-import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack } from './skills';
+import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack, heroBasicDamageMultiplier } from './skills';
 import type { SkillEvent } from './skills';
+import { StatusEffects } from './statusEffects';
+import type { DamageSource } from './statusEffects';
 import { applyTileBonuses } from './tileBonuses';
 
 interface Attacker {
@@ -49,7 +51,7 @@ export interface Projectile extends MapPoint {
 
 export type CombatEvent = AttackEffect | SkillEvent
   | { kind: 'heroAttack'; link: HeroLink; end: MapPoint }
-  | { kind: 'hit'; enemyId: number }
+  | { kind: 'hit'; enemyId: number; source: DamageSource; damage: number; heroId?: HeroLink['heroId'] }
   | { kind: 'kill'; enemyId: number; position: MapPoint; reward: number }
   | { kind: 'escape'; enemyId: number };
 
@@ -60,6 +62,7 @@ export class CombatSimulation {
   readonly board: BoardState;
   readonly config: CombatConfig;
   private readonly wallet: { money: number };
+  readonly statuses = new StatusEffects();
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
   private readonly attackers = new Map<number, Attacker>();
@@ -95,6 +98,7 @@ export class CombatSimulation {
 
   // 由运行时所有者在退出本局时释放，不承担重开/波次规则。
   destroy(): void {
+    this.statuses.clear();
     this.enemies.length = 0;
     this.projectiles.length = 0;
     this.attackers.clear();
@@ -135,6 +139,8 @@ export class CombatSimulation {
         cooldown: interval, interval,
       });
     });
+    this.statuses.sync(this.enemies, [...this.attackers.values()].map(a=>a.unit as Unit|HeroLink).concat(links),
+      link=>getHeroProgression(this.board).isActive(link));
     this.projectiles = this.projectiles.filter(arrow => this.isAttackerValid(arrow.tileIndex, arrow.unit, arrow.level));
   }
 
@@ -159,10 +165,10 @@ export class CombatSimulation {
     return events;
   }
 
-  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink, execution = false): void {
-    const result = execution ? executeEnemy(enemy) : damageEnemy(enemy, damage);
+  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink, source: DamageSource = 'basic'): void {
+    const result = damageEnemy(enemy, damage);
     if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
-    if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id });
+    if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id, source, damage: result.applied, heroId: hero?.heroId });
     if (result.killed) {
       getHeroProgression(this.board).awardKill(enemy.id, heroGrowth.enemyExp);
       this.wallet.money += this.config.enemy.killReward;
@@ -180,10 +186,12 @@ export class CombatSimulation {
 
   private step(deltaMs: number, events: CombatEvent[]): void {
     const seconds = deltaMs / 1000;
+    this.statuses.tickBuffs(deltaMs);
     this.progress?.tick(deltaMs, multiplier => this.spawnEnemy(multiplier));
     for (const enemy of [...this.enemies]) {
       if (enemy.hp <= 0) continue;
-      if (!advanceEnemy(enemy, this.path, seconds)) continue;
+      const movementSeconds=this.statuses.tickEnemy(enemy,deltaMs,(damage,source)=>this.hit(enemy,damage,events,source,'dot'));
+      if (enemy.hp<=0 || !advanceEnemy(enemy, this.path, movementSeconds)) continue;
       events.push({ kind: 'escape', enemyId: enemy.id });
       getHeroProgression(this.board).forgetEnemy(enemy.id);
       this.enemies = this.enemies.filter(candidate => candidate !== enemy);
@@ -207,7 +215,7 @@ export class CombatSimulation {
     });
 
     for (const [tileIndex, attacker] of this.attackers) {
-      const stats = applyTileBonuses(getCombatStats(attacker.unit), this.board, [tileIndex]);
+      const stats = this.statuses.basicStats(attacker.unit, applyTileBonuses(getCombatStats(attacker.unit), this.board, [tileIndex]));
       attacker.cooldown = Math.max(0, Math.min(attacker.cooldown * stats.attackInterval / attacker.interval,
         stats.attackInterval) - deltaMs);
       attacker.interval = stats.attackInterval;
@@ -237,33 +245,64 @@ export class CombatSimulation {
       }
     }
     for (const attacker of this.heroAttackers.values()) {
-      const stats = applyTileBonuses(getHeroStats(attacker.link.level, attacker.link.heroId), this.board,
-        [attacker.link.leftIndex, attacker.link.rightIndex]);
+      const stats = this.statuses.basicStats(attacker.link, applyTileBonuses(getHeroStats(attacker.link.level, attacker.link.heroId), this.board,
+        [attacker.link.leftIndex, attacker.link.rightIndex]));
+      const definition=getHeroDefinition(attacker.link.heroId);
+      const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
+      if(definition.skill.kind==='passive') {
+        const focus=attacker.link.focus??={targetId:null,stacks:0};
+        if(focus.targetId!==target?.id){focus.targetId=target?.id??null;focus.stacks=0;}
+        stats.attackInterval/=1+focus.stacks*definition.skill.effectByLevel[attacker.link.level-1]!.speedPerStack!;
+      }
       // 强化结束的当前逻辑步不提前推进新 CD；小美原有打击时序保持不变。
       if (attacker.link.skill?.skillId === 'xiaoliu_haste') {
-        updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), () => {}, stats.range);
+        updateHeroSkill(attacker.link, this.enemies, deltaMs, () => {}, event => events.push(event), stats.range);
       }
       const interval = itemAttackInterval(heroAttackInterval(attacker.link, stats.attackInterval), attacker.link.hasteEnhanced);
       attacker.cooldown = Math.max(0, Math.min(attacker.cooldown * interval / attacker.interval, interval) - deltaMs);
       attacker.interval = interval;
       if (attacker.cooldown > 1e-8) continue;
-      const target = selectTarget(this.enemies, attacker.link.origin, stats.range);
       if (!target) continue;
       events.push({ kind: 'heroAttack', link: attacker.link, end: { x: target.x, y: target.y } });
-      const victims = getHeroDefinition(attacker.link.heroId).attackMode === 'splash'
+      const victims = definition.attackMode === 'selfArea'
+        ? this.enemies.filter(enemy=>enemy.hp>0&&inRange(attacker.link.origin,enemy,stats.range))
+        : definition.attackMode === 'splash'
         ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, getHeroDefinition(attacker.link.heroId).combat!.splashRadius)) : [target];
-      for (const victim of victims) this.hit(victim, stats.damage, events, attacker.link);
+      for (const victim of victims) this.hit(victim, stats.damage*heroBasicDamageMultiplier(attacker.link)
+        *(victim!==target && 'splashMultiplier' in definition ? definition.splashMultiplier : 1), events, attacker.link);
+      if(definition.skill.kind==='passive'&&attacker.link.focus) {
+        attacker.link.focus.stacks=target.hp>0?Math.min(definition.skill.effectByLevel[attacker.link.level-1]!.maxStacks!,attacker.link.focus.stacks+1):0;
+      }
       consumeEmpoweredAttack(attacker.link, event => events.push(event));
       attacker.cooldown = interval;
     }
     for (const link of this.heroLinks) {
       if (link.skill?.skillId === 'xiaoliu_haste') continue;
       updateHeroSkill(link, this.enemies, deltaMs,
-        (enemy, damage, source) => this.hit(enemy, damage, events, source), event => events.push(event),
-        (enemy, source) => this.hit(enemy, 0, events, source, true),
-        applyTileBonuses(getHeroStats(link.level, link.heroId), this.board, [link.leftIndex, link.rightIndex]).range);
+        (enemy, damage, source) => this.hit(enemy, damage, events, source, 'skill'), event => events.push(event),
+        applyTileBonuses(getHeroStats(link.level, link.heroId), this.board, [link.leftIndex, link.rightIndex]).range,
+        (source,effect,behavior)=>this.applyHeroEffect(source,effect,behavior));
     }
     this.enemies = this.enemies.filter(enemy => enemy.hp > 0);
+    for(const link of this.heroLinks)if(link.focus && !this.enemies.some(e=>e.id===link.focus!.targetId))link.focus={targetId:null,stacks:0};
     this.progress?.finishStep(this.enemies.length);
   }
+  private applyHeroEffect(link:HeroLink, effect:Readonly<Record<string,number>>, behavior:string):void {
+    if(behavior==='selfBuff') {this.statuses.buff(link,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);return;}
+    if(behavior==='allyBuff') {
+      for(const [index,attacker] of this.attackers)if(inRange(link.origin,this.map.cells[index]!,effect.radius!))
+        this.statuses.buff(attacker.unit,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);
+      for(const ally of this.heroLinks)if(inRange(link.origin,ally.origin,effect.radius!))
+        this.statuses.buff(ally,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);
+      return;
+    }
+    for(const enemy of this.enemies.filter(e=>e.hp>0&&inRange(link.origin,e,effect.radius!))) {
+      if(behavior==='stun')this.statuses.addEnemy(enemy,{kind:'stun',source:link,remaining:effect.duration!,amount:0,interval:0});
+      if(behavior==='poison') {
+        this.statuses.addEnemy(enemy,{kind:'poison',source:link,remaining:effect.duration!,amount:effect.dotDamage!,interval:effect.tickInterval!});
+        this.statuses.addEnemy(enemy,{kind:'slow',source:link,remaining:effect.duration!,amount:effect.slow!,interval:0});
+      }
+    }
+  }
+
 }
