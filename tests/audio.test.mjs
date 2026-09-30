@@ -52,6 +52,14 @@ test('all supplied audio keys resolve beneath the Vite base, without enemy_hit',
   }
 });
 
+test('both BGM playback URLs use the supplied MP3 files under the Pages base', () => {
+  for (const key of ['home_bgm', 'battle_bgm']) {
+    const url = audioAssetUrl(key, '/legame/');
+    assert.equal(url, `/legame/assets/audio/bgm/${key}.mp3`);
+    assert.ok(existsSync(fileURLToPath(new URL(`../public${url.slice('/legame'.length)}`, import.meta.url))));
+  }
+});
+
 test('one menu track persists across menu pages, battle switches once, pause resumes same clip and HOME resumes menu', () => {
   const { backend, audio } = setup();
   audio.menu(); const home = backend.clips[0];

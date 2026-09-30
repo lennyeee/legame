@@ -1,6 +1,6 @@
 export const audioAssets = {
-  home_bgm: { file: 'bgm/home_bgm.m4a', volume: 0.28, cooldownMs: 0, maxConcurrent: 1 },
-  battle_bgm: { file: 'bgm/battle_bgm.m4a', volume: 0.25, cooldownMs: 0, maxConcurrent: 1 },
+  home_bgm: { file: 'bgm/home_bgm.mp3', volume: 0.28, cooldownMs: 0, maxConcurrent: 1 },
+  battle_bgm: { file: 'bgm/battle_bgm.mp3', volume: 0.25, cooldownMs: 0, maxConcurrent: 1 },
   battle_start: { file: 'sfx/battle_start.wav', volume: 0.38, cooldownMs: 120, maxConcurrent: 1 },
   ui_click: { file: 'sfx/ui_click.wav', volume: 0.28, cooldownMs: 55, maxConcurrent: 2 },
   recruit: { file: 'sfx/recruit.wav', volume: 0.32, cooldownMs: 100, maxConcurrent: 1 },
