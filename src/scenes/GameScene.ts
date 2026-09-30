@@ -20,7 +20,7 @@ import { pressureConfig } from '../config/pressure';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 import { gameplayHints } from '../content/gameplayGuide';
 import { isHeroLetter, isUnit } from '../systems/items';
-import { audioForScene } from '../audio/AudioManager';
+import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
 
 export class GameScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -273,5 +273,6 @@ export class GameScene extends Phaser.Scene {
       this.scene.pause();
       this.scene.launch('PveOverlayScene', { mode: 'paused', health: 0, loadout });
     });
+    loadAudioInBackground(this, audio);
   }
 }

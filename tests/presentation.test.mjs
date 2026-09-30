@@ -132,7 +132,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   let now = 0;
   const objects = new Map();
   const globalEvents = new EventEmitter();
-  const sharedGame = { events: globalEvents, registry: new Map() };
+  const sharedGame = { events: globalEvents, registry: new Map(), sound: matchingOptions.audioBackend };
   const createGame = data => {
     const originalMoney = gameConfig.initialMoney;
     gameConfig.initialMoney = startingMoney;
@@ -171,6 +171,10 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     scene.events ??= new EventEmitter();
     scene.input ??= new EventEmitter();
     scene.game = sharedGame;
+    if (matchingOptions.audioLoader) {
+      scene.cache = { audio: { exists: () => false } };
+      scene.load = matchingOptions.audioLoader;
+    }
     scene.scale = { width: 750 };
     scene.add = Object.fromEntries(['rectangle', 'circle', 'ellipse', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
     scene.add.circle=(x,y,radius,color)=>object('circle',x,y,radius,radius,color);
@@ -1804,4 +1808,22 @@ test('Audio v1 cannot play recruit sound when money is insufficient',()=>{
  finally{Math.random=random;}
  assert.equal(played.filter(key=>key==='recruit').length,1);
  assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,1);
+});
+
+test('v0.70-A1 HOME creates and starts matching even when mobile audio load/decode never completes or throws',()=>{
+ for (const failure of ['stall','throw']) {
+  const loader=Object.assign(new EventEmitter(),{
+   started:false,
+   audio(){if(failure==='throw')throw new Error('unsupported audio');},
+   start(){this.started=true;},
+  });
+  const backend=Object.assign(new EventEmitter(),{locked:false,add(){throw new Error('decode failed');}});
+  const p=pve(false,20,false,{audioLoader:loader,audioBackend:backend});
+  assert.equal(p.text(375,440,p.ready),'保卫小乐');
+  assert.equal(p.text(375,765,p.ready),'开始对战');
+  if(failure==='stall')assert.equal(loader.started,true);
+  p.click(375,765);
+  assert.equal(p.matching.phase,'MATCHING');
+  assert.equal(p.startCount(),0);
+ }
 });

@@ -30,20 +30,23 @@ export class AudioManager {
   private paused = false;
 
   constructor(private readonly backend?: AudioBackend, private readonly now: () => number = () => performance.now()) {
-    backend?.on?.('unlocked', () => this.startDesired());
+    try { backend?.on?.('unlocked', () => this.startDesired()); } catch { /* Optional audio may be unavailable. */ }
   }
 
   get state() { return { desired: this.desired, bgmKey: this.bgmKey, paused: this.paused, ...this.options }; }
   setOptions(options: AudioOptions): void {
     const wasEnabled = this.options.musicEnabled;
     this.options = { ...options };
-    if (!options.musicEnabled) this.stopMusic();
-    else if (!wasEnabled) this.startDesired();
-    if (!options.sfxEnabled) this.stopSfx();
+    try {
+      if (!options.musicEnabled) this.stopMusic();
+      else if (!wasEnabled) this.startDesired();
+      if (!options.sfxEnabled) this.stopSfx();
+    } catch { /* Preference changes must not interrupt navigation. */ }
   }
 
-  menu(scene?: AudioScene): void { this.paused = false; this.requestBgm('home_bgm', scene); }
-  battle(scene?: AudioScene): void { this.paused = false; this.requestBgm('battle_bgm', scene); }
+  menu(scene?: AudioScene): void { this.paused = false; try { this.requestBgm('home_bgm', scene); } catch { /* Silent fallback. */ } }
+  battle(scene?: AudioScene): void { this.paused = false; try { this.requestBgm('battle_bgm', scene); } catch { /* Silent fallback. */ } }
+  retryDesired(scene?: AudioScene): void { this.startDesired(scene); }
   private awaitGesture(scene?: AudioScene): void {
     scene?.input?.once?.('pointerdown', () => queueMicrotask(() => this.startDesired(scene)));
   }
@@ -59,13 +62,13 @@ export class AudioManager {
     this.startDesired(scene);
   }
   private startDesired(scene?: AudioScene): void {
-    if (!this.backend || this.backend.locked || !this.options.musicEnabled || this.paused || !this.desired) return;
-    if (this.bgmKey === this.desired && (this.bgm?.isPlaying || this.bgm?.isPaused)) return;
-    this.stopTransition();
-    const old = this.bgm;
-    const nextKey = this.desired;
-    const volume = audioAssets[nextKey].volume;
     try {
+      if (!this.backend || this.backend.locked || !this.options.musicEnabled || this.paused || !this.desired) return;
+      if (this.bgmKey === this.desired && (this.bgm?.isPlaying || this.bgm?.isPaused)) return;
+      this.stopTransition();
+      const old = this.bgm;
+      const nextKey = this.desired;
+      const volume = audioAssets[nextKey].volume;
       const next = this.backend.add(nextKey, { loop: true, volume: old && scene?.tweens ? 0 : volume });
       if (!next.play({ loop: true, volume: old && scene?.tweens ? 0 : volume })) {
         next.destroy(); this.awaitGesture(scene); return;
@@ -83,27 +86,31 @@ export class AudioManager {
   pauseBattle(): void {
     if (this.paused) return;
     this.paused = true;
-    this.stopTransition();
-    if (this.bgmKey === 'battle_bgm') this.bgm?.pause();
-    this.stopSfx();
+    try {
+      this.stopTransition();
+      if (this.bgmKey === 'battle_bgm') this.bgm?.pause();
+      this.stopSfx();
+    } catch { /* Match pause still succeeds. */ }
   }
   resumeBattle(): void {
     if (!this.paused) return;
     this.paused = false;
-    if (this.options.musicEnabled && this.desired === 'battle_bgm') {
-      if (this.bgm?.isPaused) this.bgm.resume(); else this.startDesired();
-    }
+    try {
+      if (this.options.musicEnabled && this.desired === 'battle_bgm') {
+        if (this.bgm?.isPaused) this.bgm.resume(); else this.startDesired();
+      }
+    } catch { /* Match resume still succeeds. */ }
   }
   result(outcome: 'win' | 'lose' | 'draw'): void {
     this.paused = false;
     this.desired = null;
-    this.stopMusic(); this.stopSfx();
+    try { this.stopMusic(); this.stopSfx(); } catch { /* Result still appears. */ }
     if (outcome !== 'draw') this.sfx(outcome === 'win' ? 'victory' : 'defeat');
   }
   leaveBattle(): void {
     if (this.desired === 'battle_bgm') this.desired = null;
-    if (this.bgmKey === 'battle_bgm') this.stopMusic();
-    this.stopSfx(); this.paused = false;
+    try { if (this.bgmKey === 'battle_bgm') this.stopMusic(); this.stopSfx(); } catch { /* HOME still appears. */ }
+    this.paused = false;
   }
   private stopMusic(): void {
     this.stopTransition();
@@ -120,13 +127,13 @@ export class AudioManager {
     this.activeSfx.clear();
   }
   sfx(key: SfxKey, allowWhilePaused = false): boolean {
-    if (!this.backend || this.backend.locked || !this.options.sfxEnabled || (this.paused && !allowWhilePaused)) return false;
-    const config = audioAssets[key], now = this.now();
-    const last = this.lastSfx.get(key);
-    if (last !== undefined && now - last < config.cooldownMs) return false;
-    const playing = this.activeSfx.get(key) ?? new Set<Clip>();
-    if (playing.size >= config.maxConcurrent) return false;
     try {
+      if (!this.backend || this.backend.locked || !this.options.sfxEnabled || (this.paused && !allowWhilePaused)) return false;
+      const config = audioAssets[key], now = this.now();
+      const last = this.lastSfx.get(key);
+      if (last !== undefined && now - last < config.cooldownMs) return false;
+      const playing = this.activeSfx.get(key) ?? new Set<Clip>();
+      if (playing.size >= config.maxConcurrent) return false;
       const clip = this.backend.add(key, { volume: config.volume });
       if (!clip.play({ volume: config.volume })) { clip.destroy(); return false; }
       this.lastSfx.set(key, now);
@@ -149,18 +156,37 @@ export class AudioManager {
 }
 
 const AUDIO_REGISTRY_KEY = 'legameAudio';
+const fallbackAudio = new WeakMap<object, AudioManager>();
 export function audioForScene(scene: Phaser.Scene): AudioManager {
-  const registry = scene.game.registry;
-  let audio = registry.get(AUDIO_REGISTRY_KEY) as AudioManager | undefined;
-  if (!audio) {
-    audio = new AudioManager(scene.game.sound as unknown as AudioBackend | undefined);
-    registry.set(AUDIO_REGISTRY_KEY, audio);
+  const owner = scene.game ?? scene;
+  try {
+    const registry = scene.game.registry;
+    let audio = registry.get(AUDIO_REGISTRY_KEY) as AudioManager | undefined;
+    if (!audio) {
+      audio = new AudioManager(scene.game.sound as unknown as AudioBackend | undefined);
+      registry.set(AUDIO_REGISTRY_KEY, audio);
+    }
+    return audio;
+  } catch {
+    let audio = fallbackAudio.get(owner);
+    if (!audio) { audio = new AudioManager(); fallbackAudio.set(owner, audio); }
+    return audio;
   }
-  return audio;
 }
 
-export function preloadAudio(scene: Phaser.Scene): void {
-  for (const key of Object.keys(audioAssets) as AudioKey[]) {
-    if (!scene.cache.audio.exists(key)) scene.load.audio(key, audioAssetUrl(key));
-  }
+// Called from Scene.create, never preload: decoding can fail or stall on mobile without holding HOME hostage.
+export function loadAudioInBackground(scene: Phaser.Scene, audio = audioForScene(scene)): void {
+  try {
+    const onFileComplete = (key: string): void => {
+      if (key === audio.state.desired) audio.retryDesired(scene);
+    };
+    scene.load.on('filecomplete', onFileComplete);
+    scene.events.once('shutdown', () => scene.load.off('filecomplete', onFileComplete));
+    let queued = false;
+    for (const key of Object.keys(audioAssets) as AudioKey[]) {
+      if (scene.cache.audio.exists(key)) continue;
+      try { scene.load.audio(key, audioAssetUrl(key)); queued = true; } catch { /* Skip unsupported files. */ }
+    }
+    if (queued) scene.load.start();
+  } catch { /* Asset loading is optional; Scene.create has already succeeded. */ }
 }

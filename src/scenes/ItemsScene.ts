@@ -3,7 +3,7 @@ import { equipmentLimits, itemDefinitions } from '../config/equipment';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 import { label } from '../ui/text';
 import { showItemDetail } from '../ui/ItemDetail';
-import { audioForScene } from '../audio/AudioManager';
+import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
 
 export class ItemsScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -87,5 +87,6 @@ export class ItemsScene extends Phaser.Scene {
     this.add.rectangle(375, 1200, 300, 76, 0x697e67).setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (!modal) { audio.uiClick(); this.scene.start('ReadyScene'); } });
     label(this, 375, 1200, '返回', 28, '#fffaf0');
     refresh();
+    loadAudioInBackground(this, audio);
   }
 }

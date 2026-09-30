@@ -4,7 +4,7 @@ import { progressForScene, type PlayerProgress } from '../progression/PlayerProg
 import { shopConfig } from '../progression/shop';
 import { label } from '../ui/text';
 import { showItemDetail } from '../ui/ItemDetail';
-import { audioForScene } from '../audio/AudioManager';
+import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
 
 export class ShopScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -46,5 +46,6 @@ export class ShopScene extends Phaser.Scene {
       .on('pointerdown', () => { if (!modal) { audio.uiClick(); this.scene.start('ReadyScene'); } });
     label(this, 375, 1190, '返回', 28, '#fffaf0');
     refresh();
+    loadAudioInBackground(this, audio);
   }
 }

@@ -9,7 +9,7 @@ import { itemDefinitions } from '../config/equipment';
 import { avatarSymbol } from '../progression/profile';
 import { rankDisplay } from '../progression/rank';
 import { showProfile, showSettings, type NicknameInputFactory } from '../ui/HomeDialogs';
-import { audioForScene, preloadAudio } from '../audio/AudioManager';
+import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
 
 // 仅静态预览，不创建钱包、棋盘运行状态、输入控制器、战斗或计时器。
 export class ReadyScene extends Phaser.Scene {
@@ -21,8 +21,6 @@ export class ReadyScene extends Phaser.Scene {
   private lockForMatching: (() => void) | null = null;
 
   constructor() { super('ReadyScene'); }
-
-  preload(): void { preloadAudio(this); }
 
   create(data: { inventory?: InventoryItem[]; loadout?: Loadout; autoMatch?: boolean } = {}): void {
     const progress = progressForScene(this);
@@ -115,6 +113,7 @@ export class ReadyScene extends Phaser.Scene {
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.lockForMatching = null; if (this.startState === 'WELCOME') this.startState = 'STARTING'; });
     if (data.autoMatch) this.requestStartGame(true);
+    loadAudioInBackground(this, audio);
   }
 
   requestStartGame(rematch = false): void {

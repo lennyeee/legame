@@ -3,7 +3,7 @@ import { formatHeroEffect, heroEncyclopediaEntry, heroEncyclopediaIds } from '..
 import { worldLore } from '../content/heroLore';
 import type { HeroId } from '../config/heroes';
 import { label } from '../ui/text';
-import { audioForScene } from '../audio/AudioManager';
+import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
 
 type Page = 'heroes' | 'world' | HeroId;
 const VIEW_TOP = 182;
@@ -34,6 +34,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       this.touchY = null;
     });
     this.showPage('heroes');
+    loadAudioInBackground(this);
   }
 
   showPage(page: Page): void {

@@ -16,7 +16,7 @@ registerHooks({
       source: stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'transform' }) };
   },
 });
-const { AudioManager } = await import('../src/audio/AudioManager.ts');
+const { AudioManager, audioForScene, loadAudioInBackground } = await import('../src/audio/AudioManager.ts');
 const { audioAssets, audioAssetUrl } = await import('../src/config/audio.ts');
 const { PlayerProgress } = await import('../src/progression/PlayerProgress.ts');
 const { defaultPlayerSave, sanitizeSave } = await import('../src/progression/PlayerSave.ts');
@@ -156,4 +156,67 @@ test('paused gameplay suppresses combat sounds while pause menu UI can click', (
   audio.uiClick(); assert.deepEqual(backend.keys(), ['battle_bgm','ui_click']);
   audio.resumeBattle(); audio.combatEvents([attack('刀')]);
   assert.equal(backend.keys().at(-1), 'blade_attack');
+});
+
+test('failed audio initialization returns a silent per-game manager instead of throwing', () => {
+  const broken = { on() { throw new Error('AudioContext unavailable'); }, get locked() { throw new Error('AudioContext unavailable'); } };
+  const game = { registry: new Map(), sound: broken };
+  const scene = { game, input: new EventEmitter() };
+  const audio = audioForScene(scene);
+  assert.doesNotThrow(() => audio.menu(scene));
+  assert.doesNotThrow(() => audio.sfx('ui_click'));
+  assert.equal(audio.state.desired, 'home_bgm');
+  assert.equal(audioForScene(scene), audio);
+  const inaccessible = { game: { registry: { get() { throw new Error('no registry'); } } } };
+  assert.doesNotThrow(() => audioForScene(inaccessible).menu());
+});
+
+test('audio decoding stalled or failed in a background loader cannot hold Scene.create', () => {
+  const { audio } = setup();
+  const load = Object.assign(new EventEmitter(), {
+    queued: [], started: false,
+    audio(key, url) { this.queued.push([key, url]); },
+    start() { this.started = true; },
+  });
+  const scene = { cache: { audio: { exists: () => false } }, load, events: new EventEmitter() };
+  audio.menu(scene);
+  assert.doesNotThrow(() => loadAudioInBackground(scene, audio));
+  assert.equal(load.started, true); assert.equal(load.queued.length, Object.keys(audioAssets).length);
+  // Deliberately emit neither complete nor error: the HOME scene is already alive.
+  assert.equal(audio.state.desired, 'home_bgm');
+  load.emit('loaderror', { key: 'home_bgm' });
+  assert.equal(audio.state.desired, 'home_bgm');
+  scene.events.emit('shutdown'); assert.equal(load.listenerCount('filecomplete'), 0);
+});
+
+test('missing assets and a throwing loader degrade silently; late BGM completion retries the current track', () => {
+  const { backend, audio } = setup();
+  backend.add = () => { throw new Error('not decoded yet'); };
+  const load = Object.assign(new EventEmitter(), {
+    audio() { throw new Error('unsupported format'); }, start() { throw new Error('decode failure'); },
+  });
+  const scene = { input: new EventEmitter(), cache: { audio: { exists: () => false } },
+    load, events: new EventEmitter() };
+  audio.menu(scene);
+  assert.doesNotThrow(() => loadAudioInBackground(scene, audio));
+  assert.equal(audio.state.desired, 'home_bgm');
+  backend.add = Backend.prototype.add;
+  load.emit('filecomplete', 'home_bgm', 'audio');
+  assert.equal(backend.clips.at(-1).key, 'home_bgm');
+  assert.equal(backend.clips.at(-1).isPlaying, true);
+});
+
+test('a late BGM decode retries battle without reverting to menu music', () => {
+  const { backend, audio } = setup();
+  backend.add = () => { throw new Error('not decoded yet'); };
+  const load = Object.assign(new EventEmitter(), { audio() {}, start() {} });
+  const scene = { input: new EventEmitter(), cache: { audio: { exists: () => false } },
+    load, events: new EventEmitter() };
+  audio.menu(scene); loadAudioInBackground(scene, audio);
+  audio.battle(scene);
+  backend.add = Backend.prototype.add;
+  load.emit('filecomplete', 'home_bgm', 'audio');
+  assert.equal(backend.clips.length, 0);
+  load.emit('filecomplete', 'battle_bgm', 'audio');
+  assert.deepEqual(backend.keys(), ['battle_bgm']);
 });
