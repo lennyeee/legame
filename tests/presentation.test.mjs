@@ -924,7 +924,7 @@ test('属性面板点击后显示实时数值，切换单位后同步切换，�
   const { scene, side, pointer, panel, render, range, setPosition } = setup();
   scene.input.emit('pointerdown', pointer);
   scene.input.emit('pointerup', { ...pointer, primaryDown: false });
-  assert.match(panel.text, /刀兵  Lv\.1/);
+  assert.match(panel.text, /刃兵  Lv\.1/);
   assert.match(panel.text, /攻速：1\.25 次\/秒/);
   side.board.tiles[1].unit = { type: '弓', level: 2 };
   side.combat.syncBoard();
@@ -932,7 +932,7 @@ test('属性面板点击后显示实时数值，切换单位后同步切换，�
   scene.input.emit('pointerdown', pointer);
   scene.input.emit('pointerup', { ...pointer, primaryDown: false });
   render();
-  assert.match(panel.text, /弓兵  Lv\.2/);
+  assert.match(panel.text, /狙兵  Lv\.2/);
   assert.equal(range.circle, true);
   side.board.tiles[1].unit = null;
   side.combat.syncBoard(); render();

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { getLevelColor } from '../config/units';
+import { getLevelColor, unitDisplayNames } from '../config/units';
 import type { DragItem } from '../systems/board';
 import { label } from './text';
 import { isUnit, isFarmer } from '../systems/items';
@@ -25,7 +25,8 @@ export class UnitView {
     if (!item) return;
     const ordinary = isUnit(item);
     this.background.setFillStyle(getLevelColor(ordinary || isFarmer(item) ? item.level : 1));
-    this.name.setText(item === '铲' ? item : item.type).setY(ordinary ? -8 : isFarmer(item) ? 0 : sleeping ? -2 : -7);
+    this.name.setText(item === '铲' ? item : ordinary ? unitDisplayNames[item.type] : item.type)
+      .setY(ordinary ? -8 : isFarmer(item) ? 0 : sleeping ? -2 : -7);
     this.name.setFontSize(ordinary || item === '铲' ? 30 : 24);
     this.name.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.name.width, 1)));
     this.level.setText(item !== '铲' && !linked ? `Lv.${item.level}` : '');

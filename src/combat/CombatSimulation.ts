@@ -1,4 +1,5 @@
 import { itemAttackInterval } from '../config/itemEffects';
+import { unitDisplayNames } from '../config/units';
 import { combatConfig, getCombatStats } from '../config/combat';
 import type { CombatConfig } from '../config/combat';
 import type { BoardMap, MapPoint } from '../config/maps';
@@ -221,7 +222,7 @@ export class CombatSimulation {
     if (isUnit(unit)) {
       const stats = this.ordinaryStats(unit, tileIndex);
       const attackType = { '刀': '单体', '枪': '直线贯穿', '弓': '单体远程', '骑': '范围攻击' }[unit.type];
-      return { subject: unit, kind: 'soldier', name: `${unit.type}兵`, level: unit.level,
+      return { subject: unit, kind: 'soldier', name: `${unitDisplayNames[unit.type]}兵`, level: unit.level,
         damage: stats.damage, attackIntervalMs: stats.attackInterval,
         attacksPerSecond: 1000 / stats.attackInterval, rangePx: stats.range,
         rangeCells: stats.range / CELL_SIZE, attackType };

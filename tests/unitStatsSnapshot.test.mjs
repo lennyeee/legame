@@ -43,7 +43,7 @@ test('普通兵快照的主目标伤害、实际攻速、格数射程与真实�
   const { sim } = setup('刀', 3);
   const snapshot = sim.getUnitCombatSnapshot(0);
   const base = getCombatStats({ type: '刀', level: 3 });
-  assert.equal(snapshot.name, '刀兵');
+  assert.equal(snapshot.name, '刃兵');
   assert.equal(snapshot.damage, base.damage);
   assert.equal(snapshot.attackIntervalMs, base.attackInterval);
   assert.equal(snapshot.attacksPerSecond, 1000 / base.attackInterval);
