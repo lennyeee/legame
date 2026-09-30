@@ -95,7 +95,7 @@ test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
  run(sim,cfg.cooldown);sim.enemies=sim.enemies.filter(e=>!e.isBoss);
  const target=enemy(sim,500);run(sim,20);
  assert.equal(target.hp,400);target.hp=1;board.tiles[2].unit={type:'刀',level:5};run(sim,300);
- assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+ assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
 });
 test('技能伤害随等级升高、CD缩短且不低于最小值',()=>{
  for(const level of [2,10,100000]){const stats=getSkillStats(id,level);assert.ok(stats.damage>cfg.damage);assert.ok(stats.cooldown<cfg.cooldown);assert.ok(stats.cooldown>=cfg.minCooldown);}

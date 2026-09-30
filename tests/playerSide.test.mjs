@@ -84,8 +84,8 @@ test('same heroId activates on both sides; haste ownership and EXP participants 
  assert.equal(a.useActiveItem(0,tile(0)),true);
  assert.equal(left.hasteEnhanced,true);assert.equal(right.hasteEnhanced,undefined);
  a.heroes.recordDamage(1,left,1);b.heroes.recordDamage(1,right,1);
- a.heroes.awardKill(1,5);
- assert.equal(left.currentExp,5);assert.equal(right.currentExp,0);
+ a.heroes.awardKill(1,left);
+ assert.equal(left.currentExp,1);assert.equal(right.currentExp,0);
  b.updateItems(20_000);assert.equal(b.useActiveItem(0,tile(1)),true);
  assert.equal(right.hasteEnhanced,true);
 });
@@ -98,7 +98,7 @@ test('drag suspension removes only its own link; cancel recreates a fresh cycle 
  a.syncDeployment(null);
  const fresh=[...a.heroes.links.values()][0];
  assert.notEqual(fresh,old);assert.equal(fresh.currentExp,0);
- a.heroes.awardKill(1,10);assert.equal(fresh.currentExp,0);
+ a.heroes.awardKill(1,null);assert.equal(fresh.currentExp,0);
  assert.equal([...b.heroes.links.values()][0],other);
 });
 
@@ -111,7 +111,7 @@ test('same numeric enemy id stays simulation-local; real kill rewards and EXP re
  for(let n=0;n<100 && ea.hp>0;n++) events.push(...a.updateCombat(50,null));
  assert.ok(events.some(e=>e.kind==='kill'&&e.enemyId===ea.id));
  assert.equal(a.recruitment.money,20+combatConfig.enemy.killReward);
- assert.equal(left.currentExp,heroGrowth.enemyExp);
+ assert.equal(left.currentExp,heroGrowth.rewards.kill);
  assert.equal(eb.hp,before);assert.equal(b.recruitment.money,20);assert.equal(right.currentExp,0);
  assert.ok(b.combat.enemies.includes(eb));
 });

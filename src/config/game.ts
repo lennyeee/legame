@@ -1,6 +1,6 @@
 import { recruitableHeroLetters } from './heroes';
 
-export const GAME_VERSION = '0.68-A';
+export const GAME_VERSION = '0.68-B';
 
 export const gameConfig = {
   initialMoney: 20,
@@ -12,8 +12,11 @@ export const gameConfig = {
 
 export type Recruit = (typeof gameConfig.recruitmentPool)[number];
 
-// 普通兵与铲子权重各3，每种去重后的武将字权重1；只调整这里即可改变测试概率。
-export const recruitmentWeights: Record<Recruit, number> = {
-  刀: 3, 枪: 3, 弓: 3, 骑: 3, 铲: 3,
-  ...Object.fromEntries(recruitableHeroLetters.map(letter => [letter, 1])),
-} as Record<Recruit, number>;
+// 类别百分比，每行合计100。52 = lcm(4种兵,13种字)，使每种兵/字都获得整数权重。
+export const recruitmentCategoryScale = 52;
+export const recruitmentCategories = {
+  default: { ordinary: 70, shovel: 15, heroLetter: 15, farmer: 0 },
+  hero: { ordinary: 61, shovel: 14, heroLetter: 25, farmer: 0 },
+  farmer: { ordinary: 64, shovel: 15, heroLetter: 15, farmer: 6 },
+  heroAndFarmer: { ordinary: 55, shovel: 14, heroLetter: 25, farmer: 6 },
+} as const;

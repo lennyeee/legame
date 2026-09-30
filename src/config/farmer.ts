@@ -1,7 +1,6 @@
 import { clampLevel } from './levels';
 
 export const farmerConfig = {
-  recruitmentWeight: 4, // 普通池20：4/24；招贤榜池25：4/29，约为旧单格概率的一半。
   productionMs: 12_000,
   rewardLifetimeMs: 5000,
   dollarsPerLevel: 1,

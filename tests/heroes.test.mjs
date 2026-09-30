@@ -6,10 +6,10 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { heroRecipes, heroCombat } = await import('../src/config/heroes.ts');
-const { gameConfig, recruitmentWeights } = await import('../src/config/game.ts');
+const { gameConfig } = await import('../src/config/game.ts');
 const { createBoardState, applyDrop, getDragItem } = await import('../src/systems/board.ts');
 const { getHeroLinks } = await import('../src/systems/heroActivation.ts');
-const { createRecruitmentState, recruit } = await import('../src/systems/recruitment.ts');
+const { createRecruitmentState, recruit, recruitmentPool } = await import('../src/systems/recruitment.ts');
 const { CombatSimulation } = await import('../src/combat/CombatSimulation.ts');
 const { testMap } = await import('./fixtures/combatMap.ts');
 const letter = (type, level = 1) => ({ kind: 'heroLetter', type, level });
@@ -23,7 +23,8 @@ function run(sim, ms, suspended = null) {
 }
 
 test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', () => {
-  const total = Object.values(recruitmentWeights).reduce((a,b)=>a+b,0);
+  const pool = recruitmentPool(createRecruitmentState().loadout);
+  const total = pool.reduce((sum,item)=>sum+item.weight,0);
   let offset = 0;
   for (const type of gameConfig.recruitmentPool) {
     const state = createRecruitmentState();
@@ -32,7 +33,7 @@ test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', (
     const expected = type === '铲' ? type : heroRecipes.some(r=>r.letters.includes(type)) ? letter(type) : {type,level:1};
     assert.deepEqual(state.slots, Array(5).fill(expected));
     assert.equal(state.money, 10);
-    offset += recruitmentWeights[type];
+    offset += pool.find(item=>item.value===type).weight;
   }
 });
 

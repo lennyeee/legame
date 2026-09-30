@@ -39,6 +39,14 @@ const { ShopScene } = await import('../src/scenes/ShopScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { pressureConfig, waveStartForWave } = await import('../src/config/pressure.ts');
 const { gameConfig } = await import('../src/config/game.ts');
+const { recruitmentPool } = await import('../src/systems/recruitment.ts');
+function recruitRoll(p, type) {
+ if (!p.game.sides && type==='农') return .97;
+ const pool=recruitmentPool(p.game.sides?.bottom?.recruitment.loadout ?? {active:[],passive:[]}),total=pool.reduce((sum,item)=>sum+item.weight,0);
+ let start=0;
+ for(const item of pool){if(item.value===type)return (start+item.weight/2)/total;start+=item.weight;}
+ throw new Error(`No recruitment outcome: ${type}`);
+}
 const { GAME_VERSION } = await import('../src/config/game.ts');
 const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
 const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
@@ -562,12 +570,12 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
     for (const win of [false, true, false]) {
       heroCombat.damage = win ? damage : 1;
       skillConfigs.xiaomei_barrage.damage = win ? skillDamage : 1;
-      Math.random = () => 15.5 / 28;
+      Math.random = () => recruitRoll(p,'小');
       p.click(375, 1158);
       p.drag([183,1018], [164.0625,574.0625]);
       assert.equal(p.text(164.0625,555.6875), 'Zz');
       assert.equal(p.objects.get(p.game).filter(o => o.text === 'Zz' && o.y > 532).length, 1);
-      Math.random = () => 16.5 / 28;
+      Math.random = () => recruitRoll(p,'美');
       p.click(375, 1158);
       p.drag([183,1018], [248.4375,574.0625]);
       assert.equal(p.text(164.0625,555.6875), '');
@@ -624,18 +632,18 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
   try {
     combatConfig.enemy.maxHp = 30;
     const p = pve(true, 100);
-    Math.random = () => 15.5 / 28;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+    Math.random = () => recruitRoll(p,'小');p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
     assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
-    Math.random = () => 16.5 / 28;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+    Math.random = () => recruitRoll(p,'美');p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
     const expEnemy=p.game.sides.bottom.combat.spawnEnemy();expEnemy.moveSpeed=0;
-    p.run(4500);assert.equal([...p.game.sides.bottom.heroes.links.values()][0].currentExp,heroGrowth.enemyExp);
+    p.run(4500);assert.equal([...p.game.sides.bottom.heroes.links.values()][0].currentExp,heroGrowth.rewards.kill);
     assert.equal(p.text(206.25,593.9375),'Lv.1');
     const expBars = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
       .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[1]===156&&d[2]===635&&d[4]===3);
     assert.ok(expBars().some(d=>d[3]>0));
     p.click(75, 55);const paused=p.snapshot();p.run(10000);p.drag([279,1018],[248.4375,574.0625]);
     assert.equal(p.snapshot(),paused);p.click(375,p.result.resultSnapshot?1070:765);
-    Math.random = () => 15.5 / 28;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(10);
+    Math.random = () => recruitRoll(p,'小');p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);p.run(10);
     assert.equal(p.text(206.25,593.9375),'Lv.2');assert.ok(expBars().some(d=>d[3]===0));
     p.drag([248.4375,574.0625],[183,1018]);p.run(10);
     assert.equal(expBars().length,0);assert.equal(p.text(164.0625,555.6875),'Zz');
@@ -643,7 +651,7 @@ test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/�
     p.run(30000);const ended=p.snapshot();p.run(10000);assert.equal(p.snapshot(),ended);
     p.click(375,p.result.resultSnapshot?1070:765);assert.equal(expBars().length,0);
     assert.equal(p.objects.get(p.game).some(o=>o.text==='Lv.2'&&o.y>532),false);
-    Math.random=()=>15.5/28;p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
+    Math.random=()=>recruitRoll(p,'小');p.click(375,1158);assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.1'));
   } finally { Math.random=random; combatConfig.enemy.maxHp = enemyHp; }
 });
 
@@ -652,8 +660,8 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
   try {
     combatConfig.enemy.moveSpeed=25;combatConfig.enemy.maxHp=100000;
     const p=pve(true, 100);
-    Math.random=()=>15.5/28;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-    Math.random=()=>16.5/28;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+    Math.random=()=>recruitRoll(p,'小');p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+    Math.random=()=>recruitRoll(p,'美');p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
     // Skill presentation fixture supplies durable in-range targets, independent of spawn cadence.
     for(let i=0;i<5;i++)p.game.sides.bottom.combat.spawnEnemy().moveSpeed=0;
     const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text==='小美'&&o.visible&&o.y>532);
@@ -672,14 +680,14 @@ test('小美名字闪烁由技能发动触发，暂停冻结CD和释放中伤害
   } finally { Math.random=random;combatConfig.enemy.moveSpeed=speed;combatConfig.enemy.maxHp=hp; }
 });
 
-for (const [name,left,right,cd] of [['阿饼',17.5,18.5,12000],['小六',15.5,19.5,12000]]) {
+for (const [name,left,right,cd] of [['阿饼','阿','饼',12000],['小六','小','六',12000]]) {
   test(`${name}技能事件闪烁、充能及发动后暂停冻结、拆开结算和重开清理`, () => {
     const random=Math.random,speed=combatConfig.enemy.moveSpeed,hp=combatConfig.enemy.maxHp;
     try {
       combatConfig.enemy.moveSpeed=25;combatConfig.enemy.maxHp=100000;
       const p=pve(true, 100);
-      Math.random=()=>left/28;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
-      Math.random=()=>right/28;p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+      Math.random=()=>recruitRoll(p,left);p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+      Math.random=()=>recruitRoll(p,right);p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
       for(let i=0;i<5;i++)p.game.sides.bottom.combat.spawnEnemy().moveSpeed=0;
       const flashes=()=>p.objects.get(p.game).filter(o=>o.kind==='text'&&o.text===name&&o.visible&&o.y>532);
       // 观察真实成长后的首次发动，不假定击杀升级前后的CD完全相同。
@@ -705,7 +713,7 @@ test('PVE暂停冻结敌人、攻击、出兵与真实收入计时器；禁止�
   const p = pve();
   const random = Math.random;
   try {
-    Math.random = () => 6.5/28; // 固定征到弓，保证暂停前已有自动攻击。
+    Math.random = () => recruitRoll(p,'弓'); // 固定征到弓，保证暂停前已有自动攻击。
     p.click(375, 1158);
   } finally { Math.random = random; }
   p.drag([183,1018], [164.0625,574.0625]);
@@ -755,7 +763,7 @@ test('胜负结算冻结游戏；连续重开清除单位、解锁、敌人、�
       p.run(10);
       assert.equal(p.game.time._active.length, 0);
       const win = round % 2 === 0;
-      Math.random = () => 12.5/28;
+      Math.random = () => recruitRoll(p,'铲');
       p.click(375, 1158);
       p.drag([183,1018], [501.5625,661.4375]);
       assert.equal(p.text(501.5625,661.4375), '+');
@@ -996,7 +1004,7 @@ test('Farmer badge and hit area enlarge equally on both sides, stay inside battl
 test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点击/过期旧对象不加钱',()=>{
  const random=Math.random,speed=combatConfig.enemy.moveSpeed;
  try{
-  combatConfig.enemy.moveSpeed=0;Math.random=()=>0.9;const p=farmerGame();
+  combatConfig.enemy.moveSpeed=0;Math.random=()=>0.97;const p=farmerGame();
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   assert.ok(p.objects.get(p.game).some(o=>o.text==='农'));assert.equal(p.text(164.0625,555.6875),'');
   p.run(11990);p.click(75,55);const paused=p.snapshot();p.run(30000);assert.equal(p.snapshot(),paused);
@@ -1022,7 +1030,7 @@ test('农民生产/收益过期暂停冻结，领取不触发拖拽，重复点�
 for(const win of [true,false])test('农民'+(win?'胜利':'失败')+'时收益冻结不可领取，再来一局清空并保留农民loadout',()=>{
  const random=Math.random;
  try{
-  Math.random=()=>0.9;const p=farmerGame();
+  Math.random=()=>0.97;const p=farmerGame();
   p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
   p.run(12000);
   const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height);
@@ -1074,8 +1082,8 @@ test('回主页取消保持暂停；确认清理计时器/技能/农民收益/�
   combatConfig.enemy.moveSpeed=0;const p=equippedV56();
   for(let round=0;round<3;round++){
    // 共享字小美与农民都部署，制造运行中的技能、生产与战斗。
-   for(const [rng,to] of [[16/45,[164.0625,574.0625]],[18/45,[248.4375,574.0625]],[.99,[332.8125,574.0625]]]){
-    Math.random=()=>rng;p.click(375,1158);p.drag([183,1018],to);
+   for(const [type,to] of [['小',[164.0625,574.0625]],['美',[248.4375,574.0625]],['农',[332.8125,574.0625]]]){
+    Math.random=()=>recruitRoll(p,type);p.click(375,1158);p.drag([183,1018],to);
    }
    p.run(12000);assert.equal(farmCash(p).length,1);
    const badge=p.objects.get(p.game).findLast(o=>o.interactive===true&&o.width===farmerRewardVisual.width&&o.height===farmerRewardVisual.height),clock=p.game.time;
@@ -1314,12 +1322,12 @@ test('v0.61-A top保持正常武将等级/镜像但隐藏EXP，bottom保留EXP�
  s.recruitment.slots[0]={kind:'heroLetter',type:'小',level:1};s.recruitment.slots[1]={kind:'heroLetter',type:'美',level:1};
  s.drop({kind:'slot',index:0},{kind:'tile',index:0});s.drop({kind:'slot',index:1},{kind:'tile',index:1});
  const bottom=[...s.heroes.links.values()][0],top=[...p.game.sides.top.heroes.links.values()][0];
- bottom.currentExp=10;top.currentExp=10;p.run(10);
+ bottom.currentExp=5;top.currentExp=5;p.run(10);
  const bars=sign=>p.objects.get(p.game).filter(o=>o.kind==='graphics'&&Math.sign(o.scale)===sign)
   .flatMap(o=>o.draws).filter(d=>d[0]==='fillRect'&&d[4]===3);
  assert.equal(bars(-1).length,0);assert.equal(bars(1).length,2);assert.ok(bars(1).some(d=>d[3]>0&&d[3]<138));
  const point=boardProjection(testMap,750,'top').point({x:top.origin.x,y:top.origin.y+15});
- assert.equal(p.text(point.x,point.y),'Lv.2');assert.equal(top.currentExp,10);
+ assert.equal(p.text(point.x,point.y),'Lv.2');assert.equal(top.currentExp,5);
 });
 
 test('v0.62-A HUD tracks highest started wave while the preceding wave is still spawning',()=>{
@@ -1635,8 +1643,7 @@ for(const def of getExpandedHeroes)test(`v0.67-B ${def.name} actual renderer exp
  const p=pve(true,100),side=p.game.sides.bottom;
  const random=Math.random;
  try{for(let i=0;i<2;i++){
-  const index=gameConfig.recruitmentPool.indexOf(def.letters[i]);
-  Math.random=()=>(15+index-5+.5)/28;p.click(375,1158);
+  Math.random=()=>recruitRoll(p,def.letters[i]);p.click(375,1158);
   p.drag([183,1018],[164.0625+i*84.375,574.0625]);
  }}finally{Math.random=random;}p.run(20);
  const link=side.combat.heroLinks[0];assert.equal(link.heroId,def.id);

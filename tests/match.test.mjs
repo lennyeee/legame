@@ -111,7 +111,7 @@ for(const killer of ['bottom','top'])test(`${killer}击杀只奖励本方$1和�
  const events=advance(m,1300);assert.ok(events[killer].some(e=>e.kind==='kill'&&e.enemyId===1));
  assert.equal(events[other].some(e=>e.kind==='kill'),false);
  assert.equal(m.sides[killer].recruitment.money,21);assert.equal(m.sides[other].recruitment.money,20);
- assert.equal(links[killer].currentExp,heroGrowth.enemyExp);assert.equal(links[other].currentExp,0);
+ assert.equal(links[killer].currentExp,heroGrowth.rewards.kill);assert.equal(links[other].currentExp,0);
 });
 test('pause冻结timeline、双边战斗/HP/EXP/生产/CD/铁饭碗；resume续算',()=>{
  const m=quiet('farmer','iron_rice_bowl','upgrade_talisman');

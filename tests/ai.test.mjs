@@ -204,14 +204,14 @@ for(const id of ['upgrade_talisman','haste_edict','golden_hand'])test('AI uses e
  assert.equal(s.activeItems.slots[0].remainingMs,activeItemCooldown(id));
 });
 test('canUse is side-effect-free including HeroLink, skill, EXP, participation, haste and cooldown',()=>{
- const s=side('haste_edict','upgrade_talisman'),link=hero(s);link.currentExp=10;s.heroes.recordDamage(1,link,1);s.activeItems.update(50000);
+ const s=side('haste_edict','upgrade_talisman'),link=hero(s);link.currentExp=5;s.heroes.recordDamage(1,link,1);s.activeItems.update(50000);
  const before=JSON.stringify({board:s.board,state:s.recruitment,slots:s.activeItems.slots,link}),skill=link.skill;
  for(let i=0;i<10;i++){assert.equal(s.canUseActiveItem(0,tile(0)),true);assert.equal(s.canUseActiveItem(1,tile(1)),true);}
  assert.equal(JSON.stringify({board:s.board,state:s.recruitment,slots:s.activeItems.slots,link}),before);
  assert.equal(link.skill,skill);assert.equal(s.heroes.hasHaste('xiaomei'),false);
  const hasteIndex=s.activeItems.slots.findIndex(i=>i.id==='haste_edict');
  assert.equal(s.useActiveItem(hasteIndex,tile(0)),true);assert.equal(s.canUseActiveItem(hasteIndex,tile(0)),false);
- s.heroes.awardKill(1,1);assert.equal(link.currentExp,11);
+ s.heroes.awardKill(1,link);assert.equal(link.currentExp,6);
 });
 test('canUse never creates a Link or synchronizes levels during a query',()=>{
  const s=side('haste_edict');s.board.tiles[0].unit=letter('小',3);s.board.tiles[1].unit=letter('美');s.activeItems.update(20000);

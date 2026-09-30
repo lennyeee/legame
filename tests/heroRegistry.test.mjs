@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module';
 registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
 const { heroRegistry, heroRecipes, getHeroDefinition, getHeroStats, heroGrowth, heroExpRequired } = await import('../src/config/heroes.ts');
 const { skillConfigs, getSkillStats } = await import('../src/config/skills.ts');
-const { gameConfig, recruitmentWeights, GAME_VERSION } = await import('../src/config/game.ts');
+const { gameConfig, recruitmentCategoryScale, recruitmentCategories, GAME_VERSION } = await import('../src/config/game.ts');
 const { recruitmentPool, createRecruitmentState } = await import('../src/systems/recruitment.ts');
 const { createBoardState, applyDrop } = await import('../src/systems/board.ts');
 const { getHeroProgression } = await import('../src/systems/heroProgression.ts');
@@ -17,14 +17,14 @@ function setup(hero='xiaomei') {
  const progression=getHeroProgression(board);progression.sync();
  return {board,reserve,progression,link:[...progression.links.values()][0]};
 }
-function award(progression,link,exp){progression.recordDamage(99,link,1);progression.awardKill(99,exp);}
+function award(progression,link,exp){progression.recordDamage(99,link,1);progression.awardKill(99,link,{kill:exp,assist:.2});}
 
 test('Registry has eight unique stable IDs, ordered letter pairs and names; all eight available',()=>{
  assert.equal(heroRegistry.length,8);
  for(const key of ['id','name'])assert.equal(new Set(heroRegistry.map(h=>h[key])).size,8);
  assert.equal(new Set(heroRegistry.map(h=>h.letters.join('|'))).size,8);
  assert.deepEqual(heroRecipes.map(h=>h.id),['xiaomei','abing','xiaoliu','houjiang','xiaozhan','yongqi','xiaoqian','abiao']);
- assert.equal(GAME_VERSION,'0.68-A');
+ assert.equal(GAME_VERSION,'0.68-B');
  assert.throws(()=>getHeroDefinition('unknown'),/未注册/);
 });
 for(const hero of heroRegistry)test(`Registry resolves ${hero.id} with complete identity and presentation data`,()=>{
@@ -42,14 +42,15 @@ test('planned ranges explicit; Abing B runtime225; passive has no active cooldow
 test('visual colors cannot change weights, progression or combat; all available letters enter live pool',()=>{
  const pool=recruitmentPool({active:[],passive:[]});
  assert.deepEqual(pool.map(p=>p.value),[...gameConfig.recruitmentPool]);
- assert.deepEqual(pool.map(p=>p.weight),[3,3,3,3,3,...Array(13).fill(1)]);
- assert.deepEqual(Object.values(recruitmentWeights),pool.map(p=>p.weight));
+ assert.deepEqual(pool.map(p=>p.weight),[...Array(4).fill(910),780,...Array(13).fill(60)]);
+ assert.equal(pool.reduce((sum,p)=>sum+p.weight,0),100*recruitmentCategoryScale);
+ assert.equal(recruitmentCategories.default.heroLetter,15);
  const before=heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id));
  const colors=heroRegistry.map(h=>h.cardColor);
  try{heroRegistry.forEach(h=>h.cardColor=h.cardColor==='gold'?'purple':'gold');
  assert.deepEqual(recruitmentPool({active:[],passive:[]}),pool);
  assert.deepEqual(heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id)),before);
- assert.equal(heroGrowth.enemyExp,5);assert.equal(heroExpRequired(1),45);
+ assert.equal(heroGrowth.rewards.kill,1);assert.equal(heroExpRequired(1),10);
  }finally{heroRegistry.forEach((h,i)=>h.cardColor=colors[i]);}
  for(const def of heroRegistry){
   const board=createBoardState(testMap);board.tiles[0].unit=letter(def.letters[0]);board.tiles[1].unit=letter(def.letters[1]);
@@ -76,24 +77,24 @@ test('independent skill table can express non-formula growth without changing ot
  assert.equal(getSkillStats(skill.id,3).cooldown,8500);assert.equal(getSkillStats('abing_burst',3).cooldown,11000);
  }finally{Object.defineProperty(skill,'cooldownByLevel',descriptor);}
 });
-for(const [level,required] of [[1,45],[2,70],[3,105],[4,140]])test(`Lv${level} EXP boundary ${required}, upgrade writes both letters with overflow`,()=>{
+for(const [level,required] of [[1,10],[2,20],[3,30],[4,40]])test(`Lv${level} EXP boundary ${required}, upgrade writes both letters with overflow`,()=>{
  const {board,progression,link}=setup();link.left.level=link.right.level=level;progression.sync();
  assert.equal(heroExpRequired(level),required);award(progression,link,required-1);assert.equal(link.level,level);
  award(progression,link,2);assert.equal(link.level,level+1);assert.equal(link.left.level,level+1);assert.equal(link.right.level,level+1);
  assert.equal(link.currentExp,level===4?0:1);assert.equal(board.tiles[0].unit.level,link.level);
 });
-test('new cumulative EXP is360 (+50%); multi-upgrade caps at5 without accumulating max-level EXP',()=>{
- assert.deepEqual(heroGrowth.expByLevel,[45,70,105,140]);assert.equal(heroGrowth.expByLevel.reduce((a,b)=>a+b),360);
- const {progression,link}=setup();award(progression,link,359);assert.equal(link.level,4);assert.equal(link.currentExp,139);
+test('cumulative EXP100; multi-upgrade caps at5 without accumulating max-level EXP',()=>{
+ assert.deepEqual(heroGrowth.expByLevel,[10,20,30,40]);assert.equal(heroGrowth.expByLevel.reduce((a,b)=>a+b),100);
+ const {progression,link}=setup();award(progression,link,99);assert.equal(link.level,4);assert.equal(link.currentExp,39);
  award(progression,link,1000);assert.equal(link.level,5);assert.equal(link.currentExp,0);assert.equal(heroExpRequired(5),Infinity);
  award(progression,link,1000);assert.equal(link.level,5);assert.equal(link.currentExp,0);
 });
-test('split discards new EXP and old participation; new link starts CD0/EXP0; normal kill remains5EXP',()=>{
- const {board,reserve,progression,link}=setup();award(progression,link,40);progression.recordDamage(1,link,1);
+test('split discards EXP and old participation; new link starts CD0/EXP0; normal kill earns1EXP',()=>{
+ const {board,reserve,progression,link}=setup();award(progression,link,4);progression.recordDamage(1,link,1);
  applyDrop(board,reserve,{kind:'tile',index:1},{kind:'slot',index:0});
  applyDrop(board,reserve,{kind:'slot',index:0},{kind:'tile',index:1});const fresh=[...progression.links.values()][0];
- progression.awardKill(1,1000);assert.equal(fresh.level,1);assert.equal(fresh.currentExp,0);assert.equal(fresh.skill.cooldownElapsed,0);
+ progression.awardKill(1,null);assert.equal(fresh.level,1);assert.equal(fresh.currentExp,0);assert.equal(fresh.skill.cooldownElapsed,0);
  const sim=new CombatSimulation(testMap,board,reserve);const enemy=sim.spawnEnemy();enemy.moveSpeed=0;enemy.hp=1;
  for(let i=0;i<125;i++)sim.update(10);
- assert.equal(fresh.currentExp,5);assert.equal(fresh.level,1);
+ assert.equal(fresh.currentExp,1);assert.equal(fresh.level,1);
 });

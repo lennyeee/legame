@@ -12,7 +12,7 @@ import { inRange, lineEnd, piercingTargets, selectTarget } from './targeting';
 import type { WaveProgress } from './WaveProgress';
 import { getHeroLinks } from '../systems/heroActivation';
 import type { HeroLink } from '../systems/heroActivation';
-import { getHeroStats, heroGrowth, getHeroDefinition } from '../config/heroes';
+import { getHeroStats, getHeroDefinition } from '../config/heroes';
 import { getHeroProgression } from '../systems/heroProgression';
 import { updateHeroSkill, heroAttackInterval, consumeEmpoweredAttack, heroBasicDamageMultiplier } from './skills';
 import type { SkillEvent } from './skills';
@@ -170,7 +170,7 @@ export class CombatSimulation {
     if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
     if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id, source, damage: result.applied, heroId: hero?.heroId });
     if (result.killed) {
-      getHeroProgression(this.board).awardKill(enemy.id, heroGrowth.enemyExp);
+      getHeroProgression(this.board).awardKill(enemy.id, hero ?? null);
       this.wallet.money += this.config.enemy.killReward;
       events.push({ kind: 'kill', enemyId: enemy.id, position: { x: enemy.x, y: enemy.y }, reward: this.config.enemy.killReward });
     }

@@ -37,7 +37,7 @@ for(const hero of ['xiaomei','abing','xiaoliu'])test(`${hero}唯一性保留原�
  applyDrop(board,wallet,pos('tile',3),pos('slot',0));sim.update(0);
  const fresh=sim.heroLinks[0];assert.equal(sim.heroLinks.length,1);assert.notEqual(fresh,link);
  assert.equal(link.skill,null);assert.equal(fresh.skill.cooldownElapsed,0);assert.equal(fresh.currentExp,0);
- growth.awardKill(999,10);assert.equal(fresh.currentExp,0);
+ growth.awardKill(999,null);assert.equal(fresh.currentExp,0);
 });
 
 for(const hero of ['abing','xiaoliu'])test(`${hero}普攻复用主目标周围AOE，范围外不受伤`,()=>{
@@ -59,7 +59,7 @@ test('阿饼脱战ready保留，重新接敌强化普攻仍可正常击杀并获
  const {sim,link,wallet}=setup('abing',true);link.skill.cooldownElapsed=12000;
  run(sim,20);assert.equal(link.skill.phase,'ready');const target=enemy(sim,1),before=wallet.money;
  run(sim,20);assert.equal(sim.statuses.allies.has(link),true);
- run(sim,1300);assert.equal(target.hp,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+ run(sim,1300);assert.equal(target.hp,0);assert.equal(link.currentExp,heroGrowth.rewards.kill);
  assert.equal(wallet.money,before+sim.config.enemy.killReward);
 });
 

@@ -21,10 +21,10 @@ function setup(levels=[1,1],map=testMap){
 }
 function run(sim,ms){const events=[];for(let i=0;i<ms;i+=10)events.push(...sim.update(10));return events;}
 function enemy(sim,hp=1000){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=e.maxHp=hp;return e;}
-function grant(growth,link,exp,id=999){growth.recordDamage(id,link,1);growth.awardKill(id,exp);}
+function grant(growth,link,exp,id=999){growth.recordDamage(id,link,1);growth.awardKill(id,link,{kill:exp,assist:.2});}
 
 test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
- const {board,reserve}=setup([3,3]);recruit(reserve,()=>15.5/28);assert.deepEqual(reserve.slots[0],letter('小'));
+ const {board,reserve}=setup([3,3]);recruit(reserve,()=>.86);assert.deepEqual(reserve.slots[0],letter('小'));
  const original=board.tiles[0].unit;reserve.slots[0]=null;
  applyDrop(board,reserve,p('tile',0),p('slot',0));assert.equal(reserve.slots[0],original);assert.equal(original.level,3);
  reserve.slots[1]=letter('饼',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
@@ -67,8 +67,8 @@ test('拆开丢失EXP和参战资格，重新激活是全新周期',()=>{
  const {board,reserve,growth,link}=setup([3,3]);grant(growth,link,25);growth.recordDamage(1,link,5);
  applyDrop(board,reserve,p('tile',1),p('slot',0));applyDrop(board,reserve,p('slot',0),p('tile',1));
  const fresh=[...growth.links.values()][0];assert.notEqual(fresh.cycleId,link.cycleId);assert.equal(fresh.currentExp,0);
- growth.awardKill(1,1000);assert.equal(fresh.level,3);assert.equal(fresh.currentExp,0);
- growth.recordDamage(2,link,5);growth.awardKill(2,1000);assert.equal(fresh.level,3);
+ growth.awardKill(1,null);assert.equal(fresh.level,3);assert.equal(fresh.currentExp,0);
+ growth.recordDamage(2,link,5);growth.awardKill(2,null);assert.equal(fresh.level,3);
  grant(growth,fresh,10);assert.equal(fresh.currentExp,10);
 });
 test('拖动开始即失去未满EXP，取消拖动也从新周期0开始',()=>{
@@ -82,31 +82,31 @@ test('自然EXP写回两字，连续升级保留正确溢出，普通sync不清�
  grant(growth,link,heroExpRequired(3)-7);assert.equal(link.level,4);assert.equal(link.currentExp,0);
 });
 test('零伤害不记录，多次命中只记录一次，重复死亡不重复给EXP',()=>{
- const {growth,link}=setup();growth.recordDamage(1,link,0);growth.awardKill(1,10);assert.equal(link.currentExp,0);
+ const {growth,link}=setup();growth.recordDamage(1,link,0);growth.awardKill(1,null);assert.equal(link.currentExp,0);
  for(let i=0;i<5;i++)growth.recordDamage(2,link,1);
- growth.awardKill(2,10);growth.awardKill(2,10);assert.equal(link.currentExp,10);
+ growth.awardKill(2,link);growth.awardKill(2,link);assert.equal(link.currentExp,1);
 });
-test('普通兵最后一击仍让实际参战武将获得完整EXP',()=>{
+test('普通兵最后一击使实际参战武将获得0.2 EXP',()=>{
  const {board,sim,link}=setup();const e=enemy(sim);run(sim,2400);assert.equal(e.hp,1000-2*heroCombat.damage);
  e.hp=1;board.tiles[4].unit={type:'弓',level:5};run(sim,1100);
- assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
+ assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
 });
-test('两个武将有效参战，各得完整EXP；第三个只在范围内不得EXP',()=>{
+test('两个武将各获0.2助攻EXP；第三个只在范围内不得EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:690,unlocked:true},{x:247,y:690,unlocked:true},{x:195,y:610,unlocked:true},{x:247,y:610,unlocked:true},{x:195,y:650,unlocked:true}]};
  const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
  const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-2*heroCombat.damage);
  board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');e.hp=1;board.tiles[6].unit={type:'刀',level:5};run(sim,800);
- assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.enemyExp);
- assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[heroGrowth.enemyExp,heroGrowth.enemyExp,0]);
+ assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
+ assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[heroGrowth.rewards.assist,heroGrowth.rewards.assist,0]);
 });
 test('拆开后原敌人被普通兵击杀不发旧EXP，漏怪也无EXP',()=>{
  const {board,reserve,sim,growth}=setup();const e=enemy(sim);run(sim,1200);
  applyDrop(board,reserve,p('tile',1),p('slot',0));applyDrop(board,reserve,p('slot',0),p('tile',1));sim.update(0);
  const fresh=sim.heroLinks[0];e.hp=1;board.tiles[4].unit={type:'弓',level:5};run(sim,1100);assert.equal(sim.enemies.length,0);assert.equal(fresh.currentExp,0);
- const escape=enemy(sim);growth.recordDamage(escape.id,fresh,1);escape.distance=sim.path.totalLength;run(sim,20);growth.awardKill(escape.id,100);assert.equal(fresh.currentExp,0);
+ const escape=enemy(sim);growth.recordDamage(escape.id,fresh,1);escape.distance=sim.path.totalLength;run(sim,20);growth.awardKill(escape.id,null);assert.equal(fresh.currentExp,0);
 });
-test('参战武将自己击杀也能得EXP，休眠字不得EXP',()=>{
- const {sim,link}=setup();enemy(sim,1);run(sim,1200);assert.equal(link.currentExp,heroGrowth.enemyExp);
+test('参战武将自己击杀获1 EXP，休眠字不得EXP',()=>{
+ const {sim,link}=setup();enemy(sim,1);run(sim,1200);assert.equal(link.currentExp,heroGrowth.rewards.kill);
 });
 test('等级提升增加伤害和攻速但不改变射程',()=>{
  for(const level of [2,5,50]){const stats=getHeroStats(level);assert.ok(stats.damage>heroCombat.damage);assert.ok(stats.attackInterval<heroCombat.attackInterval);assert.equal(stats.range,heroCombat.range);}
@@ -116,5 +116,5 @@ test('结算停止EXP和攻击，独立新局从空状态及Lv.1开始',()=>{
  enemy(sim);run(sim,1200);const link=sim.heroLinks[0];progress.status='defeat';const before=link.currentExp;
  assert.deepEqual(run(sim,10000),[]);assert.equal(link.currentExp,before);
  growth.clear();assert.equal(growth.links.size,0);const freshBoard=createBoardState(testMap),freshReserve=createRecruitmentState();
- assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>15.5/28);assert.equal(freshReserve.slots[0].level,1);
+ assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>.86);assert.equal(freshReserve.slots[0].level,1);
 });

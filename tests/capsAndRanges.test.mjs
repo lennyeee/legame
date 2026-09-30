@@ -50,10 +50,10 @@ for(const sourceKind of ['slot','tile'])for(const targetKind of ['slot','tile'])
 test('EXP溢出最多到Lv.5并归零，重复奖励不累计；同步传播上限5且不重置技能',()=>{
  const board=createBoardState(testMap);board.tiles[0].unit=letter('小',4);board.tiles[1].unit=letter('美',1);
  const progression=getHeroProgression(board);progression.sync();const link=[...progression.links.values()][0],skill=link.skill;
- progression.recordDamage(1,link,10);progression.awardKill(1,1e9);
+ progression.recordDamage(1,link,10);progression.awardKill(1,link,{kill:1e9,assist:.2});
  assert.equal(link.level,5);assert.equal(link.currentExp,0);assert.equal(link.skill,skill);
  assert.deepEqual([link.left.level,link.right.level],[5,5]);
- progression.recordDamage(2,link,1);progression.awardKill(2,100);assert.equal(link.currentExp,0);
+ progression.recordDamage(2,link,1);progression.awardKill(2,link,{kill:100,assist:.2});assert.equal(link.currentExp,0);
  board.tiles[0].unit.level=99;progression.sync();assert.equal(link.level,5);assert.equal(link.left.level,5);
 });
 test('新加入的12块锁定地皮都可用铲子解锁并部署，路径及6块开放地皮保持',()=>{

@@ -2,7 +2,7 @@ import type { BoardMap } from '../config/maps';
 import type { BoardState } from './board';
 import { getHeroLinks } from './heroActivation';
 import type { HeroLink } from './heroActivation';
-import { heroExpRequired, getHeroDefinition } from '../config/heroes';
+import { heroExpRequired, getHeroDefinition, heroGrowth } from '../config/heroes';
 import type { HeroId } from '../config/heroes';
 import { createSkillState } from '../combat/skills';
 import { MAX_LEVEL, clampLevel } from '../config/levels';
@@ -71,11 +71,13 @@ export class HeroProgression {
     this.participants.set(enemyId, set);
   }
 
-  awardKill(enemyId: number, exp: number): void {
+  awardKill(enemyId: number, killer: HeroLink | null,
+    rewards: Readonly<{ kill: number; assist: number }> = heroGrowth.rewards): void {
     for (const link of this.participants.get(enemyId) ?? []) {
       if (!this.isActive(link)) continue;
       if (link.level >= MAX_LEVEL) { link.currentExp = 0; continue; }
-      link.currentExp += exp;
+      // 始终落在0.2 EXP刻度；不让二进制浮点尾差累积到升级阈值/UI。
+      link.currentExp = Math.round((link.currentExp + (link === killer ? rewards.kill : rewards.assist)) * 5) / 5;
       while (link.level < MAX_LEVEL && link.currentExp >= heroExpRequired(link.level)) {
         link.currentExp -= heroExpRequired(link.level);
         link.level++;

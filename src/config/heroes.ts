@@ -12,8 +12,9 @@ export type HeroName = (typeof heroRegistry)[number]['name'];
 export const heroCombat = { damage: 10, range: rangePixels(attackRangeCells.hero), attackInterval: 1200, splashRadius: 70 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
 export const hasteConfig = { attacks: 7, speedMultiplier: 3, speedPerLevel: 0.2, minAttackInterval: 80 };
-// 逐级需求；累计45/115/220/360 EXP，敌人仍奖励5，不改变有效参战规则。
-export const heroGrowth = { expByLevel: [45, 70, 105, 140] as const, enemyExp: 5, damagePerLevel: 0.5, speedPerLevel: 0.08 };
+// 每级追加需求10/20/30/40，总计100；有效击杀+1，助攻+0.2。
+export const heroGrowth = { expByLevel: [10, 20, 30, 40] as const,
+  rewards: { kill: 1, assist: 0.2 }, damagePerLevel: 0.5, speedPerLevel: 0.08 };
 
 export interface ActiveSkillDefinition {
   kind: 'active'; id: string; behavior: 'sequenceDamage' | 'selfBuff' | 'empoweredAttack' | 'stun' | 'allyBuff' | 'poison' | 'sword';

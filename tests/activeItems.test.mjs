@@ -10,8 +10,7 @@ const { getHeroProgression } = await import('../src/systems/heroProgression.ts')
 const { FarmerProduction } = await import('../src/systems/FarmerProduction.ts');
 const { testMap } = await import('../src/config/maps.ts');
 const { itemEffects } = await import('../src/config/itemEffects.ts');
-const { recruitmentWeights } = await import('../src/config/game.ts');
-const { farmerConfig } = await import('../src/config/farmer.ts');
+const { recruitmentCategoryScale, recruitmentCategories } = await import('../src/config/game.ts');
 const { heroRecipes } = await import('../src/config/heroes.ts');
 function loadout(...ids) {const inventory=createInventory();ids.forEach(id=>setEquipped(inventory,id,true));return createLoadout(inventory);}
 function setup(){const gear=loadout('upgrade_talisman'),board=createBoardState(testMap),wallet=createRecruitmentState(gear),active=new ActiveItems(gear);return {gear,board,wallet,active};}
@@ -62,21 +61,23 @@ test('主动状态停止/销毁拒绝升级及CD推进；新实例完整CD',()=>
  assert.equal(active.use(0,board,wallet,{kind:'slot',index:0}),false);active.destroy();active.update(99999);
  assert.equal(active.slots.length,0);assert.equal(new ActiveItems(gear).slots[0].remainingMs,50000);
 });
-test('招贤榜按武将字类别统一乘2，保持相对权重、不改变普通池、不加入农民',()=>{
+test('招贤榜将HeroLetter类别从15%提高至25%，五字相对权重不变' ,()=>{
  const plain=recruitmentPool(loadout()),boosted=recruitmentPool(loadout('hero_recruitment'));
- assert.equal(itemEffects.heroRecruitmentMultiplier,2);assert.equal(boosted.some(e=>e.value==='农'),false);
+ assert.equal(boosted.some(e=>e.value==='农'),false);
+ assert.equal(boosted.reduce((n,e)=>n+e.weight,0),100*recruitmentCategoryScale);
+ assert.equal(plain.reduce((n,e)=>n+e.weight,0),100*recruitmentCategoryScale);
  for(const entry of boosted){const isLetter=heroRecipes.some(r=>r.letters.includes(entry.value));
-  assert.equal(entry.weight,recruitmentWeights[entry.value]*(isLetter?2:1));
-  assert.equal(plain.find(e=>e.value===entry.value).weight,recruitmentWeights[entry.value]);
+  assert.equal(entry.weight,isLetter?recruitmentCategories.hero.heroLetter*recruitmentCategoryScale/13:
+    entry.value==='铲'?recruitmentCategories.hero.shovel*recruitmentCategoryScale:recruitmentCategories.hero.ordinary*recruitmentCategoryScale/4);
  }
 });
 test('农民+招贤榜同时生效；loadout快照隔离装备变更，随机结果覆盖五格',()=>{
  const inventory=createInventory();setEquipped(inventory,'farmer',true);setEquipped(inventory,'hero_recruitment',true);
  const state=createRecruitmentState(createLoadout(inventory));inventory.forEach(i=>i.equipped=false);
- const pool=recruitmentPool(state.loadout);assert.equal(pool.find(e=>e.value==='农').weight,farmerConfig.recruitmentWeight);
- assert.equal(pool.find(e=>e.value==='小').weight,recruitmentWeights['小']*2);
+ const pool=recruitmentPool(state.loadout);assert.equal(pool.find(e=>e.value==='农').weight,6*recruitmentCategoryScale);
+ assert.equal(pool.find(e=>e.value==='小').weight,25*recruitmentCategoryScale/13);
  const total=pool.reduce((s,e)=>s+e.weight,0);const hits={};
- for(let i=0;i<total;i++){state.money=100;recruit(state,()=> (i+.5)/total);const item=state.slots[0];const type=typeof item==='string'?item:item.type;
+ for(let i=0;i<total;i++){state.money=1000000;recruit(state,()=> (i+.5)/total);const item=state.slots[0];const type=typeof item==='string'?item:item.type;
   hits[type]=(hits[type]??0)+1;assert.equal(state.slots.length,5);assert.ok(state.slots.every(x=>JSON.stringify(x)===JSON.stringify(item)));
  }
  for(const e of pool)assert.equal(hits[e.value],e.weight);

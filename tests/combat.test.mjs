@@ -269,7 +269,7 @@ test('战斗中征兵、交换、合成和铲子解锁可共同运行', () => {
   const { sim, wallet, board } = setup('刀', { map: testMap });
   const deployed = board.tiles[0].unit;
   sim.spawnEnemy();
-  recruit(wallet, () => 12.5/28);
+  recruit(wallet, () => .775);
   assert.equal(applyDrop(board, wallet, slot(0), tile(3)), 'unlock');
   run(sim, 100);
   wallet.money = 12; // 本用例验证战斗中交互，单独提供第二次来财所需资金。

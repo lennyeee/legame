@@ -11,25 +11,19 @@ const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
 const {testMap}=await import('../src/config/maps.ts');
 const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
-const {recruitmentWeights}=await import('../src/config/game.ts');
+const {recruitmentCategoryScale}=await import('../src/config/game.ts');
 const farmer=(level=1)=>({kind:'farmer',type:'农',level});
 const pos=(kind,index)=>({kind,index});
-test('Farmer new weight gives the expected independent five-slot probabilities, with hero recruitment only scaling letters',()=>{
+test('Farmer has exact6% per slot in both loadouts; hero recruitment changes category balance',()=>{
  function pool(...ids){const inventory=createInventory();ids.forEach(id=>setEquipped(inventory,id,true));return recruitmentPool(createLoadout(inventory));}
  assert.equal(pool().some(e=>e.value==='农'),false);assert.equal(pool('hero_recruitment').some(e=>e.value==='农'),false);
  const plain=pool('farmer'),boosted=pool('farmer','hero_recruitment');
- assert.equal(farmerConfig.recruitmentWeight,4);
- for(const [entries,base] of [[plain,28],[boosted,41]]){
-  assert.equal(entries.find(e=>e.value==='农').weight,4);
-  assert.equal(entries.reduce((sum,e)=>sum+e.weight,0),base+4);
-  const old=10/(base+10),p=4/(base+4);
-  assert.ok(p/old>=.4&&p/old<=.6);
-  const atLeast1=1-(1-p)**5,atLeast2=1-(1-p)**5-5*p*(1-p)**4;
-  assert.ok(atLeast1<1-(1-old)**5);assert.ok(atLeast2<1-(1-old)**5-5*old*(1-old)**4);
- }
- for(const entry of plain.filter(e=>e.value!=='农')){
-  const letter=['小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪'].includes(entry.value);
-  assert.equal(boosted.find(e=>e.value===entry.value).weight,entry.weight*(letter?2:1));
+ for(const entries of [plain,boosted]){const total=entries.reduce((sum,e)=>sum+e.weight,0);
+  assert.equal(total,100*recruitmentCategoryScale);assert.equal(entries.find(e=>e.value==='农').weight,6*recruitmentCategoryScale);
+  const probability=6/100;
+  assert.ok(Math.abs(1-(1-probability)**5-0.2660959776)<1e-10);
+  assert.equal(entries.filter(e=>['小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪'].includes(e.value)).reduce((n,e)=>n+e.weight,0),
+    (entries===plain?15:25)*recruitmentCategoryScale);
  }
  const state=createRecruitmentState();const inventory=createInventory();setEquipped(inventory,'farmer',true);
  const equipped=createRecruitmentState(createLoadout(inventory));equipped.money=100;
@@ -43,14 +37,14 @@ test('未装备池绝无农民；装备后按集中权重加入，开局快照�
  const inventory=createInventory();setEquipped(inventory,'farmer',true);
  const equipped=createRecruitmentState(createLoadout(inventory));setEquipped(inventory,'farmer',false);
  const plain=createRecruitmentState(createLoadout(inventory));
- const oldWeight=Object.values(recruitmentWeights).reduce((a,b)=>a+b,0),total=oldWeight+farmerConfig.recruitmentWeight;
+ const total=100*recruitmentCategoryScale;
  let hits=0;
  for(let i=0;i<total;i++){
-  plain.money=equipped.money=100;recruit(plain,()=> (i+0.5)/total);recruit(equipped,()=> (i+0.5)/total);
+  plain.money=equipped.money=1000000;recruit(plain,()=> (i+0.5)/total);recruit(equipped,()=> (i+0.5)/total);
   assert.equal(plain.slots.some(x=>x?.kind==='farmer'),false);
   if(equipped.slots[0]?.kind==='farmer'){hits++;assert.deepEqual(equipped.slots,Array(5).fill(farmer()));}
  }
- assert.equal(hits,farmerConfig.recruitmentWeight);assert.equal(equipped.loadout.passive[0].id,'farmer');
+ assert.equal(hits,6*recruitmentCategoryScale);assert.equal(equipped.loadout.passive[0].id,'farmer');
 });
 for(let level=1;level<=MAX_LEVEL;level++)test(`Lv.${level}部署12秒产${level}、领取一次后重新计时`,()=>{
  const {board,wallet,production,drop}=setup();const item=farmer(level);wallet.slots[0]=item;

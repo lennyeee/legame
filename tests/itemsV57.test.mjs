@@ -38,7 +38,7 @@ test('卖掉武将字解除Link、技能和参战；搭档休眠且等级保留'
  const {board,wallet,active,progression}=setup();board.tiles[0].unit=letter('小',3);board.tiles[1].unit=letter('美');progression.sync();
  const link=[...progression.links.values()][0];progression.recordDamage(1,link,10);link.currentExp=10;
  assert.ok(active.use(0,board,wallet,pos('tile',0)));assert.equal(progression.links.size,0);assert.equal(link.skill,null);
- progression.awardKill(1,1000);assert.equal(board.tiles[1].unit.level,3);
+ progression.awardKill(1,link,{kill:1000,assist:.2});assert.equal(board.tiles[1].unit.level,3);
 });
 test('出售农民清除生产与待领取钱；出售普通兵清除旧攻击和弹道',()=>{
  const {board,wallet,active}=setup();const farmer={kind:'farmer',type:'农',level:2};board.tiles[0].unit=farmer;

@@ -128,14 +128,14 @@ test('Split cancels old source effects, no ghost DOT/temporary buff or old EXP',
  const p=setup('yongqi'),target=p.enemy();p.ready();p.side.drop({kind:'tile',index:1},{kind:'slot',index:0});
  p.run(4000);assert.equal(target.hp,10000);assert.equal(p.sim.statuses.enemies.size,0);
 });
-test('8 heroes retain EXP45/70/105/140 and old ordinary stats are not replaced',()=>{
- assert.deepEqual(heroGrowth.expByLevel,[45,70,105,140]);assert.equal(heroGrowth.enemyExp,5);
+test('8 heroes share EXP10/20/30/40 while ordinary combat stats remain unchanged',()=>{
+ assert.deepEqual(heroGrowth.expByLevel,[10,20,30,40]);assert.equal(heroGrowth.rewards.kill,1);
  for(const h of heroRegistry)assert.deepEqual([1,2,3,4,5].map(l=>getHeroStats(l,h.id).damage),[10,15,20,25,30]);
 });
 
-test('Poison records its own participation, grants5 EXP on death, emits no ordinary attack',()=>{
+test('Poison final tick earns killer1 EXP, emits no ordinary attack',()=>{
  const p=setup('yongqi'),enemy=p.enemy(150,5);p.ready();
- const events=p.run(1000);assert.equal(enemy.hp,0);assert.equal(p.link.currentExp,5);
+ const events=p.run(1000);assert.equal(enemy.hp,0);assert.equal(p.link.currentExp,1);
  assert.equal(events.filter(e=>e.kind==='hit'&&e.source==='dot').length,1);
  assert.equal(events.some(e=>e.kind==='heroAttack'||e.kind==='attack'),false);
 });

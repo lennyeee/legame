@@ -85,7 +85,7 @@ test('new calibration changes ordinary stats but retains economics and bounded g
  assert.equal(getCombatStats({type:'刀',level:1}).damage,3);
  assert.equal(combatConfig.enemy.moveSpeed,45);assert.equal(combatConfig.enemy.killReward,1);
  assert.equal(itemEffects.upgradeCooldownMs,50000);assert.equal(itemEffects.hasteCooldownMs,20000);
- assert.equal(heroGrowth.enemyExp,5);assert.equal(combatConfig.enemy.hitRadius,20);
+ assert.equal(heroGrowth.rewards.kill,1);assert.equal(combatConfig.enemy.hitRadius,20);
  assert.ok(combatConfig.visuals.enemyRadius*2>=42&&combatConfig.visuals.enemyRadius*2<=48);
 });
 

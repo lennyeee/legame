@@ -1,11 +1,9 @@
-import { gameConfig, recruitmentWeights } from '../config/game';
+import { gameConfig, recruitmentCategoryScale, recruitmentCategories } from '../config/game';
 import type { ReserveItem } from './items';
 import { drawWeighted } from '../utils/random';
 import { copyLoadout } from './equipment';
 import type { Loadout } from './equipment';
-import { heroRecipes } from '../config/heroes';
-import { itemEffects } from '../config/itemEffects';
-import { farmerConfig } from '../config/farmer';
+import { recruitableHeroLetters } from '../config/heroes';
 import { passiveEconomy } from '../config/equipment';
 import { isUnit } from './items';
 
@@ -64,11 +62,17 @@ export function recruit(state: RecruitmentState, random?: () => number): boolean
 }
 
 export function recruitmentPool(loadout: Loadout) {
-  const multiplier = loadout.passive.some(item => item.id === 'hero_recruitment')
-    ? itemEffects.heroRecruitmentMultiplier : 1;
+  const hero = loadout.passive.some(item => item.id === 'hero_recruitment');
+  const farmer = loadout.passive.some(item => item.id === 'farmer');
+  const category = recruitmentCategories[hero ? (farmer ? 'heroAndFarmer' : 'hero') : (farmer ? 'farmer' : 'default')];
+  const ordinary = new Set(['刀', '枪', '弓', '骑']);
+  const ordinaryWeight = category.ordinary * recruitmentCategoryScale / ordinary.size;
+  const letterWeight = category.heroLetter * recruitmentCategoryScale / recruitableHeroLetters.length;
   const pool: { value: typeof gameConfig.recruitmentPool[number] | '农'; weight: number }[] =
-    gameConfig.recruitmentPool.map(value => ({ value, weight: recruitmentWeights[value]
-      * (heroRecipes.some(recipe => recipe.letters.some(letter => letter === value)) ? multiplier : 1) }));
-  if (loadout.passive.some(item => item.id === 'farmer')) pool.push({ value: '农', weight: farmerConfig.recruitmentWeight });
+    gameConfig.recruitmentPool.map(value => ({ value,
+      weight: value === '铲' ? category.shovel * recruitmentCategoryScale
+        : ordinary.has(value) ? ordinaryWeight : letterWeight,
+    }));
+  if (farmer) pool.push({ value: '农', weight: category.farmer * recruitmentCategoryScale });
   return pool;
 }

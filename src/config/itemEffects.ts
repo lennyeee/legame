@@ -3,7 +3,6 @@ export const itemEffects = {
   hasteCooldownMs: 20_000,
   hasteAttackSpeedMultiplier: 1.5,
   upgradeCooldownMs: 50_000,
-  heroRecruitmentMultiplier: 2,
 } as const;
 
 export function activeItemCooldown(id: string): number | undefined {
