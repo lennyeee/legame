@@ -228,3 +228,134 @@ test('a late BGM decode retries battle without reverting to menu music', () => {
   load.emit('filecomplete', 'battle_bgm', 'audio');
   assert.deepEqual(backend.keys(), ['battle_bgm']);
 });
+
+function suspendedContext() {
+  return Object.assign(new EventEmitter(), {
+    state: 'suspended', resumes: 0,
+    addEventListener(event, listener) { this.on(event, listener); },
+    resume() { this.resumes++; this.state = 'running'; this.emit('statechange'); return Promise.resolve(); },
+  });
+}
+
+test('HOME keeps desired BGM pending until a real gesture resumes a suspended context', async () => {
+  const backend = new Backend(); backend.context = suspendedContext();
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene);
+  assert.equal(audio.state.desired, 'home_bgm'); assert.equal(audio.state.bgmKey, null);
+  assert.equal(backend.clips.length, 0);
+  scene.input.emit('pointerdown'); await Promise.resolve();
+  assert.equal(backend.context.resumes, 1);
+  assert.equal(audio.state.bgmKey, 'home_bgm'); assert.equal(backend.clips[0].isPlaying, true);
+});
+
+test('native canvas touch restores HOME BGM even when a button stops Phaser pointer propagation', async () => {
+  const backend = new Backend(); backend.context = suspendedContext(); backend.locked = true;
+  const listeners = new Map();
+  const canvas = {
+    addEventListener(event, listener) { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(listener); },
+    removeEventListener(event, listener) { listeners.get(event)?.delete(listener); },
+    dispatch(event) { for (const listener of [...(listeners.get(event) ?? [])]) listener(); },
+  };
+  const audio = new AudioManager(backend);
+  const scene = { input: new EventEmitter(), events: new EventEmitter(), game: { canvas } };
+  audio.menu(scene);
+  assert.equal(scene.input.listenerCount('pointerdown'), 0); // Phaser stopPropagation can suppress it.
+  canvas.dispatch('touchstart'); // Native capture still runs before Phaser's object handler.
+  backend.locked = false; backend.emit('unlocked'); await Promise.resolve();
+  assert.equal(backend.context.resumes, 1);
+  assert.equal(audio.state.bgmKey, 'home_bgm'); assert.deepEqual(backend.keys(), ['home_bgm']);
+  assert.equal(listeners.get('touchstart').size, 0);
+});
+
+test('a true play result while WebAudio becomes suspended never marks BGM as playing', async () => {
+  const backend = new Backend(); backend.context = suspendedContext(); backend.context.state = 'running';
+  const normalAdd = backend.add.bind(backend); let first = true;
+  backend.add = (key, config) => {
+    const clip = normalAdd(key, config); const play = clip.play.bind(clip);
+    if (first) { first = false; clip.play = config => { const started = play(config); backend.context.state = 'suspended'; return started; }; }
+    return clip;
+  };
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene);
+  assert.equal(audio.state.desired, 'home_bgm'); assert.equal(audio.state.bgmKey, null);
+  assert.equal(backend.clips[0].destroyed, true);
+  scene.input.emit('pointerdown'); await Promise.resolve();
+  assert.equal(audio.state.bgmKey, 'home_bgm'); assert.equal(backend.clips.at(-1).isPlaying, true);
+});
+
+test('failed battle switch cannot leave a silent menu BGM marked as actual playback', async () => {
+  const backend = new Backend(); backend.context = suspendedContext(); backend.context.state = 'running';
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene); const menu = backend.clips[0];
+  const normalAdd = backend.add.bind(backend); let interrupt = true;
+  backend.add = (key, config) => {
+    const clip = normalAdd(key, config); const play = clip.play.bind(clip);
+    if (interrupt) { interrupt = false; clip.play = config => { const started = play(config); backend.context.state = 'suspended'; return started; }; }
+    return clip;
+  };
+  audio.battle(scene);
+  assert.equal(menu.destroyed, true); assert.equal(audio.state.desired, 'battle_bgm');
+  assert.equal(audio.state.bgmKey, null);
+  scene.input.emit('pointerdown'); await Promise.resolve();
+  assert.equal(audio.state.bgmKey, 'battle_bgm');
+});
+
+test('HTML5 play returning true does not count as audible until its media element fires playing', () => {
+  const backend = new Backend();
+  backend.add = (key, config) => {
+    const clip = new Clip(key, config);
+    clip.audio = Object.assign(new EventEmitter(), {
+      paused: true, addEventListener(event, listener) { this.on(event, listener); },
+      removeEventListener(event, listener) { this.off(event, listener); },
+    });
+    backend.clips.push(clip); return clip;
+  };
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene);
+  assert.equal(audio.state.desired, 'home_bgm'); assert.equal(audio.state.pendingBgm, 'home_bgm');
+  assert.equal(audio.state.bgmKey, null);
+  scene.input.emit('pointerdown');
+  assert.equal(backend.clips[0].destroyed, true);
+  const second = backend.clips[1];
+  second.audio.paused = false; second.audio.emit('playing');
+  assert.equal(audio.state.pendingBgm, null); assert.equal(audio.state.bgmKey, 'home_bgm');
+});
+
+test('unlock after switching to battle starts only the current desired BGM', async () => {
+  const backend = new Backend(); backend.context = suspendedContext();
+  const audio = new AudioManager(backend);
+  const home = { input: new EventEmitter(), events: new EventEmitter() };
+  const battle = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(home); audio.battle(battle);
+  battle.input.emit('pointerdown'); await Promise.resolve();
+  assert.deepEqual(backend.keys(), ['battle_bgm']); assert.equal(audio.state.bgmKey, 'battle_bgm');
+});
+
+test('music disabled during unlock stays silent; enabling it resumes the desired track', async () => {
+  const backend = new Backend(); backend.context = suspendedContext();
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene); audio.setOptions({ musicEnabled: false, sfxEnabled: true });
+  scene.input.emit('pointerdown'); await Promise.resolve();
+  assert.equal(audio.state.bgmKey, null); assert.equal(backend.clips.length, 0);
+  audio.setOptions({ musicEnabled: true, sfxEnabled: true });
+  assert.equal(audio.state.bgmKey, 'home_bgm'); assert.deepEqual(backend.keys(), ['home_bgm']);
+});
+
+test('WebAudio interruption invalidates actual BGM and recovery starts the desired track again', async () => {
+  const backend = new Backend(); backend.context = suspendedContext(); backend.context.state = 'running';
+  const audio = new AudioManager(backend); const scene = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.menu(scene); const original = backend.clips[0];
+  backend.context.state = 'interrupted'; backend.context.emit('statechange');
+  assert.equal(original.destroyed, true); assert.equal(audio.state.bgmKey, null);
+  assert.equal(audio.state.desired, 'home_bgm');
+  scene.input.emit('pointerdown'); await Promise.resolve();
+  assert.equal(audio.state.bgmKey, 'home_bgm'); assert.equal(backend.clips[1].isPlaying, true);
+});
+
+test('failed battle resume does not leave a false playing state', () => {
+  const { backend, audio } = setup(); audio.battle(); const first = backend.clips[0];
+  audio.pauseBattle(); first.resume = () => false;
+  audio.resumeBattle();
+  assert.equal(first.destroyed, true); assert.equal(audio.state.bgmKey, 'battle_bgm');
+  assert.equal(backend.clips[1].isPlaying, true);
+});
