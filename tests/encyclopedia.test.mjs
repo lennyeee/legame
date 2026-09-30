@@ -51,6 +51,12 @@ test('图鉴恰好收录Registry中8名武将，人物叙事与战斗配置分�
   assert.match(formatHeroEffect(heroEncyclopediaEntry('abing').skill.effectByLevel[0]), /持续 4秒/);
 });
 
+test('网页标题和游戏画布名称使用正式名称《保卫小乐》', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /<title>保卫小乐<\/title>/);
+  assert.match(html, /aria-label="保卫小乐"/);
+});
+
 test('普通兵仅更改显示名，内部ID、属性和说明仍按原类型索引', () => {
   assert.deepEqual(unitDisplayNames, { 刀: '刃', 枪: '贯', 弓: '狙', 骑: '爆' });
   assert.deepEqual(Object.keys(unitDescriptions), ['刀', '枪', '弓', '骑']);
@@ -101,24 +107,32 @@ function sceneHarness() {
   return { scene, objects, destinations, click };
 }
 
-test('HOME入口、八名卡片、详情返回与世界观入口可达', () => {
+test('档案默认武将分类，八名卡片/详情/世界分类切换与HOME返回可达', () => {
   const { scene, objects, destinations, click } = sceneHarness();
+  assert.equal(scene.page, 'heroes');
+  assert.ok(objects.some(item => item.active && item.text === '档案'));
+  assert.ok(objects.some(item => item.active && item.text === '世界'));
+  assert.ok(objects.some(item => item.active && item.text === '武将'));
   for (const id of heroEncyclopediaIds) assert.ok(objects.some(item => item.active && item.text === heroEncyclopediaEntry(id).hero.name));
-  click(205, 430);
+  click(205, 360);
   assert.equal(scene.page, heroEncyclopediaIds[0]);
   assert.ok(objects.some(item => item.active && item.text === '—— 战斗档案 ——'));
   click(76, 83);
-  assert.equal(scene.page, 'list');
-  click(375, 285);
+  assert.equal(scene.page, 'heroes');
+  click(245, 157);
   assert.equal(scene.page, 'world');
-  click(76, 83);
+  assert.ok(objects.some(item => item.active && item.text === '天选之子'));
+  assert.ok(objects.some(item => item.active && item.text.includes('想动乐，先过我们这一关。')));
+  assert.ok(objects.some(item => item.active && item.text.includes('阻止外星人击杀乐')));
+  click(505, 157);
+  assert.equal(scene.page, 'heroes');
   click(76, 83);
   assert.deepEqual(destinations, ['ReadyScene']);
 });
 
 test('长小传可触摸/滚轮滚动，返回按钮保持在滚动区外', () => {
   const { scene, objects, click } = sceneHarness();
-  click(205, 430);
+  click(205, 360);
   assert.ok(scene.maxScroll > 0);
   scene.scrollBy(400);
   assert.equal(scene.scrollOffset, 400);
@@ -130,6 +144,6 @@ test('长小传可触摸/滚轮滚动，返回按钮保持在滚动区外', () =
   assert.equal(scene.scrollOffset, scene.maxScroll);
   assert.ok(objects.some(item => item.active && item.interactive && item.y === 83));
   click(76, 83);
-  assert.equal(scene.page, 'list');
+  assert.equal(scene.page, 'heroes');
   assert.equal(scene.scrollOffset, 0);
 });

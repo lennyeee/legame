@@ -123,6 +123,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   for(const scene of [game,ready,items,howToPlay])scene.playerProgress=progress;
   const result = new ResultScene(), shop = new ShopScene();shop.playerProgress=progress;
   let resultActive=false,shopActive=false;
+  let archiveOpenCount=0;
   let active = true;
   let overlayActive = false;
   let readyActive = true;
@@ -198,7 +199,8 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
       if (key === 'HowToPlayScene') {
         shutdown(ready);readyActive=false;howToPlayActive=true;prepare(howToPlay);howToPlay.create();return;
       }
-      assert.fail('HOME starts only ItemsScene directly');
+      if (key === 'HeroEncyclopediaScene') { archiveOpenCount++; return; }
+      assert.fail('Unexpected direct HOME scene');
     },
   };
   ready.scene.launch=(key,data)=>{assert.equal(key,'MatchingScene');startMatching(data);};
@@ -269,7 +271,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
   return { progress, result, shop, get overlay(){return resultActive?result:overlay;}, game, ready, matching, setupHistory, finishFlow, shutdown, items, howToPlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
-    startCount: () => startCount, globalEvents };
+    startCount: () => startCount, archiveOpenCount: () => archiveOpenCount, globalEvents };
 }
 
 // 使用真实漏怪进入指定结算，避免再依赖已退役的单边清场胜利条件。
@@ -284,7 +286,7 @@ test('HOME内匹配保持视觉和配置锁定，VS散开时才创建战斗且�
  for(let i=0;i<10;i++)p.ready.requestStartGame();
  assert.equal(p.matching.phase,'MATCHING');assert.equal(p.startCount(),0);
  assert.equal(p.text(375,765,p.ready),'正在寻找对手…');
- assert.equal(p.objects.get(p.ready),homeObjects);assert.equal(p.text(375,440,p.ready),'乐 GAME');
+ assert.equal(p.objects.get(p.ready),homeObjects);assert.equal(p.text(375,440,p.ready),'保卫小乐');
  assert.equal(homeObjects.find(o=>o.kind==='rectangle'&&o.x===375&&o.y===765).interactive,false);
  assert.equal(homeObjects.find(o=>o.kind==='rectangle'&&o.x===375&&o.y===885).interactive,false);
  p.click(375,885);assert.equal(p.objects.has(p.items),false);
@@ -529,7 +531,7 @@ test('初始READY无对局控制器和计时器，长时间等待无敌人/资�
   const p = pve(false);
   assert.equal(p.ready.startState, 'READY');
   assert.equal(p.isActive(), false);
-  assert.equal(p.text(375,440,p.ready), '乐 GAME');
+  assert.equal(p.text(375,440,p.ready), '保卫小乐');
   assert.equal(p.text(375,765,p.ready), '开始对战');
   assert.equal(p.text(730,1314,p.ready), 'v' + GAME_VERSION);
   const before = p.snapshot();
@@ -1758,7 +1760,9 @@ test('首次获得HeroLetter提示只读征兵结果，显示时保存；重载�
 });
 
 test('HOME玩法入口进入说明页，五步内容可见且返回HOME',()=>{
- const p=pve(false);assert.equal(p.text(375,1185,p.ready),'？ 玩法');
+ const p=pve(false);assert.equal(p.text(375,1085,p.ready),'档案');assert.equal(p.text(375,1185,p.ready),'？ 玩法');
+ assert.equal(p.text(375,440,p.ready),'保卫小乐');
+ p.click(375,1085);assert.equal(p.archiveOpenCount(),1);p.ready.openingItems=false;
  p.click(375,1185);
  assert.equal(p.text(375,90,p.howToPlay),'怎么玩？');
  for(const title of ['征兵','拖上战场','召唤武将','扩大战场','保护乐','别让乐死了。'])

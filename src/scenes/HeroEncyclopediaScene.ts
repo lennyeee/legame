@@ -4,13 +4,13 @@ import { worldLore } from '../content/heroLore';
 import type { HeroId } from '../config/heroes';
 import { label } from '../ui/text';
 
-type Page = 'list' | 'world' | HeroId;
+type Page = 'heroes' | 'world' | HeroId;
 const VIEW_TOP = 182;
 const VIEW_BOTTOM = 1230;
 const VIEW_HEIGHT = VIEW_BOTTOM - VIEW_TOP;
 
 export class HeroEncyclopediaScene extends Phaser.Scene {
-  page: Page = 'list';
+  page: Page = 'heroes';
   scrollOffset = 0;
   maxScroll = 0;
   private content?: Phaser.GameObjects.Container;
@@ -31,7 +31,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       this.input.off('pointerup', this.onTouchUp, this);
       this.touchY = null;
     });
-    this.showPage('list');
+    this.showPage('heroes');
   }
 
   showPage(page: Page): void {
@@ -47,25 +47,35 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
     const back = this.add.rectangle(76, 83, 104, 62, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 76, 83, '返回', 23, '#fffaf0');
     back.on('pointerdown', () => {
-      if (this.page === 'list') this.scene.start('ReadyScene');
-      else this.showPage('list');
+      if (this.page === 'heroes' || this.page === 'world') this.scene.start('ReadyScene');
+      else this.showPage('heroes');
     });
-    label(this, 375, 78, page === 'list' ? '武将图鉴' : page === 'world' ? '世界观' : heroEncyclopediaEntry(page).hero.name, 38);
-    if (page === 'list') this.showList();
+    label(this, 375, 78, page !== 'world' && page !== 'heroes' ? heroEncyclopediaEntry(page).hero.name : '档案', 38);
+    this.showTabs(page === 'world' ? 'world' : 'heroes');
+    if (page === 'heroes') this.showList();
     else this.showScrollable(page);
   }
 
+  private showTabs(active: 'world' | 'heroes'): void {
+    const tabs = [
+      { key: 'world' as const, title: '世界', x: 245 },
+      { key: 'heroes' as const, title: '武将', x: 505 },
+    ];
+    tabs.forEach(tab => {
+      const selected = tab.key === active;
+      const shape = this.add.rectangle(tab.x, 157, 236, 52, selected ? 0x697e67 : 0xe4e0d2)
+        .setStrokeStyle(1, 0xb6bbab).setInteractive({ useHandCursor: true });
+      label(this, tab.x, 157, tab.title, 23, selected ? '#fffaf0' : '#4c6651');
+      shape.on('pointerdown', () => this.showPage(tab.key));
+    });
+  }
+
   private showList(): void {
-    label(this, 375, 182, '他们都是为了乐而来的。', 24, '#6d756b');
-    const worldButton = this.add.rectangle(375, 285, 630, 120, 0xe4e0d2)
-      .setStrokeStyle(2, 0xb6bbab).setInteractive({ useHandCursor: true });
-    label(this, 375, 264, '地球沦陷之后', 30);
-    label(this, 375, 309, '阅读世界观  ›', 22, '#627863');
-    worldButton.on('pointerdown', () => this.showPage('world'));
+    label(this, 375, 246, '他们都是为了乐而来的。', 24, '#6d756b');
     heroEncyclopediaIds.forEach((id, index) => {
       const entry = heroEncyclopediaEntry(id);
       const x = index % 2 === 0 ? 205 : 545;
-      const y = 430 + Math.floor(index / 2) * 174;
+      const y = 360 + Math.floor(index / 2) * 174;
       const card = this.add.rectangle(x, y, 310, 148, 0xfffcf4)
         .setStrokeStyle(3, entry.hero.cardColor === 'gold' ? 0xb49a50 : 0x9b83ae)
         .setInteractive({ useHandCursor: true });
@@ -77,7 +87,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
     label(this, 375, 1200, '选择一位武将查看人物小传与战斗档案', 19, '#8b8272');
   }
 
-  private showScrollable(page: Exclude<Page, 'list'>): void {
+  private showScrollable(page: Exclude<Page, 'heroes'>): void {
     this.clip = this.add.graphics();
     this.clip.fillStyle(0xffffff).fillRect(36, VIEW_TOP, 678, VIEW_HEIGHT);
     this.clip.setVisible(false);
@@ -93,8 +103,12 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       y += text.height + gap;
     };
     if (page === 'world') {
-      addText('乐与地球', 35, '#4c6651', 34);
-      worldLore.forEach(paragraph => addText(paragraph, 24, '#323b32', 34));
+      addText('外星人真正的目标', 27, '#6d756b', 18);
+      addText('天选之子', 39, '#4c6651', 28);
+      worldLore.slice(0, 4).forEach(paragraph => addText(paragraph, 23, '#323b32', 25));
+      const finalQuote = worldLore[4]?.match(/「(.+)」/)?.[1];
+      if (finalQuote) addText(`「${finalQuote}」`, 29, '#4c6651', 26);
+      addText('乐目前没有战斗能力。朋友们正在保护他，而我们的目标是阻止外星人击杀乐。', 22, '#323b32', 12);
     } else {
       const { hero, lore, recipe, quality, attackMode, range, levels, skill } = heroEncyclopediaEntry(page);
       const portrait = this.add.rectangle(375, y + 104, 604, 208, 0xe7e4d7)
@@ -140,7 +154,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
     this.scrollBy(dy);
   }
   private onTouchDown(pointer: Phaser.Input.Pointer): void {
-    if (pointer.y >= VIEW_TOP && pointer.y <= VIEW_BOTTOM && this.page !== 'list') this.touchY = pointer.y;
+    if (pointer.y >= VIEW_TOP && pointer.y <= VIEW_BOTTOM && this.page !== 'heroes') this.touchY = pointer.y;
   }
   private onTouchMove(pointer: Phaser.Input.Pointer): void {
     if (this.touchY === null || !pointer.isDown) return;

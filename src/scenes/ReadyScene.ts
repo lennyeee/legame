@@ -53,7 +53,7 @@ export class ReadyScene extends Phaser.Scene {
     };
     profileButton.on('pointerdown', () => open(false)); settingsButton.on('pointerdown', () => open(true));
     this.add.rectangle(375, 440, 600, 450, 0xeee9dc).setStrokeStyle(2, 0xc2bcae);
-    label(this, 375, 440, '乐 GAME', 58);
+    label(this, 375, 440, '保卫小乐', 58);
     label(this, 375, 565, '角色 · 地图展示区', 24, '#8b8272');
     const button = this.add.rectangle(375, 765, 330, 86, 0x697e67)
       .setInteractive({ useHandCursor: true });
@@ -78,7 +78,7 @@ export class ReadyScene extends Phaser.Scene {
       this.scene.start('ShopScene');
     });
     const heroesButton = this.add.rectangle(375, 1085, 250, 72, 0x697e67).setInteractive({ useHandCursor: true });
-    label(this, 375, 1085, '武将', 28, '#fffaf0');
+    label(this, 375, 1085, '档案', 28, '#fffaf0');
     heroesButton.on('pointerdown', () => {
       if (this.startState !== 'READY' || this.openingItems) return;
       this.openingItems = true;
