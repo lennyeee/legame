@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { audioAssets, audioAssetUrl, audioTransitionMs, type AudioKey, type BgmKey, type SfxKey } from '../config/audio';
 import type { CombatEvent } from '../combat/CombatSimulation';
+import { installAudioDebug } from './AudioDebug';
 
 export interface AudioOptions { musicEnabled: boolean; sfxEnabled: boolean }
 interface Clip {
@@ -35,11 +36,20 @@ export class AudioManager {
   private readonly activeSfx = new Map<SfxKey, Set<Clip>>();
   private readonly lastSfx = new Map<SfxKey, number>();
   private paused = false;
+  readonly diagnostics = { attempt: 'none', result: 'none', unlock: 'none', loader: 'none', history: [] as string[], assets: {} as Record<string, string> };
+  recordDiagnostic(kind: 'attempt' | 'result' | 'unlock' | 'loader', detail: string): void {
+    const message = `${Math.round(this.now())}ms ${detail}`;
+    this.diagnostics[kind] = message;
+    this.diagnostics.history.push(`${kind}: ${message}`);
+    if (this.diagnostics.history.length > 30) this.diagnostics.history.shift();
+  }
+  debugStopBgm(): void { this.stopMusic(); }
 
   constructor(private readonly backend?: AudioBackend, private readonly now: () => number = () => performance.now()) {
     try {
-      backend?.on?.('unlocked', () => this.startDesired(this.scene));
+      backend?.on?.('unlocked', () => { this.recordDiagnostic('unlock', 'Phaser unlocked'); this.startDesired(this.scene); });
       backend?.context?.addEventListener?.('statechange', () => {
+        this.recordDiagnostic('unlock', `context statechange: ${backend.context?.state}`);
         if (backend.context?.state === 'running') this.startDesired(this.scene);
         else { this.invalidateBgm(); this.awaitGesture(this.scene); }
       });
@@ -65,7 +75,10 @@ export class AudioManager {
       const context = this.backend?.context;
       if (context && context.state !== 'running') {
         // resume() must be called during the native gesture, not in a later microtask.
-        void context.resume().then(() => this.startDesired(this.scene ?? scene), () => this.awaitGesture(this.scene ?? scene));
+        this.recordDiagnostic('unlock', `gesture resume requested: ${context.state}`);
+        void context.resume().then(() => { this.recordDiagnostic('unlock', `resume resolved: ${context.state}`); this.startDesired(this.scene ?? scene); }, error => {
+          this.recordDiagnostic('unlock', `resume rejected: ${String(error)}`); this.awaitGesture(this.scene ?? scene);
+        });
       } else this.startDesired(this.scene ?? scene);
     } catch { this.awaitGesture(this.scene ?? scene); }
   }
@@ -115,8 +128,11 @@ export class AudioManager {
       const old = this.bgm;
       const nextKey = this.desired;
       const volume = audioAssets[nextKey].volume;
+      this.recordDiagnostic('attempt', `${nextKey}: add/play loop=true`);
       const next = this.backend.add(nextKey, { loop: true, volume: old && scene?.tweens ? 0 : volume });
-      if (!next.play({ loop: true, volume: old && scene?.tweens ? 0 : volume }) || !next.isPlaying
+      const played = next.play({ loop: true, volume: old && scene?.tweens ? 0 : volume });
+      this.recordDiagnostic('result', `${nextKey}: play=${played} isPlaying=${next.isPlaying} volume=${next.volume} context=${this.backend.context?.state ?? 'no WebAudio context'}`);
+      if (!played || !next.isPlaying
         || (this.backend.context && this.backend.context.state !== 'running')) {
         next.destroy();
         if (this.backend.context && this.backend.context.state !== 'running') this.invalidateBgm();
@@ -125,6 +141,7 @@ export class AudioManager {
       if (next.audio) {
         // Phaser HTML5AudioSound.play() can return true before the media play Promise rejects.
         const onPlaying = (): void => {
+          this.recordDiagnostic('result', `${nextKey}: HTMLMediaElement playing event`);
           if (this.pendingBgm?.clip !== next) return;
           this.pendingBgm.cancel(); this.pendingBgm = null;
           try {
@@ -140,7 +157,8 @@ export class AudioManager {
         } };
         this.awaitGesture(scene ?? this.scene);
       } else this.commitBgm(nextKey, next, scene);
-    } catch {
+    } catch (error) {
+      this.recordDiagnostic('result', `BGM exception: ${String(error)}`);
       if (this.backend?.context && this.backend.context.state !== 'running') this.invalidateBgm();
       this.awaitGesture(scene ?? this.scene); /* Audio must never interrupt gameplay or navigation. */
     }
@@ -154,7 +172,7 @@ export class AudioManager {
       this.transitions.push(scene.tweens.add({ targets: old, volume: 0, duration: audioTransitionMs, onComplete: () => {
         old.stop(); old.destroy(); if (this.fading === old) this.fading = null;
       } }), scene.tweens.add({ targets: next, volume: audioAssets[key].volume, duration: audioTransitionMs }));
-    } else { old?.stop(); old?.destroy(); }
+    } else { next.volume = audioAssets[key].volume; old?.stop(); old?.destroy(); }
   }
   private discardPending(): void {
     const pending = this.pendingBgm;
@@ -251,6 +269,7 @@ export function audioForScene(scene: Phaser.Scene): AudioManager {
     if (!audio) {
       audio = new AudioManager(scene.game.sound as unknown as AudioBackend | undefined);
       registry.set(AUDIO_REGISTRY_KEY, audio);
+      try { installAudioDebug(scene.game, audio); } catch { /* Diagnostic UI cannot change normal audio initialization. */ }
     }
     return audio;
   } catch {
@@ -264,13 +283,31 @@ export function audioForScene(scene: Phaser.Scene): AudioManager {
 export function loadAudioInBackground(scene: Phaser.Scene, audio = audioForScene(scene)): void {
   try {
     const onFileComplete = (key: string): void => {
+      audio.diagnostics.assets[key] = 'filecomplete: cache ready';
+      audio.recordDiagnostic('loader', `${scene.sys?.settings.key ?? 'scene'} filecomplete ${key}; cache=${scene.cache.audio.exists(key)}`);
       if (key === audio.state.desired) audio.retryDesired(scene);
     };
     scene.load.on('filecomplete', onFileComplete);
+    scene.load.on('fileload', (file: { key: string }) => {
+      audio.diagnostics.assets[file.key] = 'downloaded; waiting for decode/process/cache';
+      audio.recordDiagnostic('loader', `download complete ${file.key}; decode/process pending`);
+    });
+    scene.load.on('loaderror', (file: { key: string }) => {
+      audio.diagnostics.assets[file.key] = 'download error';
+      audio.recordDiagnostic('loader', `download error ${file.key}`);
+    });
+    scene.load.on('complete', () => {
+      for (const key of Object.keys(audio.diagnostics.assets)) if (!scene.cache.audio.exists(key) && audio.diagnostics.assets[key].startsWith('downloaded')) {
+        audio.diagnostics.assets[key] = 'loader finished without cache (process/decode failed or interrupted)';
+      }
+      audio.recordDiagnostic('loader', 'loader complete');
+    });
     scene.events.once('shutdown', () => scene.load.off('filecomplete', onFileComplete));
+    scene.events.once('shutdown', () => audio.recordDiagnostic('loader', `${scene.sys?.settings.key ?? 'scene'} shutdown; loader reset`));
     let queued = false;
     for (const key of Object.keys(audioAssets) as AudioKey[]) {
       if (scene.cache.audio.exists(key)) continue;
+      audio.diagnostics.assets[key] = 'queued';
       try { scene.load.audio(key, audioAssetUrl(key)); queued = true; } catch { /* Skip unsupported files. */ }
     }
     if (queued) scene.load.start();

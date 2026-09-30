@@ -17,6 +17,7 @@ registerHooks({
   },
 });
 const { AudioManager, audioForScene, loadAudioInBackground } = await import('../src/audio/AudioManager.ts');
+const { installAudioDebug, audioDebugSnapshot } = await import('../src/audio/AudioDebug.ts');
 const { audioAssets, audioAssetUrl } = await import('../src/config/audio.ts');
 const { PlayerProgress } = await import('../src/progression/PlayerProgress.ts');
 const { defaultPlayerSave, sanitizeSave } = await import('../src/progression/PlayerSave.ts');
@@ -358,4 +359,60 @@ test('failed battle resume does not leave a false playing state', () => {
   audio.resumeBattle();
   assert.equal(first.destroyed, true); assert.equal(audio.state.bgmKey, 'battle_bgm');
   assert.equal(backend.clips[1].isPlaying, true);
+});
+
+test('inactive scene fallback restores nonzero BGM volume when crossfade cannot run', () => {
+  const { backend, audio } = setup(); audio.menu();
+  const scene = { sys: { isActive: () => false }, tweens: { add() { throw new Error('inactive tween must not run'); } } };
+  audio.battle(scene);
+  assert.equal(backend.clips[1].isPlaying, true);
+  assert.equal(backend.clips[1].volume, audioAssets.battle_bgm.volume);
+  assert.equal(backend.clips[0].destroyed, true);
+});
+
+test('audio diagnostics distinguish downloaded, decoded/cache-ready and failed assets', () => {
+  const { audio } = setup(); const cached = new Set();
+  const load = Object.assign(new EventEmitter(), { audio() {}, start() {} });
+  loadAudioInBackground({ cache: { audio: { exists: key => cached.has(key) } }, load, events: new EventEmitter() }, audio);
+  load.emit('fileload', { key: 'home_bgm' });
+  assert.match(audio.diagnostics.assets.home_bgm, /waiting for decode/);
+  cached.add('home_bgm'); load.emit('filecomplete', 'home_bgm');
+  assert.match(audio.diagnostics.assets.home_bgm, /cache ready/);
+  load.emit('fileload', { key: 'battle_bgm' }); load.emit('complete');
+  assert.match(audio.diagnostics.assets.battle_bgm, /without cache/);
+  load.emit('loaderror', { key: 'ui_click' });
+  assert.equal(audio.diagnostics.assets.ui_click, 'download error');
+});
+
+test('audio debug is absent by default and for every query except audioDebug=1', () => {
+  let created = 0; const doc = { body: {}, createElement() { created++; throw new Error('must not create DOM'); } };
+  const { audio } = setup(); const before = audio.state;
+  for (const search of ['', '?audioDebug=0', '?audioDebug=true', '?other=1']) assert.equal(installAudioDebug({}, audio, search, doc), undefined);
+  assert.equal(created, 0); assert.deepEqual(audio.state, before);
+});
+
+test('debug overlay is read-only until real buttons run; direct playback bypasses manager and cleans up', () => {
+  const { backend, audio } = setup(); backend.context = suspendedContext(); backend.context.state = 'running';
+  backend.getAll = key => backend.clips.filter(clip => clip.key === key);
+  const game = { sound: backend, config: { audio: {} }, events: new EventEmitter(),
+    cache: { audio: { exists: () => true, get: () => ({ duration: 123 }) } },
+    scene: { getScenes: () => [{ sys: { settings: { key: 'ReadyScene' } }, startState: 'READY' }] } };
+  const element = () => ({ children: [], style: {}, append(...items) { this.children.push(...items); }, remove() { this.removed = true; } });
+  const doc = { body: element(), createElement: element };
+  audio.menu(); const before = audio.state;
+  const dispose = installAudioDebug(game, audio, '?audioDebug=1', doc);
+  try {
+    assert.deepEqual(audio.state, before); assert.equal(backend.clips.length, 1);
+    const snapshot = audioDebugSnapshot(game, audio);
+    assert.match(snapshot, /Backend: WebAudio/); assert.match(snapshot, /ReadyScene:READY/);
+    assert.match(snapshot, /decodedDuration=123/); assert.match(snapshot, /playing=true/);
+    const panel = doc.body.children[0];
+    panel.children.find(child => child.textContent === 'Play Battle BGM Direct').onclick();
+    assert.equal(backend.clips.at(-1).key, 'battle_bgm');
+    assert.equal(audio.state.desired, 'home_bgm'); // Direct test is not a menu/battle state transition.
+    assert.match(audio.diagnostics.result, /DIRECT battle_bgm/);
+    panel.children.find(child => child.textContent === 'Stop BGM').onclick();
+    assert.equal(backend.clips.at(-1).destroyed, true);
+  } finally { dispose(); }
+  assert.equal(doc.body.children[0].removed, true);
 });
