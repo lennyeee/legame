@@ -28,6 +28,7 @@ const { boardProjection, BATTLEFIELD_DIVIDER_PX } = await import('../src/ui/boar
 const { testMap } = await import('../src/config/maps.ts');
 const { createBoardState } = await import('../src/systems/board.ts');
 const { BattleController } = await import('../src/combat/BattleController.ts');
+const { formatUnitCombatSnapshot } = await import('../src/ui/unitStatsPanel.ts');
 const { GameScene } = await import('../src/scenes/GameScene.ts');
 const { MatchingScene } = await import('../src/scenes/MatchingScene.ts');
 const { createBattleSetup, matchingDuration, flowConfig } = await import('../src/flow/battleSetup.ts');
@@ -824,8 +825,10 @@ const { PlayerSide } = await import('../src/systems/PlayerSide.ts');
 
 function setup(unit = { type: '刀', level: 1 }) {
   const graphics = [];
+  const texts = [];
   const scene = {
     events: new EventEmitter(), input: new EventEmitter(), game: { events: new EventEmitter() },
+    scale: { width: 750, height: 1334 },
     add: { graphics() {
       const graphic = {
         x:0,y:0,setPosition(){return this;},setScale(){return this;},
@@ -833,9 +836,15 @@ function setup(unit = { type: '刀', level: 1 }) {
         clear() { this.circle = false; return this; },
         setDepth() { return this; }, fillStyle() { return this; }, lineStyle() { return this; },
         fillCircle(_x,_y,radius) { this.circle = true; this.radius=radius; return this; }, strokeCircle() { return this; },
+        fillRoundedRect(){return this;},strokeRoundedRect(){return this;},destroy(){this.clear();},
       };
       graphics.push(graphic);
       return graphic;
+    }, text(x,y,text) {
+      const item={x,y,text,visible:true,setDepth(){return this;},setVisible(value){this.visible=value;return this;},
+        setPosition(x,y){this.x=x;this.y=y;return this;},setText(value){this.text=value;return this;},
+        destroy(){this.visible=false;this.text='';}};
+      texts.push(item);return item;
     } },
   };
   const side = new PlayerSide('bottom', testMap);
@@ -847,19 +856,20 @@ function setup(unit = { type: '刀', level: 1 }) {
     { positionAt: () => position });
   const pointer = { id: 1, primaryDown: true, x: 187.5, y: 602.5 };
   const render = () => controller.render([], 0);
-  return { scene, deployment, pointer, render, range: graphics[0], setPosition: next => { position = next; } };
+  return { scene, deployment, pointer, render, range: graphics[0], panel: texts[0],
+    side, setPosition: next => { position = next; } };
 }
 
 for (const event of ['pointerup', 'pointerupoutside']) {
-  test(`按住显示，${event} 立即清除且下一帧不残留`, () => {
-    const { scene, pointer, render, range } = setup();
+  test(`按住显示，${event} 后选中状态正确`, () => {
+    const { scene, pointer, render, range, panel } = setup();
     scene.input.emit('pointerdown', pointer);
     render();
     assert.equal(range.circle, true);
     scene.input.emit(event, pointer);
-    assert.equal(range.circle, false);
     render();
-    assert.equal(range.circle, false);
+    assert.equal(range.circle, event === 'pointerup');
+    assert.equal(panel.visible, event === 'pointerup');
   });
 }
 
@@ -879,13 +889,15 @@ test('开始拖动立即清除范围，拖动中后续帧及松手不恢复', ()
   assert.equal(range.circle, false);
 });
 
-test('待放置栏、空格和其他区域均不显示范围', () => {
-  const { scene, pointer, render, range, setPosition } = setup();
+test('待放置栏、空格和其他区域均不显示范围且关闭面板', () => {
+  const { scene, pointer, render, range, panel, setPosition } = setup();
+  scene.input.emit('pointerdown',pointer);scene.input.emit('pointerup',pointer);assert.equal(panel.visible,true);
   for (const position of [{ kind: 'slot', index: 0 }, { kind: 'tile', index: 1 }, null]) {
     setPosition(position);
     scene.input.emit('pointerdown', pointer);
     render();
     assert.equal(range.circle, false);
+    assert.equal(panel.visible,false);
     scene.input.emit('pointerup', pointer);
   }
 });
@@ -905,6 +917,57 @@ test('其他手指松开不影响当前按住；失焦会清除，退出场景�
     assert.equal(scene.input.listenerCount(event), 0);
   }
   assert.equal(scene.game.events.listenerCount('blur'), 0);
+});
+
+test('属性面板点击后显示实时数值，切换单位后同步切换，移走单位自动关闭', () => {
+  const { scene, side, pointer, panel, render, range, setPosition } = setup();
+  scene.input.emit('pointerdown', pointer);
+  scene.input.emit('pointerup', { ...pointer, primaryDown: false });
+  assert.match(panel.text, /刀兵  Lv\.1/);
+  assert.match(panel.text, /攻速：1\.25 次\/秒/);
+  side.board.tiles[1].unit = { type: '弓', level: 2 };
+  side.combat.syncBoard();
+  setPosition({ kind: 'tile', index: 1 });
+  scene.input.emit('pointerdown', pointer);
+  scene.input.emit('pointerup', { ...pointer, primaryDown: false });
+  render();
+  assert.match(panel.text, /弓兵  Lv\.2/);
+  assert.equal(range.circle, true);
+  side.board.tiles[1].unit = null;
+  side.combat.syncBoard(); render();
+  assert.equal(panel.visible, false);
+  assert.equal(range.circle, false);
+});
+
+test('面板与范围在拖动、暂停和场景销毁时清除', () => {
+  const { scene, side, pointer, panel, render, deployment, range } = setup();
+  scene.input.emit('pointerdown', pointer);scene.input.emit('pointerup', pointer);
+  assert.equal(panel.visible, true);
+  scene.input.emit('pointerdown', pointer);
+  deployment.draggedTile = 0;
+  scene.input.emit('pointermove', { ...pointer, x: pointer.x + 9 });
+  assert.equal(panel.visible, false);
+  assert.equal(range.circle, false);
+  scene.input.emit('pointerup', pointer);
+  deployment.draggedTile = null;
+  scene.input.emit('pointerdown', pointer);scene.input.emit('pointerup', pointer);
+  assert.equal(panel.visible, true);
+  side.pause();render();
+  assert.equal(panel.visible, false);
+  scene.events.emit('shutdown');
+  assert.equal(panel.visible, false);
+});
+
+test('属性文本以真实间隔换算攻速、75px换算格数，Lv5经验显示MAX', () => {
+  const { side } = setup({ type: '枪', level: 1 });
+  const ordinary = side.combat.getUnitCombatSnapshot(0);
+  assert.match(formatUnitCombatSnapshot(ordinary), /攻速：1\.25 次\/秒/);
+  assert.match(formatUnitCombatSnapshot(ordinary), /射程：2\.5 格/);
+  const max = formatUnitCombatSnapshot({ ...ordinary, kind: 'hero', name: '小美', level: 5,
+    exp: { current: 0, required: Infinity }, skill: { name: '顺序打击', status: '冷却：就绪',
+      description: '中距离单体普攻' } });
+  assert.match(max, /经验：MAX/);
+  assert.match(max, /技能：顺序打击/);
 });
 
 
@@ -951,11 +1014,11 @@ test('暂停只提供继续和返回主页，取消保持冻结，确认清理�
  p.click(375,p.result.resultSnapshot?1070:765);assert.notEqual(p.game.match,old);assert.equal(p.game.match.timeline.elapsedMs,0);
 });
 
-test('枪弓长按预览半径与实际索敌配置完全一致，松开清除',()=>{
+test('枪弓长按预览半径与实际索敌配置完全一致，点击后保持选中',()=>{
  for(const [type,level,expected]of [['枪',1,187.5],['枪',5,187.5],['弓',1,187.5],['弓',2,206.25],['弓',3,225],['弓',4,243.75],['弓',5,262.5]]){
    const {scene,pointer,render,range}=setup({type,level});
    scene.input.emit('pointerdown',pointer);render();assert.equal(range.radius,expected);
-   scene.input.emit('pointerup',pointer);assert.equal(range.circle,false);
+   scene.input.emit('pointerup',pointer);render();assert.equal(range.circle,true);
  }
 });
 
@@ -1653,5 +1716,5 @@ for(const def of getExpandedHeroes)test(`v0.67-B ${def.name} actual renderer exp
  assert.ok(graphics.some(g=>g.draws.some(d=>d[0]==='lineStyle'&&d[2]===(def.cardColor==='purple'?0x9768b5:0xb49a50))));
  assert.ok(p.objects.get(p.game).some(o=>o.kind==='text'&&o.text.startsWith('Lv.1')));
  p.game.input.emit('pointerup',{...pointer,primaryDown:false});
- assert.equal(graphics.some(g=>g.draws.some(d=>d[0]==='fillCircle'&&d[3]===def.baseAttackRange)),false);
+ assert.equal(graphics.some(g=>g.draws.some(d=>d[0]==='fillCircle'&&d[3]===def.baseAttackRange)),true);
 });

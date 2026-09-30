@@ -1,11 +1,9 @@
 import Phaser from 'phaser';
-import { isUnit } from '../systems/items';
-import { combatConfig, getCombatStats } from '../config/combat';
+import { combatConfig } from '../config/combat';
 import type { AttackEffect, CombatEvent } from '../combat/CombatSimulation';
 import { CombatSimulation } from '../combat/CombatSimulation';
 import { label } from './text';
-import { getHeroStats, heroVisuals, heroExpRequired, getHeroDefinition } from '../config/heroes';
-import { applyTileBonuses } from '../combat/tileBonuses';
+import { heroVisuals, heroExpRequired, getHeroDefinition } from '../config/heroes';
 import { skillConfigs } from '../config/skills';
 import type { HeroLink } from '../systems/heroActivation';
 import { boardDisplayScene, boardProjection } from './boardDisplay';
@@ -90,18 +88,16 @@ export class CombatView {
       this.graphics.fillRect(x, y, width * link.currentExp / heroExpRequired(link.level), 3);
     }
     if (this.selectedTile !== null) {
-      const unit = this.battle.board.tiles[this.selectedTile]?.unit;
-      const link = this.battle.heroLinks.find(link => link.leftIndex === this.selectedTile || link.rightIndex === this.selectedTile);
-      if (isUnit(unit) || link) {
-        const point = link?.origin ?? this.battle.map.cells[this.selectedTile]!;
-        const radius = isUnit(unit)
-          ? applyTileBonuses(getCombatStats(unit), this.battle.board, [this.selectedTile]).range
-          : applyTileBonuses(getHeroStats(link!.level, link!.heroId), this.battle.board, [link!.leftIndex, link!.rightIndex]).range;
-        const color = isUnit(unit) ? visuals.attackColors[unit.type] : heroVisuals.color;
+      const snapshot = this.battle.getUnitCombatSnapshot(this.selectedTile);
+      if (snapshot) {
+        const point = snapshot.kind === 'hero'
+          ? (snapshot.subject as HeroLink).origin : this.battle.map.cells[this.selectedTile]!;
+        const color = snapshot.kind === 'soldier'
+          ? visuals.attackColors[(snapshot.subject as import('../systems/items').Unit).type] : heroVisuals.color;
         this.range.fillStyle(color, 0.1);
-        this.range.fillCircle(point.x, point.y, radius);
+        this.range.fillCircle(point.x, point.y, snapshot.rangePx);
         this.range.lineStyle(2, color, 0.6);
-        this.range.strokeCircle(point.x, point.y, radius);
+        this.range.strokeCircle(point.x, point.y, snapshot.rangePx);
       } else this.selectedTile = null;
     }
     for (const [id, expires] of this.flashes) {
