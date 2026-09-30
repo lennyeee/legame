@@ -3,6 +3,7 @@ import { formatHeroEffect, heroEncyclopediaEntry, heroEncyclopediaIds } from '..
 import { worldLore } from '../content/heroLore';
 import type { HeroId } from '../config/heroes';
 import { label } from '../ui/text';
+import { audioForScene } from '../audio/AudioManager';
 
 type Page = 'heroes' | 'world' | HeroId;
 const VIEW_TOP = 182;
@@ -20,6 +21,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
   constructor() { super('HeroEncyclopediaScene'); }
 
   create(): void {
+    audioForScene(this).menu(this);
     this.input.on('wheel', this.onWheel, this);
     this.input.on('pointerdown', this.onTouchDown, this);
     this.input.on('pointermove', this.onTouchMove, this);
@@ -47,6 +49,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
     const back = this.add.rectangle(76, 83, 104, 62, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 76, 83, '返回', 23, '#fffaf0');
     back.on('pointerdown', () => {
+      audioForScene(this).uiClick();
       if (this.page === 'heroes' || this.page === 'world') this.scene.start('ReadyScene');
       else this.showPage('heroes');
     });
@@ -66,7 +69,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       const shape = this.add.rectangle(tab.x, 157, 236, 52, selected ? 0x697e67 : 0xe4e0d2)
         .setStrokeStyle(1, 0xb6bbab).setInteractive({ useHandCursor: true });
       label(this, tab.x, 157, tab.title, 23, selected ? '#fffaf0' : '#4c6651');
-      shape.on('pointerdown', () => this.showPage(tab.key));
+      shape.on('pointerdown', () => { audioForScene(this).uiClick(); this.showPage(tab.key); });
     });
   }
 
@@ -82,7 +85,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       label(this, x, y - 37, entry.hero.name, 32);
       label(this, x, y + 5, `「${entry.lore.title}」`, 18, '#6d756b').setWordWrapWidth(280, true);
       label(this, x, y + 48, `${entry.recipe}  ·  ${entry.quality}`, 19, '#627863');
-      card.on('pointerdown', () => this.showPage(id));
+      card.on('pointerdown', () => { audioForScene(this).uiClick(); this.showPage(id); });
     });
     label(this, 375, 1200, '选择一位武将查看人物小传与战斗档案', 19, '#8b8272');
   }

@@ -3,6 +3,7 @@ import { label } from '../ui/text';
 import type { ResultSnapshot } from '../match/ResultSnapshot';
 import type { RankChange } from '../progression/rank';
 import { showRankFeedback } from '../ui/RankFeedback';
+import { audioForScene } from '../audio/AudioManager';
 
 export interface ResultData { readonly snapshot: ResultSnapshot; readonly coinReward: number; readonly rankChange?: RankChange }
 // 不拥有Match，也不提交永久奖励；只展示已完成的只读结算数据。
@@ -24,6 +25,7 @@ export class ResultScene extends Phaser.Scene {
     if (data.rankChange) showRankFeedback(this, data.rankChange);
     const leave = (rematch: boolean): void => {
       if (handled) return;
+      audioForScene(this).uiClick();
       handled = true;
       this.scene.start('ReadyScene', { autoMatch: rematch });
     };

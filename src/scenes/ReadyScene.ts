@@ -9,6 +9,7 @@ import { itemDefinitions } from '../config/equipment';
 import { avatarSymbol } from '../progression/profile';
 import { rankDisplay } from '../progression/rank';
 import { showProfile, showSettings, type NicknameInputFactory } from '../ui/HomeDialogs';
+import { audioForScene, preloadAudio } from '../audio/AudioManager';
 
 // 仅静态预览，不创建钱包、棋盘运行状态、输入控制器、战斗或计时器。
 export class ReadyScene extends Phaser.Scene {
@@ -21,8 +22,13 @@ export class ReadyScene extends Phaser.Scene {
 
   constructor() { super('ReadyScene'); }
 
+  preload(): void { preloadAudio(this); }
+
   create(data: { inventory?: InventoryItem[]; loadout?: Loadout; autoMatch?: boolean } = {}): void {
     const progress = progressForScene(this);
+    const audio = audioForScene(this);
+    audio.setOptions(progress.save.audio);
+    audio.menu(this);
     this.inventory = progress.inventory();
     this.openingItems = false;
     this.startState = 'READY';
@@ -47,6 +53,7 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 690, 80, '⚙', 32);
     const open = (settings: boolean): void => {
       if (this.startState !== 'READY' || this.openingItems) return;
+      audio.uiClick();
       this.openingItems = true;
       const close = (): void => { this.openingItems = false; refresh(); };
       if (settings) showSettings(this, progress, close); else showProfile(this, progress, close, this.nicknameInputFactory);
@@ -62,18 +69,21 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 375, 885, '道具', 28, '#fffaf0');
     itemsButton.on('pointerdown', () => {
       if (this.startState !== 'READY' || this.openingItems) return;
+      audio.uiClick();
       this.openingItems = true;
       this.scene.start('ItemsScene');
     });
     label(this, 730, 1314, `v${GAME_VERSION}`, 16, '#8b8272').setOrigin(1, 1).setAlpha(0.4);
     button.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
+      if (this.startState === 'READY' && !this.openingItems) audio.startClick();
       this.requestStartGame();
     });
     const shopButton = this.add.rectangle(375, 985, 250, 72, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 375, 985, '商店', 28, '#fffaf0');
     shopButton.on('pointerdown', () => {
       if (this.startState !== 'READY' || this.openingItems) return;
+      audio.uiClick();
       this.openingItems = true;
       this.scene.start('ShopScene');
     });
@@ -81,6 +91,7 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 375, 1085, '档案', 28, '#fffaf0');
     heroesButton.on('pointerdown', () => {
       if (this.startState !== 'READY' || this.openingItems) return;
+      audio.uiClick();
       this.openingItems = true;
       this.scene.start('HeroEncyclopediaScene');
     });
@@ -88,6 +99,7 @@ export class ReadyScene extends Phaser.Scene {
     label(this, 375, 1185, '？ 玩法', 26, '#fffaf0');
     helpButton.on('pointerdown', () => {
       if (this.startState !== 'READY' || this.openingItems) return;
+      audio.uiClick();
       this.openingItems = true;
       this.scene.start('HowToPlayScene');
     });
@@ -128,6 +140,7 @@ export class ReadyScene extends Phaser.Scene {
       claim.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
         event.stopPropagation();
         if (this.startState !== 'WELCOME') return;
+        audioForScene(this).uiClick();
         this.startState = 'STARTING';
         [shade, panel, title, gift, banner, name, joke, strike, free, description, claim, claimText].forEach(object => object.destroy());
         this.startMatch();

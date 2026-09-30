@@ -3,12 +3,15 @@ import { equipmentLimits, itemDefinitions } from '../config/equipment';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 import { label } from '../ui/text';
 import { showItemDetail } from '../ui/ItemDetail';
+import { audioForScene } from '../audio/AudioManager';
 
 export class ItemsScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
   constructor() { super('ItemsScene'); }
   create(): void {
     const progress = progressForScene(this);
+    const audio = audioForScene(this);
+    audio.menu(this);
     this.add.rectangle(375, 667, 750, 1334, 0xf7f3e8);
     label(this, 375, 100, '道具', 36);
     label(this, 375, 160, '已装备', 24);
@@ -26,6 +29,7 @@ export class ItemsScene extends Phaser.Scene {
       if (modal) return;
       const def = itemDefinitions.find(def => def.id === id);
       if (!def || !progress.save.ownedItemIds.includes(id)) return;
+      audio.uiClick();
       modal = true;
       const save = progress.save, equipped = [...save.equippedActiveItemIds, ...save.equippedPassiveItemIds].includes(id);
       showItemDetail(this, def, { text: equipped ? '卸下' : '装备', enabled: true,
@@ -74,13 +78,13 @@ export class ItemsScene extends Phaser.Scene {
       if (pages > 1) for (const direction of [-1, 1]) {
         const x = 375 + direction * 140;
         this.add.rectangle(x, pageY, 100, 48, 0xe1ddcf).setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => { if (!modal) { page = (page + direction + pages) % pages; drawPage(); } });
+          .on('pointerdown', () => { if (!modal) { audio.uiClick(); page = (page + direction + pages) % pages; drawPage(); } });
         label(this, x, pageY, direction < 0 ? '上一页' : '下一页', 20);
       }
       drawPage();
     }
     this.add.rectangle(375, 795, 610, 2, 0xc2bcae);
-    this.add.rectangle(375, 1200, 300, 76, 0x697e67).setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (!modal) this.scene.start('ReadyScene'); });
+    this.add.rectangle(375, 1200, 300, 76, 0x697e67).setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (!modal) { audio.uiClick(); this.scene.start('ReadyScene'); } });
     label(this, 375, 1200, '返回', 28, '#fffaf0');
     refresh();
   }

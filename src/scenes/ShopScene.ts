@@ -4,12 +4,15 @@ import { progressForScene, type PlayerProgress } from '../progression/PlayerProg
 import { shopConfig } from '../progression/shop';
 import { label } from '../ui/text';
 import { showItemDetail } from '../ui/ItemDetail';
+import { audioForScene } from '../audio/AudioManager';
 
 export class ShopScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
   constructor() { super('ShopScene'); }
   create(): void {
     const progress = progressForScene(this);
+    const audio = audioForScene(this);
+    audio.menu(this);
     this.add.rectangle(375, 667, 750, 1334, 0xf7f3e8);
     label(this, 375, 120, '商店', 42);
     const wallet = label(this, 375, 210, '', 30);
@@ -32,7 +35,7 @@ export class ShopScene extends Phaser.Scene {
       label(this, x, 595, def.category === 'active' ? '主动' : '被动', 22);
       cards.push({ id, state: label(this, x, 680, '', 24) });
       card.on('pointerdown', () => {
-        if (modal) return; modal = true;
+        if (modal) return; audio.uiClick(); modal = true;
         const save = progress.save, owned = save.ownedItemIds.includes(id);
         showItemDetail(this, def, { text: owned ? '已购买' : save.coins < def.shopPrice! ? '金币不足' : '购买',
           enabled: !owned && save.coins >= def.shopPrice!, run: () => progress.buyItem(id), failureText: '无法购买' },
@@ -40,7 +43,7 @@ export class ShopScene extends Phaser.Scene {
       });
     });
     this.add.rectangle(375, 1190, 300, 76, 0x697e67).setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => { if (!modal) this.scene.start('ReadyScene'); });
+      .on('pointerdown', () => { if (!modal) { audio.uiClick(); this.scene.start('ReadyScene'); } });
     label(this, 375, 1190, '返回', 28, '#fffaf0');
     refresh();
   }

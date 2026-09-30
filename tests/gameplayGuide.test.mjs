@@ -52,6 +52,7 @@ test('玩法说明按五个步骤提供指定规则与重点提醒', () => {
 
 test('说明页显示五步指引并通过明确返回按钮回HOME', () => {
   const scene = new HowToPlayScene(), objects = [], routes = [];
+  scene.game = { registry: new Map() };
   function object(kind, x, y, width, height) {
     const value = Object.assign(new EventEmitter(), { kind, x, y, width, height, text: '',
       setInteractive() { this.interactive = true; return this; }, setStrokeStyle() { return this; },

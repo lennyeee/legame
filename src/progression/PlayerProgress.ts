@@ -79,6 +79,11 @@ export class PlayerProgress {
     this.data.tutorial[hint] = true;
     this.persist();
   }
+  setAudioPreference(key: keyof PlayerSave['audio'], enabled: boolean): void {
+    if (this.data.audio[key] === enabled) return;
+    this.data.audio[key] = enabled;
+    this.persist();
+  }
   commitMatchResult(snapshot: ResultSnapshot): number {
     const reward = matchCoinReward(snapshot);
     if (this.data.settledMatchIds.includes(snapshot.matchId)) return reward;

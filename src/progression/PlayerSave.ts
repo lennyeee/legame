@@ -20,13 +20,15 @@ export interface PlayerSave {
   rank: RankState;
   profile: PlayerProfile;
   tutorial: { deploymentHintCompleted: boolean; mergeHintCompleted: boolean; heroLetterHintCompleted: boolean };
+  audio: { musicEnabled: boolean; sfxEnabled: boolean };
 }
 export function defaultPlayerSave(): PlayerSave {
   return { saveVersion: SAVE_VERSION, coins: 0, ownedItemIds: ['frugal_home'],
     equippedActiveItemIds: [], equippedPassiveItemIds: ['frugal_home'],
     stats: { matchesPlayed: 0, wins: 0, highestWave: 0, totalKills: 0 },
     seenOneTimeEventIds: [], settledMatchIds: [], shop: { shelfItemIds: [], matchesTowardRefresh: 0 }, rank: defaultRank(), profile: defaultProfile(),
-    tutorial: { deploymentHintCompleted: false, mergeHintCompleted: false, heroLetterHintCompleted: false } };
+    tutorial: { deploymentHintCompleted: false, mergeHintCompleted: false, heroLetterHintCompleted: false },
+    audio: { musicEnabled: true, sfxEnabled: true } };
 }
 export const safeInteger = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -41,6 +43,7 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
   const stats = record(input.stats);
   const shop = record(input.shop);
   const tutorial = record(input.tutorial);
+  const audio = record(input.audio);
   const matchesPlayed = safeInteger(stats.matchesPlayed);
   return { saveVersion: SAVE_VERSION, coins: safeInteger(input.coins), ownedItemIds: owned,
     rank: sanitizeRank(input.rank), profile: sanitizeProfile(input.profile),
@@ -55,6 +58,9 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
       deploymentHintCompleted: tutorial.deploymentHintCompleted === true,
       mergeHintCompleted: tutorial.mergeHintCompleted === true,
       heroLetterHintCompleted: tutorial.heroLetterHintCompleted === true,
+    }, audio: {
+      musicEnabled: audio.musicEnabled !== false,
+      sfxEnabled: audio.sfxEnabled !== false,
     } };
 }
 

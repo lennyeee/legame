@@ -20,6 +20,7 @@ import { pressureConfig } from '../config/pressure';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
 import { gameplayHints } from '../content/gameplayGuide';
 import { isHeroLetter, isUnit } from '../systems/items';
+import { audioForScene } from '../audio/AudioManager';
 
 export class GameScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -55,6 +56,8 @@ export class GameScene extends Phaser.Scene {
     let activeController: ActiveItemController | undefined;
     let ended = false;
     const progress = progressForScene(this);
+    const audio = audioForScene(this);
+    audio.setOptions(progress.save.audio);
     const tutorialAtStart = progress.save.tutorial;
     let deploymentHintShown = tutorialAtStart.deploymentHintCompleted;
     let mergeHintShown = tutorialAtStart.mergeHintCompleted;
@@ -109,8 +112,22 @@ export class GameScene extends Phaser.Scene {
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const topDeploymentView = new DeploymentView(this, testMap, 0, 'top');
     topDeploymentView.refresh(topSide.board, topSide.recruitment);
+    let knownBottomLinks = new Set(bottomSide.heroes.links.values());
+    let knownTopLinks = new Set(topSide.heroes.links.values());
+    const playNewHeroes = (): void => {
+      const bottom = new Set(bottomSide.heroes.links.values());
+      if (!deployment.isDragging) {
+        for (const link of bottom) if (!knownBottomLinks.has(link)) audio.sfx('hero_created');
+        knownBottomLinks = bottom;
+      }
+      const top = new Set(topSide.heroes.links.values());
+      for (const link of top) if (!knownTopLinks.has(link)) audio.sfx('hero_created');
+      knownTopLinks = top;
+    };
     const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
     const deployment = new DeploymentController(this, bottomSide, deploymentView, (result, observation) => {
+      if (result === 'unlock') audio.sfx('shovel');
+      if (result === 'merge' && observation && isUnit(observation.sourceItem) && isUnit(observation.targetItem)) audio.sfx('unit_merge');
       farmerView.refresh();
       refresh();
       const messages = {
@@ -165,6 +182,7 @@ export class GameScene extends Phaser.Scene {
         feedback.setText('美金不足，请等待资源增长').setColor('#a45e45');
         return;
       }
+      audio.sfx('recruit');
       feedback.setText('征兵完成 · 待放置栏已更新').setColor('#697e67');
       deployment.refresh();
       refresh();
@@ -181,6 +199,7 @@ export class GameScene extends Phaser.Scene {
       topHealthText.setText('♥'.repeat(match.health.top));
       if (!ended && match.result !== null) {
         ended = true;
+        audio.result(match.result === 'bottom' ? 'win' : match.result === 'top' ? 'lose' : 'draw');
         activeController?.cancel();
         deployment.cancel();
         this.input.enabled = false;
@@ -199,7 +218,13 @@ export class GameScene extends Phaser.Scene {
       const wasInsufficient = before < recruitmentPrice(state);
       const events = match.update(delta, deployment.draggedTile);
       leIntro.update(match.timeline.elapsedMs);
-      if (match.timeline.elapsedMs >= firstEnemyDelay) this.presentationPhase = 'RUNNING';
+      if (match.timeline.elapsedMs >= firstEnemyDelay && this.presentationPhase !== 'RUNNING') {
+        this.presentationPhase = 'RUNNING';
+        audio.battle(this);
+      }
+      audio.combatEvents(events.bottom);
+      audio.combatEvents(events.top);
+      playNewHeroes();
       battle.render(events.bottom, match.timeline.elapsedMs);
       topBattle.render(events.top, match.timeline.elapsedMs);
       if (state.money !== before) {
@@ -216,6 +241,7 @@ export class GameScene extends Phaser.Scene {
     };
     this.events.on(Phaser.Scenes.Events.UPDATE, updateMatch);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (!ended) audio.leaveBattle();
       this.events.off(Phaser.Scenes.Events.UPDATE, updateMatch);
       hintTween?.stop();
       activeHint?.shape.destroy(); activeHint?.text.destroy(); activeHint = null;
@@ -228,7 +254,7 @@ export class GameScene extends Phaser.Scene {
       this.battleSetup = null;
       this.presentationPhase = null;
     });
-    const resumeInput = (): void => { match.resume(); this.input.enabled = match.running; };
+    const resumeInput = (): void => { match.resume(); audio.resumeBattle(); this.input.enabled = match.running; };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, resumeInput));
     const pauseButton = this.add.rectangle(75, 55, 62, 54, 0x697e67)
       .setInteractive({ useHandCursor: true });
@@ -239,7 +265,9 @@ export class GameScene extends Phaser.Scene {
       deployment.cancel();
       activeController?.cancel();
       battle.hideRange();
+      audio.uiClick();
       match.pause();
+      audio.pauseBattle();
       this.input.enabled = false;
       this.events.once(Phaser.Scenes.Events.RESUME, resumeInput);
       this.scene.pause();

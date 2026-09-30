@@ -4,6 +4,7 @@ import type { Loadout } from '../systems/equipment';
 import { resultPresentation, type ResultSnapshot } from '../match/ResultSnapshot';
 import { matchCoinReward } from '../progression/PlayerProgress';
 import type { RankChange } from '../progression/rank';
+import { audioForScene } from '../audio/AudioManager';
 
 export interface PveOverlayData {
   mode: 'paused' | 'victory' | 'defeat' | 'draw';
@@ -39,6 +40,7 @@ export class PveOverlayScene extends Phaser.Scene {
     // 离开战斗统一停止旧场景，保留玩家 loadout。
     const leaveMatch = (rematch: boolean): void => {
       if (handled) return;
+      audioForScene(this).uiClick();
       handled = true;
       this.scene.stop('GameScene');
       this.scene.start('ReadyScene', { loadout: data.loadout, autoMatch: rematch });
@@ -49,6 +51,7 @@ export class PveOverlayScene extends Phaser.Scene {
     const confirmAction = ((_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
       if (handled || confirming) return;
+      audioForScene(this).uiClick();
       confirming = true;
       title.setText('确定返回主页？');
       for (const [control, text] of menu) { control.setVisible(false).disableInteractive(); text.setVisible(false); }
@@ -59,6 +62,7 @@ export class PveOverlayScene extends Phaser.Scene {
       const confirmText = label(this, 530, 765, '返回主页', 28, '#fffaf0');
       cancelButton.on('pointerdown', () => {
         if (handled || !confirming) return;
+        audioForScene(this).uiClick();
         confirming = false;
         [warning,cancelButton,cancelText,confirmButton,confirmText].forEach(object=>object.destroy());
         title.setText('已暂停');
@@ -70,6 +74,7 @@ export class PveOverlayScene extends Phaser.Scene {
     button.on('pointerdown', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
       event.stopPropagation();
       if (handled || confirming) return;
+      audioForScene(this).uiClick();
       handled = true;
       this.scene.resume('GameScene');
       this.scene.stop();

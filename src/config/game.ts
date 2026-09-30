@@ -1,6 +1,6 @@
 import { recruitableHeroLetters } from './heroes';
 
-export const GAME_VERSION = '0.69-D';
+export const GAME_VERSION = '0.70-A';
 
 export const gameConfig = {
   initialMoney: 20,

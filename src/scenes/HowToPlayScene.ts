@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
 import { gameplayGuide } from '../content/gameplayGuide';
 import { label } from '../ui/text';
+import { audioForScene } from '../audio/AudioManager';
 
 export class HowToPlayScene extends Phaser.Scene {
   constructor() { super('HowToPlayScene'); }
 
   create(): void {
+    audioForScene(this).menu(this);
     this.add.rectangle(375, 667, 750, 1334, 0xf7f3e8);
     this.add.rectangle(375, 92, 750, 150, 0xeee9dc);
     const back = this.add.rectangle(76, 90, 104, 62, 0x697e67).setInteractive({ useHandCursor: true });
     label(this, 76, 90, '返回', 23, '#fffaf0');
-    back.on('pointerdown', () => this.scene.start('ReadyScene'));
+    back.on('pointerdown', () => { audioForScene(this).uiClick(); this.scene.start('ReadyScene'); });
     label(this, 375, 90, '怎么玩？', 38);
 
     gameplayGuide.forEach((step, index) => {

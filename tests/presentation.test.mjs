@@ -68,6 +68,7 @@ const { avatars, avatarSymbol } = await import('../src/progression/profile.ts');
 const { rankTitle, rankProgress, rankDisplay } = await import('../src/progression/rank.ts');
 const { LeIntroView } = await import('../src/ui/LeIntroView.ts');
 const { buildPath, pointOnPath } = await import('../src/combat/path.ts');
+const { audioForScene } = await import('../src/audio/AudioManager.ts');
 
 test('匹配时间使用独立可注入表现随机，范围为2000～3000ms',()=>{
  assert.equal(matchingDuration(()=>0),2000);
@@ -131,6 +132,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   let now = 0;
   const objects = new Map();
   const globalEvents = new EventEmitter();
+  const sharedGame = { events: globalEvents, registry: new Map() };
   const createGame = data => {
     const originalMoney = gameConfig.initialMoney;
     gameConfig.initialMoney = startingMoney;
@@ -168,7 +170,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     };
     scene.events ??= new EventEmitter();
     scene.input ??= new EventEmitter();
-    scene.game = { events: globalEvents };
+    scene.game = sharedGame;
     scene.scale = { width: 750 };
     scene.add = Object.fromEntries(['rectangle', 'circle', 'ellipse', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
     scene.add.circle=(x,y,radius,color)=>object('circle',x,y,radius,radius,color);
@@ -1769,4 +1771,37 @@ test('HOME玩法入口进入说明页，五步内容可见且返回HOME',()=>{
   assert.ok(p.objects.get(p.howToPlay).some(object=>object.text===title));
  p.click(76,90);
  assert.equal(p.text(375,765,p.ready),'开始对战');
+});
+
+test('Audio v1 requests battle music at actual RUNNING and success SFX only for real recruit, merge, hero and shovel',()=>{
+ const p=pve(true,100),audio=audioForScene(p.game),played=[];
+ audio.sfx=key=>{played.push(key);return true;};
+ assert.equal(audio.state.desired,'home_bgm');
+ const random=Math.random;
+ try{
+  Math.random=()=>recruitRoll(p,'刀');p.click(375,1158);
+  assert.equal(played.filter(key=>key==='recruit').length,1);
+  p.drag([183,1018],[279,1018]);
+  assert.equal(played.filter(key=>key==='unit_merge').length,1);
+  p.drag([183,1018],[375,700]); // Invalid: no success sound.
+  assert.equal(played.filter(key=>key==='unit_merge').length,1);
+  Math.random=()=>recruitRoll(p,'铲');p.click(375,1158);
+  p.drag([183,1018],[501.5625,661.4375]);
+  assert.equal(played.filter(key=>key==='shovel').length,1);
+  Math.random=()=>recruitRoll(p,'小');p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+  Math.random=()=>recruitRoll(p,'美');p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
+  p.run(10);assert.equal(played.filter(key=>key==='hero_created').length,1);
+  assert.equal(audio.state.desired,'home_bgm');
+  p.run(9490);assert.equal(audio.state.desired,'battle_bgm');
+ }finally{Math.random=random;}
+});
+
+test('Audio v1 cannot play recruit sound when money is insufficient',()=>{
+ const p=pve(true,20),audio=audioForScene(p.game),played=[];
+ audio.sfx=key=>{played.push(key);return true;};
+ const random=Math.random;
+ try{Math.random=()=>recruitRoll(p,'刀');p.click(375,1158);p.click(375,1158);}
+ finally{Math.random=random;}
+ assert.equal(played.filter(key=>key==='recruit').length,1);
+ assert.equal(p.game.sides.bottom.recruitment.successfulRecruits,1);
 });

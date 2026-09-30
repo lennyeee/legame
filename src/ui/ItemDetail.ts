@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { ItemDefinition } from '../config/equipment';
 import { label } from './text';
+import { audioForScene } from '../audio/AudioManager';
 
 export interface ItemDetailAction { text: string; enabled: boolean; run: () => boolean; failureText?: string }
 // 商店、装备槽、背包卡共享同一详情卡；效果文本只来自definition。
@@ -25,10 +26,12 @@ export function showItemDetail(scene: Phaser.Scene, definition: ItemDefinition,
     scene.events.off(Phaser.Scenes.Events.SHUTDOWN, close);
     onClose();
   };
-  shade.on('pointerdown', close); closeButton.on('pointerdown', close);
+  const closeClick = (): void => { audioForScene(scene).uiClick(); close(); };
+  shade.on('pointerdown', closeClick); closeButton.on('pointerdown', closeClick);
   if (action.enabled) button.setInteractive({ useHandCursor: true }); else button.setAlpha(0.5);
   button.on('pointerdown', () => {
     if (closed || !action.enabled) return;
+    audioForScene(scene).uiClick();
     if (action.run()) close(); else text.setText(action.failureText ?? '操作未完成');
   });
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, close);

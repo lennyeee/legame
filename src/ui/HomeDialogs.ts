@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { PlayerProgress } from '../progression/PlayerProgress';
 import { avatars } from '../progression/profile';
 import { label } from './text';
+import { audioForScene } from '../audio/AudioManager';
 
 export interface NicknameInput { value(): string; destroy(): void }
 export type NicknameInputFactory = (scene: Phaser.Scene, value: string) => NicknameInput;
@@ -31,13 +32,13 @@ function shell(scene: Phaser.Scene, onClose: () => void) {
     cleanups.forEach(cleanup => cleanup()); objects.forEach(object => object.destroy()); shade.destroy(); panel.destroy();
     scene.events.off(Phaser.Scenes.Events.SHUTDOWN, close); onClose();
   };
-  shade.on('pointerdown', close); scene.events.once(Phaser.Scenes.Events.SHUTDOWN, close);
+  shade.on('pointerdown', () => { audioForScene(scene).uiClick(); close(); }); scene.events.once(Phaser.Scenes.Events.SHUTDOWN, close);
   const text = (x: number, y: number, value: string, size = 26, color = '#514c40') => {
     const object = label(scene, x, y, value, size, color).setDepth(23); objects.push(object); return object;
   };
   const button = (x: number, y: number, value: string, run: () => void, color = 0x697e67, width = 250) => {
     const object = scene.add.rectangle(x, y, width, 72, color).setDepth(22).setInteractive({ useHandCursor: true }); objects.push(object);
-    object.on('pointerdown', () => { if (!closed) run(); }); return { control: object, text: text(x, y, value, 26, '#fffaf0') };
+    object.on('pointerdown', () => { if (!closed) { audioForScene(scene).uiClick(); run(); } }); return { control: object, text: text(x, y, value, 26, '#fffaf0') };
   };
   button(635, 320, '×', close, 0x8b8272, 50);
   return { close, text, button, cleanups, closed: () => closed };
@@ -61,18 +62,34 @@ export function showProfile(scene: Phaser.Scene, progress: PlayerProgress, onClo
 }
 export function showSettings(scene: Phaser.Scene, progress: PlayerProgress, onClose: () => void): void {
   const dialog = shell(scene, onClose);
+  const audio = audioForScene(scene);
   const title = dialog.text(375, 440, '游戏设置', 34);
-  const description = dialog.text(375, 610, '进度仅保存在当前浏览器/设备。', 24);
+  const description = dialog.text(375, 680, '进度仅保存在当前浏览器/设备。', 24);
+  const music = dialog.button(375, 525, '', () => {
+    progress.setAudioPreference('musicEnabled', !progress.save.audio.musicEnabled);
+    audio.setOptions(progress.save.audio); refresh();
+  }, 0x697e67, 320);
+  const sfx = dialog.button(375, 605, '', () => {
+    progress.setAudioPreference('sfxEnabled', !progress.save.audio.sfxEnabled);
+    audio.setOptions(progress.save.audio); refresh();
+  }, 0x697e67, 320);
+  const refresh = (): void => {
+    music.text.setText(`音乐：${progress.save.audio.musicEnabled ? '开' : '关'}`);
+    sfx.text.setText(`音效：${progress.save.audio.sfxEnabled ? '开' : '关'}`);
+  };
+  refresh();
   const reset = dialog.button(375, 760, '重置游戏进度', () => {
     reset.control.disableInteractive().setVisible(false); reset.text.setVisible(false);
+    for (const toggle of [music, sfx]) { toggle.control.disableInteractive().setVisible(false); toggle.text.setVisible(false); }
     title.setText('确定重新开始吗？');
     description.setText('将清除当前浏览器/设备的金币、战绩、段位、已获得道具、装备、商店进度、昵称/头像及一次性欢迎事件。\n此操作无法恢复。')
       .setWordWrapWidth(490, true).setFixedSize(500, 260).setPosition(375, 680);
     const cancel = dialog.button(220, 930, '取消', () => {
-      title.setText('游戏设置'); description.setText('进度仅保存在当前浏览器/设备。').setFixedSize(0, 0).setPosition(375, 610);
+      title.setText('游戏设置'); description.setText('进度仅保存在当前浏览器/设备。').setFixedSize(0, 0).setPosition(375, 680);
       [cancel.control, cancel.text, confirm.control, confirm.text].forEach(object => object.destroy());
       reset.control.setVisible(true).setInteractive({ useHandCursor: true }); reset.text.setVisible(true);
+      for (const toggle of [music, sfx]) { toggle.control.setVisible(true).setInteractive({ useHandCursor: true }); toggle.text.setVisible(true); }
     });
-    const confirm = dialog.button(530, 930, '确定重置', () => { confirm.control.disableInteractive(); cancel.control.disableInteractive(); progress.reset(); dialog.close(); }, 0xa65040);
+    const confirm = dialog.button(530, 930, '确定重置', () => { confirm.control.disableInteractive(); cancel.control.disableInteractive(); progress.reset(); audio.setOptions(progress.save.audio); dialog.close(); }, 0xa65040);
   }, 0xa65040, 320);
 }

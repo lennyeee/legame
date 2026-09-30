@@ -70,6 +70,7 @@ function sceneHarness() {
   const scene = new HeroEncyclopediaScene();
   scene.events = new EventEmitter();
   scene.input = new EventEmitter();
+  scene.game = { registry: new Map() };
   scene.children = { removeAll() { for (const item of objects) item.active = false; } };
   scene.scene = { start(key) { destinations.push(key); } };
   const objects = [], destinations = [];
