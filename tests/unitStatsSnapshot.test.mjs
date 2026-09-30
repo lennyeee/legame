@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { createBoardState } = await import('../src/systems/board.ts');
 const { createRecruitmentState } = await import('../src/systems/recruitment.ts');
 const { CombatSimulation } = await import('../src/combat/CombatSimulation.ts');
-const { heroRecipes, getHeroDefinition } = await import('../src/config/heroes.ts');
+const { heroRecipes, getHeroDefinition, getHeroStats } = await import('../src/config/heroes.ts');
 const { getCombatStats } = await import('../src/config/combat.ts');
 
 const map = { name: '属性快照', mirrorY: -500, cellSize: 75,
@@ -87,7 +87,7 @@ test('真实状态 Buff 改变武将快照，过期后恢复', () => {
   run(sim, 40);
   const after = sim.getUnitCombatSnapshot(0);
   assert.equal(after.damage, 10);
-  assert.equal(after.attacksPerSecond, 1000 / 1200);
+  assert.equal(after.attacksPerSecond, 1000 / getHeroStats(1,'xiaomei').attackInterval);
   assert.notEqual(link, source);
 });
 
@@ -116,6 +116,20 @@ test('八名武将的快照名称和普攻类型对应实际攻击模式', () =>
   }
 });
 
+test('八名武将Lv1-Lv5面板快照与实际普攻配置一致', () => {
+  for (const recipe of heroRecipes) {
+    for (let level = 1; level <= 5; level++) {
+      const { sim } = hero(recipe.id, level);
+      const snapshot = sim.getUnitCombatSnapshot(0);
+      const base = getHeroStats(level, recipe.id);
+      assert.equal(snapshot.damage, base.damage);
+      close(snapshot.attackIntervalMs, base.attackInterval);
+      close(snapshot.attacksPerSecond, 1000 / base.attackInterval);
+      assert.equal(snapshot.rangePx, base.range);
+    }
+  }
+});
+
 test('武将等级段EXP、Lv5 MAX和技能CD均读取当前HeroLink状态', () => {
   const { sim, link } = hero('xiaomei', 2);
   link.currentExp = 3.4;
@@ -139,7 +153,7 @@ test('小倩叠层、小六强化次数和阿饼自身强化均反映当前真�
   const liu = hero('xiaoliu');
   liu.link.skill.phase = 'empowered'; liu.link.skill.remainingAttacks = 4;
   assert.match(liu.sim.getUnitCombatSnapshot(0).skill.status, /剩余 4 \/ 7/);
-  assert.ok(liu.sim.getUnitCombatSnapshot(0).damage > 10);
+  assert.equal(liu.sim.getUnitCombatSnapshot(0).damage, 9.6);
   const bing = hero('abing');
   bing.sim.statuses.buff(bing.link, bing.link, 1000, .3, .3);
   assert.match(bing.sim.getUnitCombatSnapshot(0).skill.status, /强化中/);

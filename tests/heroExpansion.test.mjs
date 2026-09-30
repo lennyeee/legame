@@ -34,21 +34,21 @@ test('Abing225, execution removed, self buff affects only basic attacks and expi
  assert.equal(getHeroStats(1,'abing').range,225);assert.equal(skillConfigs.abing_execute,undefined);
  p.ready();assert.ok(enemy.hp>0);assert.equal(p.sim.statuses.allies.has(other),false);
  const events=p.run(1000),hits=events.filter(e=>e.kind==='hit'&&e.heroId==='abing');
- assert.ok(hits.length);assert.equal(hits[0].source,'basic');assert.equal(hits[0].damage,13);
+ assert.ok(hits.length);assert.equal(hits[0].source,'basic');assert.ok(Math.abs(hits[0].damage-10.4)<1e-5);
  p.run(3100);assert.equal(p.sim.statuses.allies.has(p.link),false);
- assert.equal(p.sim.statuses.basicStats(p.link,getHeroStats(1,'abing')).damage,10);
+ assert.equal(p.sim.statuses.basicStats(p.link,getHeroStats(1,'abing')).damage,8);
 });
 test('Xiaoliu seven successful boosted attacks; no target consumes nothing, eighth normal',()=>{
  const p=setup('xiaoliu'),target=p.enemy();p.ready();assert.equal(p.link.skill.remainingAttacks,7);
  p.sim.enemies=[];p.run(1000);assert.equal(p.link.skill.remainingAttacks,7);
  p.sim.enemies=[target];let hits=[];
  while(hits.length<8)hits.push(...p.run(20).filter(e=>e.kind==='hit'&&e.heroId==='xiaoliu'));
- assert.deepEqual(hits.slice(0,7).map(e=>e.damage),Array(7).fill(12));assert.equal(hits[7].damage,10);
+ assert.ok(hits.slice(0,7).every(e=>Math.abs(e.damage-9.6)<1e-5));assert.equal(hits[7].damage,8);
  assert.equal(p.link.skill.remainingAttacks,0);assert.equal(p.link.skill.phase,'charging');
 });
 test('Houjiang180 self-centred AOE includes multiple enemies, rejects outside range',()=>{
  const p=setup('houjiang'),a=p.enemy(50),b=p.enemy(230),far=p.enemy(500);
- p.run(1200);assert.equal(a.hp,9990);assert.equal(b.hp,9990);assert.equal(far.hp,10000);
+ p.run(1200);assert.equal(a.hp,9991);assert.equal(b.hp,9991);assert.equal(far.hp,10000);
 });
 test('Shout stuns all in range; movement resumes without changing base speed',()=>{
  const p=setup('houjiang'),a=p.enemy(100),b=p.enemy(200);p.ready();a.moveSpeed=b.moveSpeed=55;
@@ -78,7 +78,7 @@ test('Xiaozhan buffs ordinary and heroes including self; reapply does not multip
 });
 test('Yongqi primary full damage, surrounding70%, smoke directly applies poison andslow',()=>{
  const p=setup('yongqi'),a=p.enemy(160),b=p.enemy(180);p.run(1200);
- assert.equal(b.hp,9990);assert.equal(a.hp,9993);
+ assert.equal(b.hp,9991);assert.equal(a.hp,9993.7);
  p.ready();assert.equal(p.sim.statuses.enemies.get(a).length,2);
  const events=p.run(4000);assert.equal(events.filter(e=>e.kind==='hit'&&e.source==='dot'&&e.enemyId===a.id).length,4);
  assert.ok(events.filter(e=>e.kind==='hit'&&e.source==='dot').every(e=>e.damage===6));
@@ -91,7 +91,7 @@ test('Ally buff never scales Xiaomei skill, sword or DOT',()=>{
  const hits=events.filter(e=>e.kind==='hit'&&e.source===source);
  if(id==='xiaomei'){// first hit occurs in ready() itself; add a second locked target next cast separately below
   assert.equal(p.link.skill.castDamage,100);
- }else{assert.ok(hits.length);assert.ok(hits.every(h=>Math.abs(h.damage-(id==='abiao'?12:6))<1e-6));}
+ }else{assert.ok(hits.length);assert.ok(hits.every(h=>Math.abs(h.damage-(id==='abiao'?16.8:6))<1e-6));}
  }
 });
 test('Xiaoqian no CD, consecutive attacks accelerate to6, keep stacks on ordinary frame, reset target/death/out-of-range',()=>{
@@ -106,7 +106,7 @@ test('Sword charge requires300 range; landing reads new live whole-path enemies,
  const p=setup('abiao'),far=p.enemy(1400);p.run(2000);assert.equal(p.link.skill.cooldownElapsed,0);
  const near=p.enemy(150);p.ready();assert.equal(p.link.skill.phase,'casting');assert.equal(far.hp,10000);
  near.hp=0;const newcomer=p.enemy(1800);const events=p.run(400);
- assert.equal(far.hp,9988);assert.equal(newcomer.hp,9988);assert.equal(near.hp,0);
+ assert.equal(far.hp,9983.2);assert.equal(newcomer.hp,9983.2);assert.equal(near.hp,0);
  const hits=events.filter(e=>e.kind==='hit');assert.deepEqual(hits.map(h=>h.source),['skill','skill']);
  assert.equal(events.some(e=>e.kind==='heroAttack'),false);
 });
@@ -120,7 +120,7 @@ for(const id of ['abing','xiaoliu','houjiang','xiaozhan','yongqi','abiao'])test(
 test('Pause/result freeze state timers and CD; destroy/new side contains no effects',()=>{
  const p=setup('yongqi'),target=p.enemy();p.ready();p.side.pause();const before=JSON.stringify([...p.sim.statuses.enemies.values()]);
  p.run(8000);assert.equal(JSON.stringify([...p.sim.statuses.enemies.values()]),before);assert.equal(target.hp,10000);
- p.side.resume();p.run(1000);assert.equal(target.hp,9994);p.side.stop();const hp=target.hp;p.run(10000);assert.equal(target.hp,hp);
+ p.side.resume();p.run(1000);assert.equal(target.hp,9985);p.side.stop();const hp=target.hp;p.run(10000);assert.equal(target.hp,hp);
  p.side.destroy();assert.equal(p.sim.statuses.enemies.size,0);assert.equal(p.sim.statuses.allies.size,0);assert.equal(p.side.heroes.links.size,0);
  assert.equal(setup('yongqi').sim.statuses.enemies.size,0);
 });
@@ -128,16 +128,19 @@ test('Split cancels old source effects, no ghost DOT/temporary buff or old EXP',
  const p=setup('yongqi'),target=p.enemy();p.ready();p.side.drop({kind:'tile',index:1},{kind:'slot',index:0});
  p.run(4000);assert.equal(target.hp,10000);assert.equal(p.sim.statuses.enemies.size,0);
 });
-test('8 heroes share EXP10/20/30/40 while ordinary combat stats remain unchanged',()=>{
+test('8 heroes share EXP10/20/30/40 and use explicit per-hero base damage tables',()=>{
  assert.deepEqual(heroGrowth.expByLevel,[10,20,30,40]);assert.equal(heroGrowth.rewards.kill,1);
- for(const h of heroRegistry)assert.deepEqual([1,2,3,4,5].map(l=>getHeroStats(l,h.id).damage),[10,15,20,25,30]);
+ for(const h of heroRegistry)assert.deepEqual([1,2,3,4,5].map(l=>getHeroStats(l,h.id).damage),[...h.attackDamageByLevel]);
 });
 
 test('Poison final tick earns killer1 EXP, emits no ordinary attack',()=>{
- const p=setup('yongqi'),enemy=p.enemy(150,5);p.ready();
- const events=p.run(1000);assert.equal(enemy.hp,0);assert.equal(p.link.currentExp,1);
+ const p=setup('yongqi'),enemy=p.enemy(150,6),damageTable=getHeroDefinition('yongqi').attackDamageByLevel;
+ try {
+  getHeroDefinition('yongqi').attackDamageByLevel[0]=0;p.ready();
+  const events=p.run(1000);assert.equal(enemy.hp,0);assert.equal(p.link.currentExp,1);
  assert.equal(events.filter(e=>e.kind==='hit'&&e.source==='dot').length,1);
- assert.equal(events.some(e=>e.kind==='heroAttack'||e.kind==='attack'),false);
+  assert.equal(events.some(e=>e.kind==='hit'&&e.source==='basic'),false);
+ } finally {getHeroDefinition('yongqi').attackDamageByLevel[0]=damageTable[0];}
 });
 test('Status sources and same numeric enemy IDs remain isolated between two simulations',()=>{
  const a=setup('yongqi'),b=setup('yongqi');const first=a.enemy(),second=b.enemy();

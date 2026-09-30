@@ -5,7 +5,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) specifier += '.ts';
   return next(specifier, context);
 } });
-const { heroRecipes, heroCombat } = await import('../src/config/heroes.ts');
+const { heroRecipes, heroCombat, getHeroStats } = await import('../src/config/heroes.ts');
 const { gameConfig } = await import('../src/config/game.ts');
 const { createBoardState, applyDrop, getDragItem } = await import('../src/systems/board.ts');
 const { getHeroLinks } = await import('../src/systems/heroActivation.ts');
@@ -86,34 +86,35 @@ function battle() {
   const enemy=sim.spawnEnemy();enemy.moveSpeed=0;enemy.hp=enemy.maxHp=1000;
   return {board,reserve,sim,enemy};
 }
+const xiaomeiStats = getHeroStats(1,'xiaomei');
 test('激活武将每周期只攻击一次，从双格中心索敌，正确伤害及奖励',()=>{
   const {sim,enemy,reserve}=battle();
-  const events=run(sim,heroCombat.attackInterval*2);
+  const events=run(sim,xiaomeiStats.attackInterval*2+30);
   assert.equal(events.filter(e=>e.kind==='heroAttack').length,2);
-  assert.equal(enemy.hp,1000-heroCombat.damage*2);
+  assert.equal(enemy.hp,1000-xiaomeiStats.damage*2);
   assert.equal(sim.projectiles.length,0);
-  enemy.hp=1;run(sim,heroCombat.attackInterval);
+  enemy.hp=1;run(sim,xiaomeiStats.attackInterval+30);
   assert.equal(reserve.money,21);
 });
 test('优先路径进度最高的范围内目标，范围外不受伤',()=>{
   const {sim,enemy}=battle();enemy.distance=20;
   const far=sim.spawnEnemy();far.moveSpeed=0;far.distance=800;
   const near=sim.spawnEnemy();near.moveSpeed=0;near.distance=80;
-  run(sim,heroCombat.attackInterval);
-  assert.equal(enemy.hp,1000);assert.equal(far.hp,far.maxHp);assert.equal(near.hp,near.maxHp-heroCombat.damage);
+  run(sim,xiaomeiStats.attackInterval+30);
+  assert.equal(enemy.hp,1000);assert.equal(far.hp,far.maxHp);assert.equal(near.hp,near.maxHp-xiaomeiStats.damage);
 });
 test('拖动任一字立即解除，放回重新开始冷却；移动/交换不残留攻击',()=>{
   for(const index of [0,1]) {
-    const {sim,board,reserve,enemy}=battle();run(sim,1000);
+    const {sim,board,reserve,enemy}=battle();run(sim,1000);const hpBeforeDrag=enemy.hp;
     sim.update(0,index);assert.equal(sim.heroLinks.length,0);
     assert.equal(run(sim,2000,index).filter(e=>e.kind==='heroAttack').length,0);
-    assert.equal(enemy.hp,1000);
+    assert.equal(enemy.hp,hpBeforeDrag);
     sim.update(0);assert.equal(sim.heroLinks.length,1);
-    assert.equal(run(sim,1000).filter(e=>e.kind==='heroAttack').length,0);
+    assert.equal(run(sim,xiaomeiStats.attackInterval-20).filter(e=>e.kind==='heroAttack').length,0);
     applyDrop(board,reserve,pos('tile',index),pos('slot',0));sim.update(0);
     assert.equal(sim.heroLinks.length,0);assert.deepEqual(run(sim,2000),[]);
     applyDrop(board,reserve,pos('slot',0),pos('tile',index));sim.update(0);
-    assert.equal(sim.heroLinks.length,1);assert.equal(run(sim,1200).filter(e=>e.kind==='heroAttack').length,1);
+    assert.equal(sim.heroLinks.length,1);assert.equal(run(sim,xiaomeiStats.attackInterval+30).filter(e=>e.kind==='heroAttack').length,1);
     applyDrop(board,reserve,pos('tile',0),pos('tile',1));sim.update(0);
     assert.equal(sim.heroLinks.length,0);assert.deepEqual(run(sim,2000),[]);
   }

@@ -87,14 +87,15 @@ test('零伤害不记录，多次命中只记录一次，重复死亡不重复�
  growth.awardKill(2,link);growth.awardKill(2,link);assert.equal(link.currentExp,1);
 });
 test('普通兵最后一击使实际参战武将获得0.2 EXP',()=>{
- const {board,sim,link}=setup();const e=enemy(sim);run(sim,2400);assert.equal(e.hp,1000-2*heroCombat.damage);
+ const {board,sim,link}=setup();const e=enemy(sim);const attacks=run(sim,2400).filter(event=>event.kind==='heroAttack').length;
+ assert.equal(e.hp,1000-attacks*getHeroStats(1,'xiaomei').damage);
  e.hp=1;board.tiles[4].unit={type:'弓',level:5};run(sim,1100);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
 });
 test('两个武将各获0.2助攻EXP；第三个只在范围内不得EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:690,unlocked:true},{x:247,y:690,unlocked:true},{x:195,y:610,unlocked:true},{x:247,y:610,unlocked:true},{x:195,y:650,unlocked:true}]};
  const {board,sim,link}=setup([1,1],map);board.tiles[2].unit=letter('阿');board.tiles[3].unit=letter('饼');
- const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-2*heroCombat.damage);
+ const e=enemy(sim);run(sim,1200);assert.equal(e.hp,1000-getHeroStats(1,'xiaomei').damage-getHeroStats(1,'abing').damage);
  board.tiles[4].unit=letter('小');board.tiles[5].unit=letter('六');e.hp=1;board.tiles[6].unit={type:'刀',level:5};run(sim,800);
  assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
  assert.deepEqual(sim.heroLinks.map(l=>l.currentExp),[heroGrowth.rewards.assist,heroGrowth.rewards.assist,0]);
@@ -109,7 +110,7 @@ test('参战武将自己击杀获1 EXP，休眠字不得EXP',()=>{
  const {sim,link}=setup();enemy(sim,1);run(sim,1200);assert.equal(link.currentExp,heroGrowth.rewards.kill);
 });
 test('等级提升增加伤害和攻速但不改变射程',()=>{
- for(const level of [2,5,50]){const stats=getHeroStats(level);assert.ok(stats.damage>heroCombat.damage);assert.ok(stats.attackInterval<heroCombat.attackInterval);assert.equal(stats.range,heroCombat.range);}
+ for(const level of [2,5,50]){const stats=getHeroStats(level);assert.ok(stats.damage>getHeroStats(1).damage);assert.ok(stats.attackInterval<getHeroStats(1).attackInterval);assert.equal(stats.range,heroCombat.range);}
 });
 test('结算停止EXP和攻击，独立新局从空状态及Lv.1开始',()=>{
  const {board,reserve,growth}=setup();const progress=new WaveProgress(waveConfig);const sim=new CombatSimulation(testMap,board,reserve,undefined,progress);

@@ -147,7 +147,7 @@ test('双格武将读取两格，两个同类+40%加法累计、异类并存，�
   const { board, sim, enemy } = combatCase('hero', 'attack');
   board.tiles[1].bonusType = 'attack';
   const base = getHeroStats(1);
-  assert.deepEqual(Array.from({ length: 5 }, (_, index) => getHeroStats(index + 1).damage), [10, 15, 20, 25, 30]);
+  assert.deepEqual(Array.from({ length: 5 }, (_, index) => getHeroStats(index + 1).damage), [10, 14, 19, 25, 32]);
   assert.equal(base.damage, 10);
   const both = applyTileBonuses(base, board, [0, 1]);
   assert.equal(both.damage, 14);
@@ -168,12 +168,12 @@ test('双格武将读取两格，两个同类+40%加法累计、异类并存，�
 test('武将双攻速格真正缩短普攻间隔、双射程格扩大普通索敌；农民不攻击', () => {
   const slow = combatCase('hero'), fast = combatCase('hero', 'attackSpeed');
   fast.board.tiles[1].bonusType = 'attackSpeed';
-  assert.equal(run(slow.sim, 900).filter(e => e.kind === 'heroAttack').length, 0);
-  assert.equal(run(fast.sim, 900).filter(e => e.kind === 'heroAttack').length, 1);
+  assert.equal(run(slow.sim, 600).filter(e => e.kind === 'heroAttack').length, 0);
+  assert.equal(run(fast.sim, 600).filter(e => e.kind === 'heroAttack').length, 1);
   const far = combatCase('hero', 'none', 400), extended = combatCase('hero', 'range', 400);
   extended.board.tiles[1].bonusType = 'range';
-  assert.equal(run(far.sim, 1300).filter(e => e.kind === 'heroAttack').length, 0);
-  assert.equal(run(extended.sim, 1300).filter(e => e.kind === 'heroAttack').length, 1);
+  assert.equal(run(far.sim, 800).filter(e => e.kind === 'heroAttack').length, 0);
+  assert.ok(run(extended.sim, 800).filter(e => e.kind === 'heroAttack').length > 0);
   assert.ok(extended.sim.heroLinks[0].skill.cooldownElapsed > 0);
   assert.equal(far.sim.heroLinks[0].skill.cooldownElapsed, 0);
   const farmer = combatCase('刀', 'attack');

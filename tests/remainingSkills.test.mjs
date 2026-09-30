@@ -41,10 +41,10 @@ for(const hero of ['xiaomei','abing','xiaoliu'])test(`${hero}唯一性保留原�
 });
 
 for(const hero of ['abing','xiaoliu'])test(`${hero}普攻复用主目标周围AOE，范围外不受伤`,()=>{
- const {sim}=setup(hero,true);const a=enemy(sim),b=enemy(sim),far=enemy(sim);
+ const {sim,link}=setup(hero,true);const a=enemy(sim),b=enemy(sim),far=enemy(sim);
  a.distance=100;b.distance=130;far.distance=800;
- const events=run(sim,1200);assert.equal(events.filter(e=>e.kind==='heroAttack').length,1);
- assert.equal(a.hp,10000-heroCombat.damage);assert.equal(b.hp,10000-heroCombat.damage);assert.equal(far.hp,10000);
+ const events=run(sim,getHeroStats(1,link.heroId).attackInterval+30);assert.equal(events.filter(e=>e.kind==='heroAttack').length,1);
+ assert.equal(a.hp,10000-getHeroStats(1,link.heroId).damage);assert.equal(b.hp,10000-getHeroStats(1,link.heroId).damage);assert.equal(far.hp,10000);
 });
 
 test('阿饼完整CD后仅自身强化，Boss也可触发但没有处决和即时奖励',()=>{
@@ -80,10 +80,10 @@ test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次
    assert.equal(link.skill.remainingAttacks,7-attacks);
  }
  assert.equal(attacks,7);assert.equal(link.skill.phase,'charging');assert.equal(link.skill.cooldownElapsed,0);
- assert.equal(a.hp,1e8-(7-triggerAttacks)*heroCombat.damage*1.2);assert.equal(b.hp,a.hp);
- assert.equal(heroAttackInterval(link,getHeroStats(1).attackInterval),1200);
- assert.equal(run(sim,1180).filter(e=>e.kind==='heroAttack').length,0);
- assert.equal(run(sim,40).filter(e=>e.kind==='heroAttack').length,1);
+ assert.ok(Math.abs(a.hp-(1e8-(7-triggerAttacks)*getHeroStats(1,'xiaoliu').damage*1.2))<1e-5);assert.equal(b.hp,a.hp);
+ assert.equal(heroAttackInterval(link,getHeroStats(1,'xiaoliu').attackInterval),1000/1.1);
+ assert.equal(run(sim,850).filter(e=>e.kind==='heroAttack').length,0);
+ assert.equal(run(sim,60).filter(e=>e.kind==='heroAttack').length,1);
  sim.enemies=[];
  const elapsed=link.skill.cooldownElapsed;
  assert.equal(run(sim,cd-elapsed-30).some(e=>e.kind==='skillStart'),false);

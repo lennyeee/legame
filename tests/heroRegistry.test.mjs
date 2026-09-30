@@ -24,7 +24,7 @@ test('Registry has eight unique stable IDs, ordered letter pairs and names; all 
  for(const key of ['id','name'])assert.equal(new Set(heroRegistry.map(h=>h[key])).size,8);
  assert.equal(new Set(heroRegistry.map(h=>h.letters.join('|'))).size,8);
  assert.deepEqual(heroRecipes.map(h=>h.id),['xiaomei','abing','xiaoliu','houjiang','xiaozhan','yongqi','xiaoqian','abiao']);
- assert.equal(GAME_VERSION,'0.69-A');
+ assert.equal(GAME_VERSION,'0.69-B');
  assert.throws(()=>getHeroDefinition('unknown'),/未注册/);
 });
 for(const hero of heroRegistry)test(`Registry resolves ${hero.id} with complete identity and presentation data`,()=>{
@@ -38,6 +38,30 @@ test('planned ranges explicit; Abing B runtime225; passive has no active cooldow
  const passive=getHeroDefinition('xiaoqian').skill;assert.equal(passive.kind,'passive');assert.equal('cooldownByLevel' in passive,false);
  assert.equal(getHeroDefinition('xiaozhan').baseAttackRange,230);
  assert.equal(getHeroDefinition('yongqi').baseAttackRange,230);
+});
+test('v0.69-B keeps explicit per-hero Lv1-Lv5 damage and attack-rate tables',()=>{
+ const expected={
+  xiaomei:{damage:[10,14,19,25,32],aps:[1.30,1.50,1.70,1.90,2.10]},
+  abing:{damage:[8,11,15,20,26],aps:[1.25,1.45,1.65,1.85,2.05]},
+  xiaoliu:{damage:[8,11,15,20,26],aps:[1.10,1.25,1.40,1.55,1.70]},
+  houjiang:{damage:[9,13,18,24,31],aps:[1.05,1.20,1.35,1.50,1.65]},
+  xiaozhan:{damage:[8,11,15,20,26],aps:[1.10,1.25,1.40,1.55,1.70]},
+  yongqi:{damage:[9,13,18,24,31],aps:[1.10,1.25,1.40,1.55,1.70]},
+  xiaoqian:{damage:[10,15,21,28,36],aps:[1.30,1.50,1.70,1.90,2.10]},
+  abiao:{damage:[14,20,28,37,48],aps:[.95,1.05,1.15,1.25,1.35]},
+ };
+ for(const [id,table] of Object.entries(expected)){
+  const hero=getHeroDefinition(id);
+  assert.deepEqual([...hero.attackDamageByLevel],table.damage);
+  assert.deepEqual([...hero.attacksPerSecondByLevel],table.aps);
+  for(let level=1;level<=5;level++){
+   const stats=getHeroStats(level,id);
+   assert.equal(stats.damage,table.damage[level-1]);
+   assert.ok(Math.abs(stats.attackInterval-1000/table.aps[level-1])<1e-10);
+  }
+ }
+ assert.equal('damagePerLevel' in heroGrowth,false);
+ assert.equal('speedPerLevel' in heroGrowth,false);
 });
 test('visual colors cannot change weights, progression or combat; all available letters enter live pool',()=>{
  const pool=recruitmentPool({active:[],passive:[]});
@@ -55,13 +79,13 @@ test('visual colors cannot change weights, progression or combat; all available 
  for(const def of heroRegistry){
   const board=createBoardState(testMap);board.tiles[0].unit=letter(def.letters[0]);board.tiles[1].unit=letter(def.letters[1]);
   const progression=getHeroProgression(board);progression.sync();assert.equal(progression.links.size,1);
-  assert.equal(getHeroStats(1,def.id).damage,10);
+  assert.equal(getHeroStats(1,def.id).damage,def.attackDamageByLevel[0]);
  }
 });
-for(const id of ['xiaomei','abing','xiaoliu'])for(const level of [1,2,3,4,5])test(`${id} Lv${level} registry supplies expected ordinary and skill values`,()=>{
+for(const id of ['xiaomei','abing','xiaoliu'])for(const level of [1,2,3,4,5])test(`${id} Lv${level} registry supplies expected combat and skill values`,()=>{
  const hero=getHeroDefinition(id),stats=getHeroStats(level,id),skill=hero.skill;
- assert.equal(stats.damage,Math.round(10*(1+.5*(level-1))));assert.equal(stats.range,id==='abing'?225:230);
- assert.equal(stats.attackInterval,1200/(1+.08*(level-1)));
+ assert.equal(stats.damage,hero.attackDamageByLevel[level-1]);assert.equal(stats.range,id==='abing'?225:230);
+ assert.equal(stats.attackInterval,1000/hero.attacksPerSecondByLevel[level-1]);
  assert.equal(skillConfigs[hero.skillId],skill);
  const actual=getSkillStats(hero.skillId,level);
  const base=id==='xiaomei'?10000:id==='abing'?14000:12000;

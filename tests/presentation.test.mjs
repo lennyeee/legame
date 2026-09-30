@@ -52,7 +52,7 @@ const { GAME_VERSION } = await import('../src/config/game.ts');
 const { setupDevTopSide } = await import('../src/dev/topSetup.ts');
 const { READY_BACKGROUND_COLOR } = await import('../src/config/ready.ts');
 const { aiConfig } = await import('../src/config/ai.ts');
-const { heroCombat, heroGrowth } = await import('../src/config/heroes.ts');
+const { heroCombat, heroRegistry, heroGrowth } = await import('../src/config/heroes.ts');
 const { combatConfig } = await import('../src/config/combat.ts');
 const { farmerRewardVisual } = await import('../src/config/farmer.ts');
 const { FarmerView } = await import('../src/ui/FarmerView.ts');
@@ -564,12 +564,13 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
 
 test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重开清理', () => {
   const random = Math.random;
-  const damage = heroCombat.damage;
+  const xiaomei = heroRegistry.find(hero => hero.id === 'xiaomei');
+  const damage = xiaomei.attackDamageByLevel[0];
   const skillDamage = skillConfigs.xiaomei_barrage.damage;
   try {
     const p = pve(true, 100);
     for (const win of [false, true, false]) {
-      heroCombat.damage = win ? damage : 1;
+      xiaomei.attackDamageByLevel[0] = win ? damage : 1;
       skillConfigs.xiaomei_barrage.damage = win ? skillDamage : 1;
       Math.random = () => recruitRoll(p,'小');
       p.click(375, 1158);
@@ -625,7 +626,7 @@ test('双格视觉、休眠标识、拆开恢复、暂停、胜负及多次重�
       // 恢复下一轮初始计时，确保新一局重复测试也完全走关闭/创建流程。
       p.run(30000);p.click(375,p.result.resultSnapshot?1070:765);
     }
-  } finally { Math.random=random;heroCombat.damage=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
+  } finally { Math.random=random;xiaomei.attackDamageByLevel[0]=damage;skillConfigs.xiaomei_barrage.damage=skillDamage; }
 });
 
 test('EXP条随参战击杀更新，暂停冻结，同字升级清零，拆开/重开清理', () => {
