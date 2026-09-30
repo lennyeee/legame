@@ -3,6 +3,14 @@ import type { PlayerSide } from '../systems/PlayerSide';
 import { getDragItem } from '../systems/board';
 import type { UnitPosition, DropAction } from '../systems/board';
 import type { DeploymentView } from '../ui/deployment';
+import type { ReserveItem } from '../systems/items';
+
+export interface DropObservation {
+  source: UnitPosition;
+  target: UnitPosition | null;
+  sourceItem: ReserveItem | null;
+  targetItem: ReserveItem | null;
+}
 
 // 鼠标与触摸共享 Phaser Pointer；松手前不改数据，取消即恢复原位。
 export class DeploymentController {
@@ -12,7 +20,7 @@ export class DeploymentController {
     private readonly scene: Phaser.Scene,
     private readonly side: PlayerSide,
     private readonly view: DeploymentView,
-    private readonly onDrop: (result: DropAction) => void,
+    private readonly onDrop: (result: DropAction, observation?: DropObservation) => void,
     private readonly canInteract: () => boolean = () => true,
   ) {
     scene.input.on('pointerdown', this.start);
@@ -63,11 +71,15 @@ export class DeploymentController {
     // 单击只用于查看射程，不能被当成原位拖放失败，也不暂停战斗。
     if (!this.active.moved) { this.cancel(); return; }
     const cancelled = pointer.event?.type === 'touchcancel';
+    const source = this.active.source;
+    const target = cancelled ? null : this.view.positionAt(pointer.x, pointer.y);
+    const observation = { source, target, sourceItem: getDragItem(this.board, this.recruitment, source),
+      targetItem: target ? getDragItem(this.board, this.recruitment, target) : null };
     const result = cancelled ? 'invalid' : this.side.drop(
-      this.active.source, this.view.positionAt(pointer.x, pointer.y),
+      source, target,
     );
     this.cancel();
-    this.onDrop(result);
+    this.onDrop(result, observation);
   };
 
   private cancelPointer = (pointer: Phaser.Input.Pointer): void => {

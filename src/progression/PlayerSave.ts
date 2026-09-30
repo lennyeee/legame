@@ -19,12 +19,14 @@ export interface PlayerSave {
   shop: { shelfItemIds: string[]; matchesTowardRefresh: number };
   rank: RankState;
   profile: PlayerProfile;
+  tutorial: { deploymentHintCompleted: boolean; mergeHintCompleted: boolean; heroLetterHintCompleted: boolean };
 }
 export function defaultPlayerSave(): PlayerSave {
   return { saveVersion: SAVE_VERSION, coins: 0, ownedItemIds: ['frugal_home'],
     equippedActiveItemIds: [], equippedPassiveItemIds: ['frugal_home'],
     stats: { matchesPlayed: 0, wins: 0, highestWave: 0, totalKills: 0 },
-    seenOneTimeEventIds: [], settledMatchIds: [], shop: { shelfItemIds: [], matchesTowardRefresh: 0 }, rank: defaultRank(), profile: defaultProfile() };
+    seenOneTimeEventIds: [], settledMatchIds: [], shop: { shelfItemIds: [], matchesTowardRefresh: 0 }, rank: defaultRank(), profile: defaultProfile(),
+    tutorial: { deploymentHintCompleted: false, mergeHintCompleted: false, heroLetterHintCompleted: false } };
 }
 export const safeInteger = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -38,6 +40,7 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
     .slice(0, equipmentLimits[category]);
   const stats = record(input.stats);
   const shop = record(input.shop);
+  const tutorial = record(input.tutorial);
   const matchesPlayed = safeInteger(stats.matchesPlayed);
   return { saveVersion: SAVE_VERSION, coins: safeInteger(input.coins), ownedItemIds: owned,
     rank: sanitizeRank(input.rank), profile: sanitizeProfile(input.profile),
@@ -47,7 +50,12 @@ export function sanitizeSave(value: unknown, definitions: readonly ItemDefinitio
       highestWave: safeInteger(stats.highestWave), totalKills: safeInteger(stats.totalKills) },
     seenOneTimeEventIds: ids(input.seenOneTimeEventIds), settledMatchIds: ids(input.settledMatchIds),
     shop: { shelfItemIds: ids(shop.shelfItemIds).filter(id => definitions.some(def => def.id === id && def.shopEligible)).slice(0, shopConfig.shelfSize),
-      matchesTowardRefresh: Math.min(shopConfig.matchesPerRefresh - 1, safeInteger(shop.matchesTowardRefresh)) } };
+      matchesTowardRefresh: Math.min(shopConfig.matchesPerRefresh - 1, safeInteger(shop.matchesTowardRefresh)) },
+    tutorial: {
+      deploymentHintCompleted: tutorial.deploymentHintCompleted === true,
+      mergeHintCompleted: tutorial.mergeHintCompleted === true,
+      heroLetterHintCompleted: tutorial.heroLetterHintCompleted === true,
+    } };
 }
 
 export type SavePolicy = { kind: 'reset' } | { kind: 'migrate'; migrate: (old: unknown) => unknown };

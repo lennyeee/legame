@@ -84,11 +84,19 @@ export class ReadyScene extends Phaser.Scene {
       this.openingItems = true;
       this.scene.start('HeroEncyclopediaScene');
     });
+    const helpButton = this.add.rectangle(375, 1185, 250, 72, 0x697e67).setInteractive({ useHandCursor: true });
+    label(this, 375, 1185, '？ 玩法', 26, '#fffaf0');
+    helpButton.on('pointerdown', () => {
+      if (this.startState !== 'READY' || this.openingItems) return;
+      this.openingItems = true;
+      this.scene.start('HowToPlayScene');
+    });
     this.lockForMatching = () => {
       button.disableInteractive();
       itemsButton.disableInteractive();
       shopButton.disableInteractive();
       heroesButton.disableInteractive();
+      helpButton.disableInteractive();
       profileButton.disableInteractive(); settingsButton.disableInteractive();
       buttonText.setText('正在寻找对手…').setFontSize(26);
       itemsButton.setAlpha(0.5);

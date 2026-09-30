@@ -18,6 +18,8 @@ import type { BattleSetup } from '../flow/battleSetup';
 import { LeIntroView } from '../ui/LeIntroView';
 import { pressureConfig } from '../config/pressure';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
+import { gameplayHints } from '../content/gameplayGuide';
+import { isHeroLetter, isUnit } from '../systems/items';
 
 export class GameScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -52,11 +54,63 @@ export class GameScene extends Phaser.Scene {
     const activeSlots = drawLoadout(this, loadout);
     let activeController: ActiveItemController | undefined;
     let ended = false;
+    const progress = progressForScene(this);
+    const tutorialAtStart = progress.save.tutorial;
+    let deploymentHintShown = tutorialAtStart.deploymentHintCompleted;
+    let mergeHintShown = tutorialAtStart.mergeHintCompleted;
+    let heroHintQueued = false;
+    let activeHint: { shape: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text } | null = null;
+    let hintTween: Phaser.Tweens.Tween | undefined;
+    let showNextHint = (): void => {};
+    const validMergeAvailable = (): boolean => {
+      const positions = [
+        ...state.slots.map((_, index) => ({ kind: 'slot' as const, index })),
+        ...bottomSide.board.tiles.map((_, index) => ({ kind: 'tile' as const, index })),
+      ];
+      for (const source of positions) {
+        const sourceItem = bottomSide.itemAt(source);
+        if (!isUnit(sourceItem)) continue;
+        for (const target of positions) {
+          if (source.kind === target.kind && source.index === target.index) continue;
+          if (!isUnit(bottomSide.itemAt(target))) continue;
+          if (bottomSide.dropAction(source, target) === 'merge') return true;
+        }
+      }
+      return false;
+    };
+    const toastHint = (key: 'deploymentHintCompleted' | 'mergeHintCompleted' | 'heroLetterHintCompleted', message: string): void => {
+      if (activeHint) return;
+      // 复用棋盘下方的反馈区，提示不会遮挡战场或备战栏。
+      const shape = this.add.rectangle(375, controlsLayout.feedbackY, 370, 64, 0x353d36, 0.9)
+        .setStrokeStyle(1, 0xd8d1bd).setDepth(30);
+      const text = label(this, 375, controlsLayout.feedbackY, message, 18, '#fffaf0')
+        .setWordWrapWidth(346, true).setDepth(31);
+      activeHint = { shape, text };
+      if (key === 'heroLetterHintCompleted') progress.completeTutorialHint(key);
+      hintTween = this.tweens.add({ targets: [shape, text], alpha: 0, delay: 4500, duration: 350,
+        onComplete: () => {
+          shape.destroy(); text.destroy(); activeHint = null; hintTween = undefined;
+          showNextHint();
+        } });
+    };
+    showNextHint = (): void => {
+      if (ended || !this.input.enabled || activeHint) return;
+      const hasDeployable = state.slots.some(item => item !== null && item !== '铲');
+      if (!deploymentHintShown && hasDeployable && !progress.save.tutorial.deploymentHintCompleted) {
+        deploymentHintShown = true; toastHint('deploymentHintCompleted', gameplayHints.deployment); return;
+      }
+      if (!mergeHintShown && !progress.save.tutorial.mergeHintCompleted && validMergeAvailable()) {
+        mergeHintShown = true; toastHint('mergeHintCompleted', gameplayHints.merge); return;
+      }
+      if (heroHintQueued && !progress.save.tutorial.heroLetterHintCompleted) {
+        heroHintQueued = false; toastHint('heroLetterHintCompleted', gameplayHints.heroLetter);
+      }
+    };
     const deploymentView = new DeploymentView(this, testMap, gameConfig.slotCount);
     const topDeploymentView = new DeploymentView(this, testMap, 0, 'top');
     topDeploymentView.refresh(topSide.board, topSide.recruitment);
     const feedback = label(this, 375, controlsLayout.feedbackY, '拖动兵种部署，拖动铲子解锁', 20, '#8b8272');
-    const deployment = new DeploymentController(this, bottomSide, deploymentView, result => {
+    const deployment = new DeploymentController(this, bottomSide, deploymentView, (result, observation) => {
       farmerView.refresh();
       refresh();
       const messages = {
@@ -67,6 +121,18 @@ export class GameScene extends Phaser.Scene {
         unlock: '部署格已解锁',
       };
       feedback.setText(messages[result]).setColor(result === 'invalid' ? '#a45e45' : '#697e67');
+      if (result !== 'invalid' && observation) {
+        if (observation.source.kind === 'slot' && observation.target?.kind === 'tile'
+          && observation.sourceItem !== null && observation.sourceItem !== '铲'
+          && !progress.save.tutorial.deploymentHintCompleted) {
+          progress.completeTutorialHint('deploymentHintCompleted');
+        }
+        if (result === 'merge' && isUnit(observation.sourceItem) && isUnit(observation.targetItem)
+          && !progress.save.tutorial.mergeHintCompleted) {
+          progress.completeTutorialHint('mergeHintCompleted');
+        }
+      }
+      showNextHint();
     }, () => !ended && this.input.enabled && !activeController?.isDragging);
     const buttonShape = this.add.graphics();
     const button = this.add.rectangle(375, controlsLayout.recruitY, controlsLayout.recruitWidth, controlsLayout.recruitHeight, 0x697e67, 0)
@@ -102,6 +168,8 @@ export class GameScene extends Phaser.Scene {
       feedback.setText('征兵完成 · 待放置栏已更新').setColor('#697e67');
       deployment.refresh();
       refresh();
+      if (state.slots.some(isHeroLetter) && !progress.save.tutorial.heroLetterHintCompleted) heroHintQueued = true;
+      showNextHint();
     });
     deployment.refresh();
     refresh();
@@ -149,6 +217,8 @@ export class GameScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.UPDATE, updateMatch);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.off(Phaser.Scenes.Events.UPDATE, updateMatch);
+      hintTween?.stop();
+      activeHint?.shape.destroy(); activeHint?.text.destroy(); activeHint = null;
       match.destroy();
       farmerView.destroy();
       topFarmerView.destroy();

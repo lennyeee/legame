@@ -74,6 +74,11 @@ export class PlayerProgress {
     if (this.hasSeenWelcome()) return;
     this.data.seenOneTimeEventIds.push(WELCOME_EVENT); this.persist();
   }
+  completeTutorialHint(hint: keyof PlayerSave['tutorial']): void {
+    if (this.data.tutorial[hint]) return;
+    this.data.tutorial[hint] = true;
+    this.persist();
+  }
   commitMatchResult(snapshot: ResultSnapshot): number {
     const reward = matchCoinReward(snapshot);
     if (this.data.settledMatchIds.includes(snapshot.matchId)) return reward;

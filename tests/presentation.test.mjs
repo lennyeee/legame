@@ -37,6 +37,7 @@ const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
 const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
 const { ResultScene } = await import('../src/scenes/ResultScene.ts');
 const { ShopScene } = await import('../src/scenes/ShopScene.ts');
+const { HowToPlayScene } = await import('../src/scenes/HowToPlayScene.ts');
 const { PveOverlayScene } = await import('../src/scenes/PveOverlayScene.ts');
 const { pressureConfig, waveStartForWave } = await import('../src/config/pressure.ts');
 const { gameConfig } = await import('../src/config/game.ts');
@@ -115,9 +116,11 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   const queued = [];
   const setupHistory = [];
   const items = new ItemsScene();
+  const howToPlay = new HowToPlayScene();
   let itemsActive = false;
+  let howToPlayActive = false;
   const overlay = new PveOverlayScene();
-  for(const scene of [game,ready,items])scene.playerProgress=progress;
+  for(const scene of [game,ready,items,howToPlay])scene.playerProgress=progress;
   const result = new ResultScene(), shop = new ShopScene();shop.playerProgress=progress;
   let resultActive=false,shopActive=false;
   let active = true;
@@ -192,6 +195,9 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
       if (key === 'ItemsScene') {
         shutdown(ready);readyActive=false;itemsActive=true;prepare(items);items.create(data);return;
       }
+      if (key === 'HowToPlayScene') {
+        shutdown(ready);readyActive=false;howToPlayActive=true;prepare(howToPlay);howToPlay.create();return;
+      }
       assert.fail('HOME starts only ItemsScene directly');
     },
   };
@@ -199,6 +205,9 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   items.scene = { start: (key,data) => {
     assert.equal(key,'ReadyScene');shutdown(items);itemsActive=false;readyActive=true;prepare(ready);ready.create(data);
   } };
+  howToPlay.scene={start:key=>{
+    assert.equal(key,'ReadyScene');shutdown(howToPlay);howToPlayActive=false;readyActive=true;prepare(ready);ready.create();
+  }};
   overlay.scene = {
     resume: () => { active = true; game.events.emit('resume'); },
     stop: key => { if (key === 'GameScene') {shutdown(game);gameActive=false;} else { shutdown(overlay); overlayActive = false; } },
@@ -239,7 +248,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   if (startImmediately) ready.requestStartGame();
   const text = (x, y, scene = game) => objects.get(scene).find(o => o.kind === 'text' && o.x === x && o.y === y)?.text;
   const click = (x, y) => {
-    let scene=resultActive?result:overlayActive?overlay:shopActive?shop:itemsActive?items:gameActive?game:ready;
+    let scene=resultActive?result:overlayActive?overlay:shopActive?shop:howToPlayActive?howToPlay:itemsActive?items:gameActive?game:ready;
     const cover=matchingActive&&objects.get(matching).find(o=>o.kind==='container'&&o.interactive&&o.visible&&o.getBounds().contains(x,y));
     if(cover)scene=matching;
     const target = objects.get(scene).findLast(o => o.interactive === true && o.x === x && o.y === y);
@@ -259,7 +268,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     }
   };
   const snapshot = () => JSON.stringify(objects.get(readyActive ? ready : game).map(o => ({ text: o.text, visible: o.visible, draws: o.draws })));
-  return { progress, result, shop, get overlay(){return resultActive?result:overlay;}, game, ready, matching, setupHistory, finishFlow, shutdown, items, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
+  return { progress, result, shop, get overlay(){return resultActive?result:overlay;}, game, ready, matching, setupHistory, finishFlow, shutdown, items, howToPlay, objects, text, click, drag, run, snapshot, sceneOrder, isActive: () => active && gameActive && !itemsActive,
     startCount: () => startCount, globalEvents };
 }
 
@@ -1718,4 +1727,42 @@ for(const def of getExpandedHeroes)test(`v0.67-B ${def.name} actual renderer exp
  assert.ok(p.objects.get(p.game).some(o=>o.kind==='text'&&o.text.startsWith('Lv.1')));
  p.game.input.emit('pointerup',{...pointer,primaryDown:false});
  assert.equal(graphics.some(g=>g.draws.some(d=>d[0]==='fillCircle'&&d[3]===def.baseAttackRange)),true);
+});
+
+test('首次部署提示只在有可部署内容时显示，成功部署后本地完成且已有合法合并时提示合并',()=>{
+ const p=pve(false,20,true);p.click(375,765);
+ const random=Math.random;try{Math.random=()=>recruitRoll(p,'刀');p.click(375,1158);}finally{Math.random=random;}
+ assert.equal(p.game.sides.bottom.recruitment.slots.filter(item=>item?.type==='刀').length,5);
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.x===375&&o.y===1264).findLast(o=>o.text)?.text,'拖动单位，把他们放上战场。');
+ const tileIndex=p.game.sides.bottom.board.tiles.findIndex(tile=>tile.unlocked&&!tile.unit);
+ assert.ok(tileIndex>=0);
+ const point=boardProjection(testMap,750,'bottom').point(testMap.cells[tileIndex]);
+ p.drag([183,1018],[point.x,point.y]);
+ assert.equal(p.progress.save.tutorial.deploymentHintCompleted,true);
+ p.run(5000);
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.x===375&&o.y===1264).findLast(o=>o.text)?.text,'相同兵种、相同等级，可以拖到一起升级。');
+ p.drag([279,1018],[375,1018]);
+ assert.equal(p.progress.save.tutorial.mergeHintCompleted,true);
+});
+
+test('首次获得HeroLetter提示只读征兵结果，显示时保存；重载后不会重复提示',()=>{
+ const p=pve(false,20,true);p.click(375,765);
+ const random=Math.random;try{Math.random=()=>recruitRoll(p,'小');p.click(375,1158);}finally{Math.random=random;}
+ assert.ok(p.game.sides.bottom.recruitment.slots.every(item=>item?.type==='小'));
+ assert.equal(p.progress.save.tutorial.heroLetterHintCompleted,false);
+ p.run(5000);
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.x===375&&o.y===1264).findLast(o=>o.text)?.text, '收集正确的两个名字，可以组成武将。\n例如：小 + 美 → 小美');
+ assert.equal(p.progress.save.tutorial.heroLetterHintCompleted,true);
+ const reloaded=new PlayerProgress({getItem:()=>JSON.stringify(p.progress.save),setItem(){}});
+ assert.equal(reloaded.save.tutorial.heroLetterHintCompleted,true);
+});
+
+test('HOME玩法入口进入说明页，五步内容可见且返回HOME',()=>{
+ const p=pve(false);assert.equal(p.text(375,1185,p.ready),'？ 玩法');
+ p.click(375,1185);
+ assert.equal(p.text(375,90,p.howToPlay),'怎么玩？');
+ for(const title of ['征兵','拖上战场','召唤武将','扩大战场','保护乐','别让乐死了。'])
+  assert.ok(p.objects.get(p.howToPlay).some(object=>object.text===title));
+ p.click(76,90);
+ assert.equal(p.text(375,765,p.ready),'开始对战');
 });

@@ -7,6 +7,7 @@ import { MatchingScene } from './scenes/MatchingScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ShopScene } from './scenes/ShopScene';
 import { HeroEncyclopediaScene } from './scenes/HeroEncyclopediaScene';
+import { HowToPlayScene } from './scenes/HowToPlayScene';
 import './style.css';
 
 new Phaser.Game({
@@ -19,5 +20,5 @@ new Phaser.Game({
     width: 750,
     height: 1334,
   },
-  scene: [ReadyScene, MatchingScene, GameScene, PveOverlayScene, ItemsScene, ResultScene, ShopScene, HeroEncyclopediaScene],
+  scene: [ReadyScene, MatchingScene, GameScene, PveOverlayScene, ItemsScene, ResultScene, ShopScene, HeroEncyclopediaScene, HowToPlayScene],
 });
