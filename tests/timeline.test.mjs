@@ -38,14 +38,21 @@ test('large delta emits every due spawn once, identical to fine and uneven incre
  assert.equal(a.elapsedMs,10000);
 });
 
-test('first15 waves match exact HP/count tables and fixed spawn interval; wave16+ is smooth',()=>{
- assert.deepEqual(Array.from({length:15},(_,i)=>enemyHpForWave(i+1)),[10,18,28,40,54,70,88,108,130,154,180,208,238,270,304]);
- assert.deepEqual(Array.from({length:15},(_,i)=>enemyCountForWave(i+1)),[10,11,12,13,15,16,18,19,20,21,22,23,24,25,26]);
- assert.equal(enemyHpForWave(16),340);assert.equal(enemyCountForWave(16),27);
+test('first20 waves match the pressure HP table; enemy counts and cadence remain unchanged',()=>{
+ assert.deepEqual(Array.from({length:20},(_,i)=>enemyHpForWave(i+1)),[10,18,28,40,54,70,88,125,175,240,320,420,540,680,840,1020,1220,1440,1680,1940]);
+ assert.deepEqual(Array.from({length:20},(_,i)=>enemyCountForWave(i+1)),[10,11,12,13,15,16,18,19,20,21,22,23,24,25,26,27,28,29,30,31]);
+ assert.equal(enemyCountForWave(16),27);assert.equal(enemyCountForWave(20),31);
+ assert.equal(combatConfig.enemy.moveSpeed,45);assert.equal(combatConfig.enemy.killReward,1);
+ assert.equal(pressureConfig.baseHealth,3);assert.equal(pressureConfig.firstEnemyDelay,9500);assert.equal(pressureConfig.spawnInterval,1500);
  for(let w=1;w<=100;w++){
   assert.equal(spawnIntervalForWave(w),1500);
   assert.equal(waveStartForWave(w+1)-waveStartForWave(w),enemyCountForWave(w)*1500);
-  if(w>15){assert.ok(enemyHpForWave(w)>enemyHpForWave(w-1));assert.equal(enemyCountForWave(w)-enemyCountForWave(w-1),1);}
+  if(w>20){assert.ok(enemyHpForWave(w)>enemyHpForWave(w-1));assert.equal(enemyCountForWave(w)-enemyCountForWave(w-1),1);}
+ }
+ for(const [wave,hp] of [[21,2231],[22,2566],[25,3903],[30,7849]])assert.equal(enemyHpForWave(wave),hp);
+ for(const wave of [8,20,21,22]){
+  const t=new MatchTimeline(),spawn=t.advance(waveStartForWave(wave)).find(event=>event.wave===wave);
+  assert.equal(Math.round(combatConfig.enemy.maxHp*spawn.hpMultiplier),enemyHpForWave(wave));
  }
  const t=new MatchTimeline();const events=t.advance(waveStartForWave(2));
  assert.equal(events.filter(e=>e.wave===1).length,10);assert.equal(events.filter(e=>e.wave===2).length,1);
@@ -63,12 +70,17 @@ test('wave100 generates normally, no finite completion or accumulated history',(
  assert.ok(next.some(e=>e.wave===101));
 });
 
-for(const w of [100,1000,1000000])test(`wave${w} pressure is deterministic, finite and positive`,()=>{
+for(const w of [100,1000])test(`wave${w} pressure is deterministic, finite and positive`,()=>{
  const hp=enemyHpForWave(w),count=enemyCountForWave(w),interval=spawnIntervalForWave(w),start=waveStartForWave(w);
- assert.ok(Number.isSafeInteger(hp)&&hp>0);assert.ok(Number.isInteger(count)&&count>=1);
+ assert.ok(Number.isFinite(hp)&&Number.isInteger(hp)&&hp>0);assert.ok(Number.isInteger(count)&&count>=1);
  assert.ok(Number.isFinite(interval)&&interval>0);assert.ok(Number.isFinite(start)&&start>=9500);
  assert.equal(hp,enemyHpForWave(w));assert.equal(count,enemyCountForWave(w));
  assert.equal(interval,spawnIntervalForWave(w));assert.equal(start,waveStartForWave(w));
+});
+
+test('wave1000000 pressure has no artificial HP ceiling beyond JavaScript Number range',()=>{
+ assert.equal(enemyHpForWave(1000000),Infinity);
+ assert.equal(enemyCountForWave(1000000),1000011);
 });
 
 test('wave1000 can also be generated without losing or duplicating events',()=>{
@@ -79,12 +91,12 @@ test('wave1000 can also be generated without losing or duplicating events',()=>{
 
 test('unsafe parameters and JS clock bounds fail explicitly, never simulate a final wave',()=>{
  for(const patch of [{waveStartInterval:0},{spawnInterval:0},{waves:[]},{waves:[{hp:0,count:1}]},
-  {waves:[{hp:1,count:0}]},{extension:{hpPerWave:0,hpIncrementGrowth:2,countPerWave:1}}]){
+  {waves:[{hp:1,count:0}]},{extension:{hpGrowthMultiplier:1,countPerWave:1}}]){
   assert.throws(()=>new MatchTimeline({...pressureConfig,...patch}),RangeError);
  }
  for(const w of [0,-1,1.5,Infinity,NaN])assert.throws(()=>enemyCountForWave(w),RangeError);
  assert.throws(()=>waveStartForWave(Number.MAX_SAFE_INTEGER),RangeError);
- assert.equal(enemyHpForWave(Number.MAX_SAFE_INTEGER),Number.MAX_SAFE_INTEGER);
+ assert.equal(enemyHpForWave(Number.MAX_SAFE_INTEGER),Infinity);
  assert.ok(spawnIntervalForWave(Number.MAX_SAFE_INTEGER)>0);
  const t=new MatchTimeline();assert.throws(()=>t.advance(Number.MAX_SAFE_INTEGER+1),RangeError);
  assert.equal(t.elapsedMs,0);assert.equal(t.advance(9500)[0].id,1);

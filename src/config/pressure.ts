@@ -4,7 +4,7 @@ export interface PressureConfig {
   firstEnemyDelay: number;
   spawnInterval: number;
   waves: readonly WavePressure[];
-  extension: { hpPerWave: number; hpIncrementGrowth: number; countPerWave: number };
+  extension: { hpGrowthMultiplier: number; countPerWave: number };
   // 仅供历史对照/隔离测试显式覆盖；正式配置按count × spawnInterval衔接。
   waveStartInterval?: number;
 }
@@ -14,12 +14,14 @@ export const pressureConfig: PressureConfig = {
   waves: [
     { hp: 10, count: 10 }, { hp: 18, count: 11 }, { hp: 28, count: 12 },
     { hp: 40, count: 13 }, { hp: 54, count: 15 }, { hp: 70, count: 16 },
-    { hp: 88, count: 18 }, { hp: 108, count: 19 }, { hp: 130, count: 20 },
-    { hp: 154, count: 21 }, { hp: 180, count: 22 }, { hp: 208, count: 23 },
-    { hp: 238, count: 24 }, { hp: 270, count: 25 }, { hp: 304, count: 26 },
+    { hp: 88, count: 18 }, { hp: 125, count: 19 }, { hp: 175, count: 20 },
+    { hp: 240, count: 21 }, { hp: 320, count: 22 }, { hp: 420, count: 23 },
+    { hp: 540, count: 24 }, { hp: 680, count: 25 }, { hp: 840, count: 26 },
+    { hp: 1020, count: 27 }, { hp: 1220, count: 28 }, { hp: 1440, count: 29 },
+    { hp: 1680, count: 30 }, { hp: 1940, count: 31 },
   ],
-  // 第16波增36HP，之后每波增量再+2；数量每波+1，无最终波。
-  extension: { hpPerWave: 36, hpIncrementGrowth: 2, countPerWave: 1 },
+  // Wave21起HP按上一波逐波乘1.15并round；数量规则保持每波+1。
+  extension: { hpGrowthMultiplier: 1.15, countPerWave: 1 },
 };
 
 export function validatePressureConfig(config: PressureConfig): void {
@@ -28,8 +30,8 @@ export function validatePressureConfig(config: PressureConfig): void {
     || !positive(config.spawnInterval) || !config.waves.length
     || config.waves.some(w => !positive(w.hp) || !positive(w.count)
       || (w.spawnInterval !== undefined && !positive(w.spawnInterval)))
-    || !positive(config.extension.hpPerWave) || !positive(config.extension.countPerWave)
-    || !Number.isSafeInteger(config.extension.hpIncrementGrowth) || config.extension.hpIncrementGrowth < 0
+    || !Number.isFinite(config.extension.hpGrowthMultiplier) || config.extension.hpGrowthMultiplier <= 1
+    || !positive(config.extension.countPerWave)
     || (config.waveStartInterval !== undefined && !positive(config.waveStartInterval))) {
     throw new RangeError('Invalid pressure HP/count/cadence');
   }
@@ -41,10 +43,23 @@ function extensionStep(wave: number, config: PressureConfig): number {
 }
 const safeValue = (n: number): number => Math.min(Number.MAX_SAFE_INTEGER, n);
 
+// 缓存每个不可变压力配置的逐波结果，既保持严格的逐波round语义，也避免时间轴反复重算。
+const hpByConfig = new WeakMap<PressureConfig, { signature: string; values: number[] }>();
+
 export function enemyHpForWave(wave: number, config: PressureConfig = pressureConfig): number {
-  const k = extensionStep(wave, config), last = config.waves.at(-1)!;
-  return k === 0 ? config.waves[wave - 1]!.hp : safeValue(last.hp + config.extension.hpPerWave * k
-    + config.extension.hpIncrementGrowth * k * (k - 1) / 2);
+  extensionStep(wave, config);
+  const signature = `${config.extension.hpGrowthMultiplier}:${config.waves.map(entry => entry.hp).join(',')}`;
+  let cached = hpByConfig.get(config);
+  if (!cached || cached.signature !== signature) {
+    cached = { signature, values: config.waves.map(entry => entry.hp) };
+    hpByConfig.set(config, cached);
+  }
+  const { values } = cached;
+  while (values.length < wave && Number.isFinite(values.at(-1))) {
+    values.push(Math.round(values.at(-1)! * config.extension.hpGrowthMultiplier));
+  }
+  // Number的有限精度最终会自然溢出；不额外把HP限制到人为平衡上限。
+  return values[Math.min(wave, values.length) - 1]!;
 }
 export function enemyCountForWave(wave: number, config: PressureConfig = pressureConfig): number {
   const k = extensionStep(wave, config);
