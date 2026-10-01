@@ -26,6 +26,9 @@ const { heroEncyclopediaEntry, heroEncyclopediaIds, formatHeroEffect } = await i
 const { heroLore, worldLore } = await import('../src/content/heroLore.ts');
 const { unitDisplayNames, unitDescriptions } = await import('../src/config/units.ts');
 const { unitLevelStats, getCombatStats } = await import('../src/config/combat.ts');
+const { gameplayGuide, gameplayHints } = await import('../src/content/gameplayGuide.ts');
+const { itemDefinitions } = await import('../src/config/equipment.ts');
+const { opponentNames } = await import('../src/progression/profile.ts');
 const { HeroEncyclopediaScene } = await import('../src/scenes/HeroEncyclopediaScene.ts');
 
 test('图鉴恰好收录Registry中8名武将，人物叙事与战斗配置分层', () => {
@@ -103,17 +106,18 @@ function sceneHarness() {
   const click = (x, y) => {
     const target = objects.findLast(value => value.active && value.interactive && value.x === x && value.y === y);
     assert.ok(target, `no target at ${x},${y}`);
-    target.emit('pointerdown');
+    target.emit('pointerdown', { id: 1, x, y });
+    target.emit('pointerup', { id: 1, x, y });
   };
   return { scene, objects, destinations, click };
 }
 
-test('档案默认武将分类，八名卡片/详情/世界分类切换与HOME返回可达', () => {
+test('档案默认英雄分类，八名卡片/详情/世界分类切换与HOME返回可达', () => {
   const { scene, objects, destinations, click } = sceneHarness();
   assert.equal(scene.page, 'heroes');
   assert.ok(objects.some(item => item.active && item.text === '档案'));
   assert.ok(objects.some(item => item.active && item.text === '世界'));
-  assert.ok(objects.some(item => item.active && item.text === '武将'));
+  assert.ok(objects.some(item => item.active && item.text === '英雄'));
   for (const id of heroEncyclopediaIds) assert.ok(objects.some(item => item.active && item.text === heroEncyclopediaEntry(id).hero.name));
   click(205, 360);
   assert.equal(scene.page, heroEncyclopediaIds[0]);
@@ -131,20 +135,42 @@ test('档案默认武将分类，八名卡片/详情/世界分类切换与HOME�
   assert.deepEqual(destinations, ['ReadyScene']);
 });
 
-test('长小传可触摸/滚轮滚动，返回按钮保持在滚动区外', () => {
+test('长小传纵向触摸/滚轮可滚到底且不切换英雄，返回按钮保持在滚动区外', () => {
   const { scene, objects, click } = sceneHarness();
   click(205, 360);
   assert.ok(scene.maxScroll > 0);
   scene.scrollBy(400);
   assert.equal(scene.scrollOffset, 400);
-  scene.onTouchDown({ y: 600 });
-  scene.onTouchMove({ y: 400, isDown: true });
+  scene.onTouchDown({ id: 1, x: 375, y: 600 });
+  scene.onTouchMove({ id: 1, x: 375, y: 400, isDown: true });
   assert.equal(scene.scrollOffset, 600);
   scene.onTouchUp();
+  assert.equal(scene.page, heroEncyclopediaIds[0]);
   scene.onWheel({}, [], 0, 5000);
   assert.equal(scene.scrollOffset, scene.maxScroll);
   assert.ok(objects.some(item => item.active && item.interactive && item.y === 83));
   click(76, 83);
   assert.equal(scene.page, 'heroes');
   assert.equal(scene.scrollOffset, 0);
+});
+
+test('英雄列表只接受位移阈值内的明确点击，触摸拖动不会误选英雄', () => {
+  const { scene, objects } = sceneHarness();
+  const card = objects.find(item => item.active && item.interactive && item.x === 205 && item.y === 360);
+  assert.ok(card);
+  card.emit('pointerdown', { id: 1, x: 205, y: 360 });
+  card.emit('pointerup', { id: 1, x: 205, y: 380 });
+  assert.equal(scene.page, 'heroes');
+  card.emit('pointerdown', { id: 1, x: 205, y: 360 });
+  card.emit('pointerup', { id: 1, x: 205, y: 360 });
+  assert.equal(scene.page, heroEncyclopediaIds[0]);
+});
+
+test('主要玩家可见内容使用“英雄”术语，不显示旧“武将”称呼', () => {
+  const visible = [...gameplayGuide.flatMap(step => [step.title, ...step.lines]), ...Object.values(gameplayHints),
+    ...itemDefinitions.map(item => item.description), ...heroEncyclopediaIds.map(id => heroEncyclopediaEntry(id).hero.name), ...opponentNames];
+  assert.ok(visible.every(text => !text.includes('武将')));
+  const { scene, objects } = sceneHarness();
+  assert.ok(objects.some(item => item.active && item.text === '英雄'));
+  assert.ok(objects.every(item => !item.active || !item.text.includes('武将')));
 });

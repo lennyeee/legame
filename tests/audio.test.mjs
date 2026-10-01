@@ -53,11 +53,11 @@ test('all supplied audio keys resolve beneath the Vite base, without enemy_hit',
   }
 });
 
-test('A5 loader includes the two supplied feedback sounds and B mix stays restrained', () => {
-  assert.equal(audioAssets.unit_place.volume, .42);
+test('B1 increases only the three positive-feedback sounds; level-up and combat mix stay unchanged', () => {
+  assert.equal(audioAssets.unit_place.volume, .48);
   assert.equal(audioAssets.hero_level_up.volume, .44);
-  assert.equal(audioAssets.hero_created.volume, .46);
-  assert.equal(audioAssets.unit_merge.volume, .40);
+  assert.equal(audioAssets.hero_created.volume, .52);
+  assert.equal(audioAssets.unit_merge.volume, .46);
   assert.equal(audioAssets.snipe_attack.volume, .15);
   assert.equal(audioAssets.pierce_attack.volume, .14);
   assert.equal(audioAssets.battle_bgm.volume, .23);

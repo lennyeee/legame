@@ -40,10 +40,11 @@ test('新玩家教程状态默认false，旧存档缺字段安全补false，完�
 });
 
 test('玩法说明按五个步骤提供指定规则与重点提醒', () => {
-  assert.deepEqual(gameplayGuide.map(step => step.title), ['征兵', '拖上战场', '召唤武将', '扩大战场', '保护乐']);
+  assert.deepEqual(gameplayGuide.map(step => step.title), ['征兵', '拖上战场', '召唤英雄', '扩大战场', '保护乐']);
   assert.match(gameplayGuide[0].lines.join(''), /刃、贯、狙、爆/);
   assert.match(gameplayGuide[1].lines.join(''), /相同兵种 \+ 相同等级/);
   assert.match(gameplayGuide[2].lines.join(''), /小.*美.*小美/);
+  assert.ok(!gameplayGuide[2].lines.join('').includes('武将'));
   assert.match(gameplayGuide[3].lines.join(''), /铲子.*未解锁的土地/);
   assert.match(gameplayGuide[4].lines.join(''), /3 点生命/);
   assert.equal(gameplayHints.deployment, '拖动单位，把他们放上战场。');
@@ -66,7 +67,7 @@ test('说明页显示五步指引并通过明确返回按钮回HOME', () => {
   };
   scene.scene = { start: key => routes.push(key) };
   scene.create();
-  for (const title of ['怎么玩？', '征兵', '拖上战场', '召唤武将', '扩大战场', '保护乐', '别让乐死了。']) {
+  for (const title of ['怎么玩？', '征兵', '拖上战场', '召唤英雄', '扩大战场', '保护乐', '别让乐死了。']) {
     assert.ok(objects.some(item => item.text === title), `missing ${title}`);
   }
   objects.find(item => item.interactive)?.emit('pointerdown');

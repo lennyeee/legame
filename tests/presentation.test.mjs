@@ -1770,7 +1770,7 @@ test('首次获得HeroLetter提示只读征兵结果，显示时保存；重载�
  assert.ok(p.game.sides.bottom.recruitment.slots.every(item=>item?.type==='小'));
  assert.equal(p.progress.save.tutorial.heroLetterHintCompleted,false);
  p.run(5000);
- assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.x===375&&o.y===1264).findLast(o=>o.text)?.text, '收集正确的两个名字，可以组成武将。\n例如：小 + 美 → 小美');
+ assert.equal(p.objects.get(p.game).filter(o=>o.kind==='text'&&o.x===375&&o.y===1264).findLast(o=>o.text)?.text, '收集正确的两个名字，可以组成英雄。\n例如：小 + 美 → 小美');
  assert.equal(p.progress.save.tutorial.heroLetterHintCompleted,true);
  const reloaded=new PlayerProgress({getItem:()=>JSON.stringify(p.progress.save),setItem(){}});
  assert.equal(reloaded.save.tutorial.heroLetterHintCompleted,true);
@@ -1782,7 +1782,7 @@ test('HOME玩法入口进入说明页，五步内容可见且返回HOME',()=>{
  p.click(375,1085);assert.equal(p.archiveOpenCount(),1);p.ready.openingItems=false;
  p.click(375,1185);
  assert.equal(p.text(375,90,p.howToPlay),'怎么玩？');
- for(const title of ['征兵','拖上战场','召唤武将','扩大战场','保护乐','别让乐死了。'])
+ for(const title of ['征兵','拖上战场','召唤英雄','扩大战场','保护乐','别让乐死了。'])
   assert.ok(p.objects.get(p.howToPlay).some(object=>object.text===title));
  p.click(76,90);
  assert.equal(p.text(375,765,p.ready),'开始对战');

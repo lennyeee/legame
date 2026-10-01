@@ -17,6 +17,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
   private content?: Phaser.GameObjects.Container;
   private clip?: Phaser.GameObjects.Graphics;
   private touchY: number | null = null;
+  private touchStart: { id: number; x: number; y: number } | null = null;
 
   constructor() { super('HeroEncyclopediaScene'); }
 
@@ -32,6 +33,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       this.input.off('pointermove', this.onTouchMove, this);
       this.input.off('pointerup', this.onTouchUp, this);
       this.touchY = null;
+      this.touchStart = null;
     });
     this.showPage('heroes');
     ensureAudioLoader(this);
@@ -63,7 +65,7 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
   private showTabs(active: 'world' | 'heroes'): void {
     const tabs = [
       { key: 'world' as const, title: '世界', x: 245 },
-      { key: 'heroes' as const, title: '武将', x: 505 },
+      { key: 'heroes' as const, title: '英雄', x: 505 },
     ];
     tabs.forEach(tab => {
       const selected = tab.key === active;
@@ -86,9 +88,15 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
       label(this, x, y - 37, entry.hero.name, 32);
       label(this, x, y + 5, `「${entry.lore.title}」`, 18, '#6d756b').setWordWrapWidth(280, true);
       label(this, x, y + 48, `${entry.recipe}  ·  ${entry.quality}`, 19, '#627863');
-      card.on('pointerdown', () => { audioForScene(this).uiClick(); this.showPage(id); });
+      let press: { id: number; x: number; y: number } | null = null;
+      card.on('pointerdown', (pointer: Phaser.Input.Pointer) => { press = { id: pointer.id, x: pointer.x, y: pointer.y }; });
+      card.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        const tapped = press?.id === pointer.id && Math.hypot(pointer.x - press.x, pointer.y - press.y) <= 10;
+        press = null;
+        if (tapped) { audioForScene(this).uiClick(); this.showPage(id); }
+      });
     });
-    label(this, 375, 1200, '选择一位武将查看人物小传与战斗档案', 19, '#8b8272');
+    label(this, 375, 1200, '选择一位英雄查看人物小传与战斗档案', 19, '#8b8272');
   }
 
   private showScrollable(page: Exclude<Page, 'heroes'>): void {
@@ -158,12 +166,18 @@ export class HeroEncyclopediaScene extends Phaser.Scene {
     this.scrollBy(dy);
   }
   private onTouchDown(pointer: Phaser.Input.Pointer): void {
-    if (pointer.y >= VIEW_TOP && pointer.y <= VIEW_BOTTOM && this.page !== 'heroes') this.touchY = pointer.y;
+    if (pointer.y >= VIEW_TOP && pointer.y <= VIEW_BOTTOM && this.page !== 'heroes') {
+      this.touchY = pointer.y;
+      this.touchStart = { id: pointer.id, x: pointer.x, y: pointer.y };
+    }
   }
   private onTouchMove(pointer: Phaser.Input.Pointer): void {
-    if (this.touchY === null || !pointer.isDown) return;
-    this.scrollBy(this.touchY - pointer.y);
-    this.touchY = pointer.y;
+    if (this.touchY === null || !pointer.isDown || pointer.id !== this.touchStart?.id) return;
+    // Touch movement only scrolls the long-form page; hero changes require a deliberate tap.
+    if (Math.hypot(pointer.x - this.touchStart.x, pointer.y - this.touchStart.y) > 10) {
+      this.scrollBy(this.touchY - pointer.y);
+      this.touchY = pointer.y;
+    }
   }
-  private onTouchUp(): void { this.touchY = null; }
+  private onTouchUp(): void { this.touchY = null; this.touchStart = null; }
 }
