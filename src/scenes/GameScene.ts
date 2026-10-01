@@ -21,6 +21,7 @@ import { progressForScene, type PlayerProgress } from '../progression/PlayerProg
 import { gameplayHints } from '../content/gameplayGuide';
 import { isHeroLetter, isUnit } from '../systems/items';
 import { audioForScene, ensureAudioLoader } from '../audio/AudioManager';
+import { visualAssets } from '../config/visualAssets';
 
 export class GameScene extends Phaser.Scene {
   playerProgress?: PlayerProgress;
@@ -30,6 +31,12 @@ export class GameScene extends Phaser.Scene {
   get sides() { return this.match?.sides ?? null; }
   constructor() {
     super('GameScene');
+  }
+
+  preload(): void {
+    for (const asset of [...Object.values(visualAssets.units), visualAssets.enemy]) {
+      if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
+    }
   }
 
   create(data: { setup: BattleSetup }): void {

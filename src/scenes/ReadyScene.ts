@@ -10,6 +10,7 @@ import { avatarSymbol } from '../progression/profile';
 import { rankDisplay } from '../progression/rank';
 import { showProfile, showSettings, type NicknameInputFactory } from '../ui/HomeDialogs';
 import { audioForScene, ensureAudioLoader } from '../audio/AudioManager';
+import { visualAssets } from '../config/visualAssets';
 
 // 仅静态预览，不创建钱包、棋盘运行状态、输入控制器、战斗或计时器。
 export class ReadyScene extends Phaser.Scene {
@@ -30,7 +31,8 @@ export class ReadyScene extends Phaser.Scene {
     this.inventory = progress.inventory();
     this.openingItems = false;
     this.startState = 'READY';
-    this.add.rectangle(375, 667, 750, 1334, READY_BACKGROUND_COLOR).setInteractive();
+    this.add.rectangle(375, 667, 750, 1334, READY_BACKGROUND_COLOR).setDepth(-2).setInteractive();
+    this.loadBackground();
     this.add.circle(100, 110, 40, 0x697e67);
     const avatar = label(this, 100, 110, '', 40);
     const nickname = label(this, 270, 95, '', 28);
@@ -114,6 +116,26 @@ export class ReadyScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.lockForMatching = null; if (this.startState === 'WELCOME') this.startState = 'STARTING'; });
     if (data.autoMatch) this.requestStartGame(true);
     ensureAudioLoader(this);
+  }
+
+  private loadBackground(): void {
+    // HOME becomes interactive immediately; a failed/slow image leaves the solid-color fallback.
+    if (!this.textures || !this.load) return;
+    const { key, url } = visualAssets.home;
+    const show = (): void => {
+      if (!this.sys.isActive() || !this.textures.exists(key)) return;
+      const source = this.textures.get(key).getSourceImage();
+      const width = this.scale.width;
+      const height = this.scale.height;
+      this.add.image(width / 2, height / 2, key)
+        .setScale(Math.max(width / source.width, height / source.height)).setDepth(-1);
+    };
+    if (this.textures.exists(key)) { show(); return; }
+    const event = `filecomplete-image-${key}`;
+    this.load.once(event, show);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.load.off(event, show));
+    this.load.image(key, url);
+    this.load.start();
   }
 
   requestStartGame(rematch = false): void {

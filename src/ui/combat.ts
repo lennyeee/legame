@@ -9,11 +9,13 @@ import type { HeroLink } from '../systems/heroActivation';
 import { boardDisplayScene, boardProjection } from './boardDisplay';
 import type { DisplaySide } from './boardDisplay';
 import { boardDisplay } from '../config/layout';
+import { visualAssets } from '../config/visualAssets';
 
 export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly range: Phaser.GameObjects.Graphics;
   private readonly uprightBars: Phaser.GameObjects.Graphics | null;
+  private readonly enemyImages = new Map<number, { sprite: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Ellipse }>();
   private readonly flashes = new Map<number, number>();
   private effects: { event: AttackEffect; expires: number }[] = [];
   private heroEffects: { event: Extract<CombatEvent, { kind: 'heroAttack' }>; expires: number }[] = [];
@@ -24,13 +26,15 @@ export class CombatView {
   private skillAreas: { link:HeroLink; expires:number; radius:number; sword:boolean }[] = [];
   private readonly projection;
   private readonly showHeroExp: boolean;
+  private readonly screenScene: Phaser.Scene;
 
   constructor(private readonly scene: Phaser.Scene, private readonly battle: CombatSimulation,
     side: DisplaySide = 'bottom') {
+    this.screenScene = scene;
     this.projection = boardProjection(battle.map, scene.scale?.width ?? 750, side);
     this.showHeroExp = side === 'bottom';
     // 血条是阅读方向固定的 HUD，不能随上半场的几何图形一起翻转。
-    this.uprightBars = side === 'top' ? scene.add.graphics().setDepth(11) : null;
+    this.uprightBars = scene.add.graphics().setDepth(13);
     this.scene = boardDisplayScene(scene, battle.map, side);
     scene = this.scene;
     this.range = scene.add.graphics().setDepth(1);
@@ -61,6 +65,11 @@ export class CombatView {
     }
     this.graphics.clear();
     this.uprightBars?.clear();
+    const liveEnemyIds = new Set(this.battle.enemies.map(enemy => enemy.id));
+    for (const [id, view] of this.enemyImages) {
+      if (liveEnemyIds.has(id)) continue;
+      view.sprite.destroy(); view.shadow.destroy(); this.enemyImages.delete(id);
+    }
     this.skillFlashes = this.skillFlashes.filter(flash => {
       if (flash.expires <= now || !this.battle.isHeroLinkValid(flash.link)) { flash.text.destroy(); return false; }
       flash.text.setAlpha(0.4 + 0.6 * Math.abs(Math.cos((flash.expires - now) / 55)));
@@ -117,29 +126,27 @@ export class CombatView {
       if(point){this.graphics.lineStyle(3,0xe2b351,.8);this.graphics.strokeCircle(point.x,point.y,26);}
     }
     for (const enemy of this.battle.enemies) {
-      this.graphics.fillStyle(this.flashes.has(enemy.id) ? visuals.hitColor : visuals.enemyColor);
-      this.graphics.fillCircle(enemy.x, enemy.y, visuals.enemyRadius);
-      this.graphics.lineStyle(2, 0x784139);
-      this.graphics.strokeCircle(enemy.x, enemy.y, visuals.enemyRadius);
+      let view = this.enemyImages.get(enemy.id);
+      if (!view) {
+        const shadow = this.screenScene.add.ellipse(0, 0, 43 * boardDisplay.scale, 10 * boardDisplay.scale,
+          0x292720, 0.12).setDepth(10);
+        const sprite = this.screenScene.add.image(0, 0, visualAssets.enemy.key).setDepth(11);
+        sprite.setScale(visualAssets.enemy.width * boardDisplay.scale / sprite.width);
+        view = { sprite, shadow };
+        this.enemyImages.set(enemy.id, view);
+      }
+      const point = this.projection.point(enemy);
+      view.sprite.setPosition(point.x, point.y).setAlpha(this.flashes.has(enemy.id) ? 0.55 : 1);
+      view.shadow.setPosition(point.x, point.y + 31 * boardDisplay.scale);
       const statuses=this.battle.statuses.enemies.get(enemy)??[];
       if(statuses.length){this.graphics.lineStyle(3,statuses.some(e=>e.kind==='stun')?0xe4c860:0x66996b,.9);
         this.graphics.strokeCircle(enemy.x,enemy.y,visuals.enemyRadius+5);}
-      const barWidth = 40;
-      if (this.uprightBars) {
-        const point = this.projection.point(enemy);
-        const width = barWidth * boardDisplay.scale;
-        const height = 6 * boardDisplay.scale;
-        const y = point.y - (visuals.enemyRadius + 12) * boardDisplay.scale;
-        this.uprightBars.fillStyle(0x714d43).fillRect(point.x - width / 2, y, width, height);
-        this.uprightBars.fillStyle(0x83b06f).fillRect(point.x - width / 2, y,
-          width * enemy.hp / enemy.maxHp, height);
-      } else {
-        const barY = this.projection.aboveRectY(enemy.y, visuals.enemyRadius, 6, 6);
-        this.graphics.fillStyle(0x714d43);
-        this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth, 6);
-        this.graphics.fillStyle(0x83b06f);
-        this.graphics.fillRect(enemy.x - barWidth / 2, barY, barWidth * enemy.hp / enemy.maxHp, 6);
-      }
+      const width = 40 * boardDisplay.scale;
+      const height = 6 * boardDisplay.scale;
+      const y = point.y - (visualAssets.enemy.width / 2 + 11) * boardDisplay.scale;
+      this.uprightBars?.fillStyle(0x714d43).fillRect(point.x - width / 2, y, width, height);
+      this.uprightBars?.fillStyle(0x83b06f).fillRect(point.x - width / 2, y,
+        width * enemy.hp / enemy.maxHp, height);
     }
     this.effects = this.effects.filter(({ event, expires }) =>
       expires > now && this.battle.isAttackerValid(event.tileIndex, event.unit, event.level));

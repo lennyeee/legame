@@ -70,6 +70,7 @@ const { rankTitle, rankProgress, rankDisplay } = await import('../src/progressio
 const { LeIntroView } = await import('../src/ui/LeIntroView.ts');
 const { buildPath, pointOnPath } = await import('../src/combat/path.ts');
 const { audioForScene } = await import('../src/audio/AudioManager.ts');
+const { visualAssets } = await import('../src/config/visualAssets.ts');
 
 test('匹配时间使用独立可注入表现随机，范围为2000～3000ms',()=>{
  assert.equal(matchingDuration(()=>0),2000);
@@ -156,6 +157,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
         if (key === 'setStrokeStyle') return (...args) => {t.stroke=args;return proxy;};
         if (key === 'alpha') return t.alpha;
         if (key === 'setScale') return (scale) => {t.scale=scale;return proxy;};
+        if (key === 'setTexture') return textureKey => {t.key=textureKey;return proxy;};
         if (key === 'setVisible') return value => { t.visible = value; return proxy; };
         if (key === 'disableInteractive') return () => {t.interactive=false;return proxy;};
         if (key === 'setInteractive') return () => { t.interactive = true; return proxy; };
@@ -183,6 +185,7 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     scene.scale = { width: 750 };
     scene.add = Object.fromEntries(['rectangle', 'circle', 'ellipse', 'triangle', 'graphics', 'container'].map(kind => [kind, (...args) => object(kind, ...args)]));
     scene.add.circle=(x,y,radius,color)=>object('circle',x,y,radius,radius,color);
+    scene.add.image=(x,y,key)=>{const image=object('image',x,y,key==='enemy_basic'?750:350,key==='enemy_basic'?750:350);image.key=key;return image;};
     scene.add.container = (x,y,children=[])=>{const parent=object('container',x,y);parent.children=children;return parent;};
     scene.add.text = (x, y, text, style) => { const textObject=object('text', x, y).setText(text);textObject.style=style;return textObject; };
     scene.sys = { events: new EventEmitter() };
@@ -544,6 +547,57 @@ test('未装备农民开局被动栏为空',()=>{
   const p=pve();assert.equal(p.text(120,1110),'—');assert.equal(p.objects.get(p.game).some(o=>o.text==='农民'),false);
 });
 
+test('普通兵PNG沿用同一格子点击范围，四种持有栏视觉与拖动阴影同步',()=>{
+  const p=pve(true,100),random=Math.random;
+  try {
+    for(const type of ['刀','枪','弓','骑']) {
+      Math.random=()=>recruitRoll(p,type);
+      p.click(375,1158);
+      const slots=p.objects.get(p.game).filter(o=>o.kind==='container'&&o.visible&&o.y===1018
+        &&o.children.some(child=>child.kind==='image'&&child.visible&&child.key===visualAssets.units[type].key));
+      assert.equal(slots.length,5);
+      for(const slot of slots) {
+        assert.equal(slot.children.some(child=>child.kind==='ellipse'&&child.visible),true);
+        assert.equal(slot.children.some(child=>child.kind==='text'&&child.visible&&child.text===type),false);
+      }
+    }
+    p.drag([183,1018],[164.0625,574.0625]);
+    const deployed=p.objects.get(p.game).find(o=>o.kind==='container'&&o.visible&&o.x===164.0625&&o.y===577.0625
+      &&o.children.some(child=>child.kind==='image'&&child.visible&&child.key===visualAssets.units.骑.key));
+    assert.ok(deployed);
+    assert.equal(deployed.children.some(child=>child.kind==='ellipse'&&child.visible),true);
+    assert.equal(p.game.sides.bottom.board.tiles[0].unit.type,'骑');
+  } finally { Math.random=random; }
+});
+
+test('双边敌军PNG和接触阴影跟随移动，消失后同组销毁',()=>{
+  const p=pve();p.run(pressureConfig.firstEnemyDelay+20);
+  const images=p.objects.get(p.game).filter(o=>o.kind==='image'&&o.key===visualAssets.enemy.key&&o.visible);
+  assert.equal(images.length,2);
+  const first=images[0],position={x:first.x,y:first.y};
+  p.run(100);
+  assert.notDeepEqual({x:first.x,y:first.y},position);
+  for(const side of [p.game.sides.bottom,p.game.sides.top])side.combat.enemies.length=0;
+  p.run(10);
+  assert.equal(images.every(image=>!image.visible),true);
+});
+
+test('HOME背景在Scene已显示后异步加载，按单一比例cover且失败可保留底色',()=>{
+  const ready=new ReadyScene(),loader=new EventEmitter(),events=new EventEmitter();
+  let queued=null,starts=0,loaded=false,drawn=null;
+  ready.events=events;ready.sys={isActive:()=>true};ready.scale={width:750,height:1334};
+  ready.textures={exists:()=>loaded,get:()=>({getSourceImage:()=>({width:941,height:1672})})};
+  ready.load=loader;loader.image=(key,url)=>{queued={key,url};};loader.start=()=>{starts++;};
+  ready.add={image:(x,y,key)=>{drawn={x,y,key,setScale(scale){this.scale=scale;return this;},setDepth(depth){this.depth=depth;return this;}};return drawn;}};
+  ready.loadBackground();
+  assert.equal(drawn,null);assert.equal(starts,1);
+  assert.deepEqual(queued,{key:visualAssets.home.key,url:visualAssets.home.url});
+  loaded=true;loader.emit(`filecomplete-image-${visualAssets.home.key}`);
+  assert.equal(drawn.depth,-1);assert.equal(drawn.x,375);assert.equal(drawn.y,667);
+  assert.equal(drawn.scale,Math.max(750/941,1334/1672));
+  events.emit('shutdown');assert.equal(loader.listenerCount(`filecomplete-image-${visualAssets.home.key}`),0);
+});
+
 test('初始READY无对局控制器和计时器，长时间等待无敌人/资源/技能/EXP/操作', () => {
   const p = pve(false);
   assert.equal(p.ready.startState, 'READY');
@@ -577,10 +631,9 @@ test('开始后统一初始化一次，重复请求无效，无条件收入保�
   p.run(990);assert.equal(p.text(170, 55), '$ 20');
   p.run(10);assert.equal(p.text(170, 55), '$ 20');
   assert.equal(p.game.time._active.length, 0);
-  const enemyCircles = () => p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0)
-    .flatMap(o=>o.draws).filter(d=>d[0]==='fillCircle'&&d[3]===combatConfig.visuals.enemyRadius);
-  p.run(pressureConfig.firstEnemyDelay-1010);assert.equal(enemyCircles().length, 0);
-  p.run(20);assert.equal(enemyCircles().length, 1);
+  const enemyImages = () => p.objects.get(p.game).filter(o=>o.kind==='image'&&o.key==='enemy_basic'&&o.visible);
+  p.run(pressureConfig.firstEnemyDelay-1010);assert.equal(enemyImages().length, 0);
+  p.run(20);assert.equal(enemyImages().length, 2); // 同步出兵各有独立的 PNG。
   const random = Math.random;
   try { Math.random=()=>0;p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]); }
   finally { Math.random=random; }
@@ -885,7 +938,7 @@ function setup(unit = { type: '刀', level: 1 }) {
     { positionAt: () => position });
   const pointer = { id: 1, primaryDown: true, x: 187.5, y: 602.5 };
   const render = () => controller.render([], 0);
-  return { scene, deployment, pointer, render, range: graphics[0], panel: texts[0],
+  return { scene, deployment, pointer, render, range: graphics[1], panel: texts[0],
     side, setPosition: next => { position = next; } };
 }
 
