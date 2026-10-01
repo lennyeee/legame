@@ -16,7 +16,7 @@ registerHooks({
       source: stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'transform' }) };
   },
 });
-const { AudioManager, audioForScene, loadAudioInBackground } = await import('../src/audio/AudioManager.ts');
+const { AudioManager, audioForScene, ensureAudioLoader, loadAudioInBackground } = await import('../src/audio/AudioManager.ts');
 const { installAudioDebug, audioDebugSnapshot } = await import('../src/audio/AudioDebug.ts');
 const { audioAssets, audioAssetUrl } = await import('../src/config/audio.ts');
 const { PlayerProgress } = await import('../src/progression/PlayerProgress.ts');
@@ -196,6 +196,66 @@ test('audio decoding stalled or failed in a background loader cannot hold Scene.
   load.emit('loaderror', { key: 'home_bgm' });
   assert.equal(audio.state.desired, 'home_bgm');
   scene.events.emit('shutdown'); assert.equal(load.listenerCount('filecomplete'), 0);
+});
+
+test('HOME launches one persistent audio loader without touching its own Loader or waiting for audio', () => {
+  const game = {};
+  let launches = 0;
+  const makeScene = () => ({ game, load: { audio() { throw new Error('visible Scene must not load audio'); } },
+    scene: { isActive: () => false, launch: key => { assert.equal(key, 'AudioLoaderScene'); launches++; } },
+    events: new EventEmitter() });
+  const home = makeScene();
+  assert.doesNotThrow(() => ensureAudioLoader(home));
+  assert.equal(launches, 1);
+  home.events.emit('shutdown');
+  assert.doesNotThrow(() => ensureAudioLoader(makeScene()));
+  assert.equal(launches, 1, 'a queued launch must not restart the loader on Scene transitions');
+});
+
+test('persistent audio loader survives visible Scene shutdown and reconciles the current desired BGM', () => {
+  const { backend, audio } = setup();
+  const cached = new Set();
+  const load = Object.assign(new EventEmitter(), { queued: [], started: 0,
+    audio(key) { this.queued.push(key); }, start() { this.started++; } });
+  const loader = { sys: { settings: { key: 'AudioLoaderScene' } },
+    cache: { audio: { exists: key => cached.has(key) } }, load, events: new EventEmitter() };
+  const home = { input: new EventEmitter(), events: new EventEmitter() };
+  backend.add = () => { throw new Error('not cached yet'); };
+  audio.menu(home);
+  loadAudioInBackground(loader, audio);
+  assert.equal(load.started, 1);
+  assert.equal(load.queued.length, Object.keys(audioAssets).length);
+  home.events.emit('shutdown');
+  assert.equal(load.listenerCount('filecomplete'), 1, 'ordinary Scene shutdown cannot remove loader callbacks');
+  backend.add = (key, config) => {
+    if (!cached.has(key)) throw new Error('not cached yet');
+    return Backend.prototype.add.call(backend, key, config);
+  };
+  cached.add('home_bgm'); load.emit('filecomplete', 'home_bgm');
+  assert.equal(audio.state.bgmKey, 'home_bgm');
+  assert.equal(backend.clips.at(-1).isPlaying, true);
+  const battle = { input: new EventEmitter(), events: new EventEmitter() };
+  audio.battle(battle);
+  cached.add('battle_bgm'); load.emit('filecomplete', 'battle_bgm');
+  assert.equal(audio.state.bgmKey, 'battle_bgm');
+  assert.equal(backend.clips.at(-1).isPlaying, true);
+  assert.match(audio.diagnostics.loader, /filecomplete battle_bgm/);
+});
+
+test('persistent loader respects disabled music and lets unavailable SFX succeed only after ready', () => {
+  const { backend, audio } = setup();
+  const load = Object.assign(new EventEmitter(), { audio() {}, start() {} });
+  const cached = new Set();
+  const loader = { cache: { audio: { exists: key => cached.has(key) } }, load, events: new EventEmitter() };
+  const add = backend.add.bind(backend);
+  backend.add = (key, config) => { if (!cached.has(key)) throw new Error('not cached'); return add(key, config); };
+  audio.setOptions({ musicEnabled: false, sfxEnabled: true });
+  audio.menu(); loadAudioInBackground(loader, audio);
+  cached.add('home_bgm'); load.emit('filecomplete', 'home_bgm');
+  assert.equal(audio.state.bgmKey, null);
+  assert.equal(audio.sfx('recruit'), false);
+  cached.add('recruit'); load.emit('filecomplete', 'recruit');
+  assert.equal(audio.sfx('recruit'), true);
 });
 
 test('missing assets and a throwing loader degrade silently; late BGM completion retries the current track', () => {

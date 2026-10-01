@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { gameplayGuide } from '../content/gameplayGuide';
 import { label } from '../ui/text';
-import { audioForScene, loadAudioInBackground } from '../audio/AudioManager';
+import { audioForScene, ensureAudioLoader } from '../audio/AudioManager';
 
 export class HowToPlayScene extends Phaser.Scene {
   constructor() { super('HowToPlayScene'); }
@@ -36,6 +36,6 @@ export class HowToPlayScene extends Phaser.Scene {
       }
       if (isFinal) label(this, 375, 1225, '别让乐死了。', 30, '#a65040');
     });
-    loadAudioInBackground(this);
+    ensureAudioLoader(this);
   }
 }

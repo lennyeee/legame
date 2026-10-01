@@ -279,9 +279,22 @@ export function audioForScene(scene: Phaser.Scene): AudioManager {
   }
 }
 
-// Called from Scene.create, never preload: decoding can fail or stall on mobile without holding HOME hostage.
+const audioLoaderLaunches = new WeakSet<Phaser.Game>();
+
+// Launch one audio-only Scene. Phaser queues launches until its next update, so guard that interval too.
+export function ensureAudioLoader(scene: Phaser.Scene): void {
+  const game = scene.game;
+  try {
+    if (audioLoaderLaunches.has(game) || scene.scene.isActive('AudioLoaderScene')) return;
+    audioLoaderLaunches.add(game);
+    scene.scene.launch('AudioLoaderScene');
+  } catch { audioLoaderLaunches.delete(game); /* Audio loading must never hold up a visible Scene. */ }
+}
+
+// Called only by the persistent AudioLoaderScene after HOME is created, never from preload.
 export function loadAudioInBackground(scene: Phaser.Scene, audio = audioForScene(scene)): void {
   try {
+    audio.recordDiagnostic('loader', 'audio loader started');
     const onFileComplete = (key: string): void => {
       audio.diagnostics.assets[key] = 'filecomplete: cache ready';
       audio.recordDiagnostic('loader', `${scene.sys?.settings.key ?? 'scene'} filecomplete ${key}; cache=${scene.cache.audio.exists(key)}`);
@@ -303,7 +316,7 @@ export function loadAudioInBackground(scene: Phaser.Scene, audio = audioForScene
       audio.recordDiagnostic('loader', 'loader complete');
     });
     scene.events.once('shutdown', () => scene.load.off('filecomplete', onFileComplete));
-    scene.events.once('shutdown', () => audio.recordDiagnostic('loader', `${scene.sys?.settings.key ?? 'scene'} shutdown; loader reset`));
+    scene.events.once('shutdown', () => audio.recordDiagnostic('loader', 'audio loader shutdown; game ending'));
     let queued = false;
     for (const key of Object.keys(audioAssets) as AudioKey[]) {
       if (scene.cache.audio.exists(key)) continue;

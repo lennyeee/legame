@@ -34,6 +34,7 @@ const { MatchingScene } = await import('../src/scenes/MatchingScene.ts');
 const { createBattleSetup, matchingDuration, flowConfig } = await import('../src/flow/battleSetup.ts');
 const { createLoadout, createInventory } = await import('../src/systems/equipment.ts');
 const { ReadyScene } = await import('../src/scenes/ReadyScene.ts');
+const { AudioLoaderScene } = await import('../src/scenes/AudioLoaderScene.ts');
 const { ItemsScene } = await import('../src/scenes/ItemsScene.ts');
 const { ResultScene } = await import('../src/scenes/ResultScene.ts');
 const { ShopScene } = await import('../src/scenes/ShopScene.ts');
@@ -118,6 +119,8 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
   const setupHistory = [];
   const items = new ItemsScene();
   const howToPlay = new HowToPlayScene();
+  const audioLoaderScene = new AudioLoaderScene();
+  let audioLoaderActive = false;
   let itemsActive = false;
   let howToPlayActive = false;
   const overlay = new PveOverlayScene();
@@ -171,6 +174,8 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
     scene.events ??= new EventEmitter();
     scene.input ??= new EventEmitter();
     scene.game = sharedGame;
+    scene.scene ??= {};
+    scene.scene.isActive = key => key === 'AudioLoaderScene' && audioLoaderActive;
     if (matchingOptions.audioLoader) {
       scene.cache = { audio: { exists: () => false } };
       scene.load = matchingOptions.audioLoader;
@@ -209,7 +214,13 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
       assert.fail('Unexpected direct HOME scene');
     },
   };
-  ready.scene.launch=(key,data)=>{assert.equal(key,'MatchingScene');startMatching(data);};
+  ready.scene.launch=(key,data)=>{
+    if(key==='AudioLoaderScene') {
+      if(!audioLoaderActive){audioLoaderActive=true;prepare(audioLoaderScene);audioLoaderScene.create();}
+      return;
+    }
+    assert.equal(key,'MatchingScene');startMatching(data);
+  };
   items.scene = { start: (key,data) => {
     assert.equal(key,'ReadyScene');shutdown(items);itemsActive=false;readyActive=true;prepare(ready);ready.create(data);
   } };
