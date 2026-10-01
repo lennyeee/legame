@@ -153,6 +153,11 @@ function pve(startImmediately = true, startingMoney = gameConfig.initialMoney, a
         if (key === 'setText') return value => { t.text = value; return proxy; };
         if (key === 'setSize') return (width,height)=>{t.width=width;t.height=height;return proxy;};
         if (key === 'setPosition') return (x,y) => {t.x=x;t.y=y;return proxy;};
+        if (key === 'setOrigin') return (x,y) => {t.originX=x;t.originY=y;return proxy;};
+        if (key === 'setColor') return color => {t.color=color;return proxy;};
+        if (key === 'setFontStyle') return style => {t.fontStyle=style;return proxy;};
+        if (key === 'setStroke') return (color,thickness) => {t.textStroke={color,thickness};return proxy;};
+        if (key === 'setFillStyle') return (color,alpha) => {t.fillStyle=color;t.fillAlpha=alpha;return proxy;};
         if (key === 'setAlpha') return value => {t.alpha=value;return proxy;};
         if (key === 'setStrokeStyle') return (...args) => {t.stroke=args;return proxy;};
         if (key === 'alpha') return t.alpha;
@@ -559,6 +564,11 @@ test('普通兵PNG沿用同一格子点击范围，四种持有栏视觉与拖�
       for(const slot of slots) {
         assert.equal(slot.children.some(child=>child.kind==='ellipse'&&child.visible),true);
         assert.equal(slot.children.some(child=>child.kind==='text'&&child.visible&&child.text===type),false);
+      const level=slot.children.find(child=>child.kind==='text'&&child.text==='1');
+      assert.ok(level);assert.equal(level.originX,0);assert.equal(level.originY,0);
+      assert.ok(level.x<0&&level.y<0);assert.equal(level.fontStyle,'bold');assert.equal(level.textStroke.thickness,2);
+      assert.equal(slot.children.some(child=>child.kind==='rectangle'&&child.width===40&&child.height===17),false);
+      const unitBackground=slot.children.find(child=>child.kind==='rectangle');assert.equal(unitBackground.fillStyle,0xfffcf4);
       }
     }
     p.drag([183,1018],[164.0625,574.0625]);
@@ -1216,7 +1226,7 @@ test('升级符真实输入：50秒CD、暂停冻结、非法释放/移出保留
   p.game.input.emit('pointerup',{id:2,x:164.0625,y:574.0625,primaryDown:false});
   p.game.input.emit('pointerup',{id:1,x:183,y:1018,primaryDown:false});
   assert.equal(p.text(80,1018),'升级符\n50s');assert.equal(p.text(375,1264),'道具使用成功');
-  assert.ok(p.objects.get(p.game).some(o=>o.text==='Lv.2'));
+  assert.ok(p.objects.get(p.game).some(o=>o.text==='2'));
   p.run(50000);p.click(80,1018);p.click(75,55);assert.equal(p.text(80,1018),'升级符\n可用');
   p.run(1000);p.click(375,p.result.resultSnapshot?1070:765);p.game.input.emit('pointerup',{id:1,x:279,y:1018});assert.equal(p.text(80,1018),'升级符\n可用');
  }finally{combatConfig.enemy.moveSpeed=speed;Math.random=random;}

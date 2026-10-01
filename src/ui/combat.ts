@@ -128,22 +128,23 @@ export class CombatView {
     for (const enemy of this.battle.enemies) {
       let view = this.enemyImages.get(enemy.id);
       if (!view) {
-        const shadow = this.screenScene.add.ellipse(0, 0, 43 * boardDisplay.scale, 10 * boardDisplay.scale,
-          0x292720, 0.12).setDepth(10);
+        const shadow = this.screenScene.add.ellipse(0, 0, 37 * boardDisplay.scale, 9 * boardDisplay.scale,
+          0x292720, 0.2).setDepth(10);
         const sprite = this.screenScene.add.image(0, 0, visualAssets.enemy.key).setDepth(11);
         sprite.setScale(visualAssets.enemy.width * boardDisplay.scale / sprite.width);
         view = { sprite, shadow };
         this.enemyImages.set(enemy.id, view);
       }
       const point = this.projection.point(enemy);
-      view.sprite.setPosition(point.x, point.y).setAlpha(this.flashes.has(enemy.id) ? 0.55 : 1);
+      view.sprite.setPosition(point.x, point.y - 5 * boardDisplay.scale)
+        .setAlpha(this.flashes.has(enemy.id) ? 0.55 : 1);
       view.shadow.setPosition(point.x, point.y + 31 * boardDisplay.scale);
       const statuses=this.battle.statuses.enemies.get(enemy)??[];
       if(statuses.length){this.graphics.lineStyle(3,statuses.some(e=>e.kind==='stun')?0xe4c860:0x66996b,.9);
         this.graphics.strokeCircle(enemy.x,enemy.y,visuals.enemyRadius+5);}
       const width = 40 * boardDisplay.scale;
       const height = 6 * boardDisplay.scale;
-      const y = point.y - (visualAssets.enemy.width / 2 + 11) * boardDisplay.scale;
+      const y = point.y - (visualAssets.enemy.width / 2 + 5) * boardDisplay.scale;
       this.uprightBars?.fillStyle(0x714d43).fillRect(point.x - width / 2, y, width, height);
       this.uprightBars?.fillStyle(0x83b06f).fillRect(point.x - width / 2, y,
         width * enemy.hp / enemy.maxHp, height);

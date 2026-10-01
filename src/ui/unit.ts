@@ -12,7 +12,6 @@ export class UnitView {
   private readonly name: Phaser.GameObjects.Text;
   private readonly level: Phaser.GameObjects.Text;
   private readonly shadow: Phaser.GameObjects.Ellipse;
-  private readonly levelBadge: Phaser.GameObjects.Rectangle;
   private readonly sprite: Phaser.GameObjects.Image;
   private spriteType: Unit['type'] | null = null;
 
@@ -20,13 +19,12 @@ export class UnitView {
     this.background = scene.add.rectangle(0, 0, size, size, 0xfffcf4)
       .setStrokeStyle(2, 0x9aa58c);
     this.name = label(scene, 0, -8, '', 30);
-    this.level = label(scene, 0, Math.min(20, size / 2 - 9), '', 17);
+    this.level = label(scene, -size / 2 + 5, -size / 2 + 3, '', 16)
+      .setOrigin(0, 0).setFontStyle('bold').setStroke('#514a40', 2);
     this.shadow = scene.add.ellipse(0, 23, 43, 9, 0x292720, 0.16).setVisible(false);
-    this.levelBadge = scene.add.rectangle(0, Math.min(25, size / 2 - 9), 40, 17, 0xfffcf4, 0.86)
-      .setVisible(false);
-    this.sprite = scene.add.image(0, -8, visualAssets.units.刀.key).setVisible(false);
+    this.sprite = scene.add.image(0, 0, visualAssets.units.刀.key).setVisible(false);
     this.root = scene.add.container(x, y, [this.background, this.shadow,
-      this.sprite, this.name, this.levelBadge, this.level]);
+      this.sprite, this.name, this.level]);
     this.root.setVisible(false);
   }
 
@@ -35,9 +33,8 @@ export class UnitView {
     this.background.setVisible(!linked);
     if (!item) return;
     const ordinary = isUnit(item);
-    this.background.setFillStyle(getLevelColor(ordinary || isFarmer(item) ? item.level : 1));
+    this.background.setFillStyle(ordinary ? 0xfffcf4 : getLevelColor(isFarmer(item) ? item.level : 1));
     this.shadow.setVisible(ordinary);
-    this.levelBadge.setVisible(ordinary);
     this.sprite.setVisible(ordinary);
     if (ordinary && this.spriteType !== item.type) {
       const asset = visualAssets.units[item.type];
@@ -50,9 +47,15 @@ export class UnitView {
     this.name.setVisible(!ordinary);
     this.name.setFontSize(ordinary || item === '铲' ? 30 : 24);
     this.name.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.name.width, 1)));
-    this.level.setText(item !== '铲' && !linked ? `Lv.${item.level}` : '');
-    this.level.setY(ordinary ? this.levelBadge.y : Math.min(20, this.background.height / 2 - 9));
-    this.level.setFontSize(ordinary ? 13 : sleeping ? 12 : 17);
+    this.level.setText(item !== '铲' && !linked ? ordinary ? `${item.level}` : `Lv.${item.level}` : '');
+    if (ordinary) {
+      const color = getLevelColor(item.level).toString(16).padStart(6, '0');
+      this.level.setColor(`#${color}`).setFontSize(16)
+        .setPosition(-this.background.width / 2 + 5, -this.background.height / 2 + 3);
+    } else {
+      this.level.setColor('#514a40').setFontSize(sleeping ? 12 : 17)
+        .setPosition(0, Math.min(20, this.background.height / 2 - 9)).setOrigin(0.5, 0.5);
+    }
     this.level.setScale(Math.min(1, (this.background.width - 8) / Math.max(this.level.width, 1)));
   }
 }
