@@ -10,11 +10,12 @@ export interface Enemy extends MapPoint {
   distance: number;
   hitRadius?: number; // 受击圆，独立于显示尺寸；无体积的规则fixture默认0。
   isBoss?: boolean;
+  percentDamageMultiplier?: number;
   spawnEventId?: number; // Match共享出题事件；id本身仍只在所属Side内唯一。
 }
 
 export function createEnemy(id: number, path: BattlePath, stats: { maxHp: number; moveSpeed: number; hitRadius?: number }): Enemy {
-  return { id, ...pointOnPath(path, 0), ...stats, hp: stats.maxHp, distance: 0 };
+  return { id, ...pointOnPath(path, 0), ...stats, hp: stats.maxHp, distance: 0, percentDamageMultiplier: 1 };
 }
 
 // 按走过的总长度插值，一次更新跨越拐角也不会偏离路径。
@@ -24,10 +25,12 @@ export function advanceEnemy(enemy: Enemy, path: BattlePath, deltaSeconds: numbe
   return enemy.distance >= path.totalLength;
 }
 
-export function damageEnemy(enemy: Enemy, damage: number): { applied: number; killed: boolean } {
-  if (enemy.hp <= 0 || damage <= 0) return { applied: 0, killed: false };
+export function damageEnemy(enemy: Enemy, damage: number | { regular: number; trueDamage: number }): { applied: number; killed: boolean } {
+  // 防御系统尚未存在；分开的真实伤害通道为以后绕过防御保留明确入口。
+  const total = typeof damage === 'number' ? damage : damage.regular + damage.trueDamage;
+  if (enemy.hp <= 0 || total <= 0) return { applied: 0, killed: false };
   const before = enemy.hp;
-  enemy.hp = Math.max(0, enemy.hp - damage);
+  enemy.hp = Math.max(0, enemy.hp - total);
   return { applied: before - enemy.hp, killed: enemy.hp === 0 };
 }
 

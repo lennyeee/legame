@@ -49,7 +49,7 @@ test('首次完整CD、无目标ready保持、出现目标立即释放并重置C
  assert.equal(run(sim,cfg.cooldown-20).some(e=>e.kind==='skillStart'),false);
  run(sim,40);assert.equal(link.skill.phase,'ready');run(sim,10000);assert.equal(link.skill.phase,'ready');
  const target=enemy(sim);const events=run(sim,20);
- assert.equal(events.filter(e=>e.kind==='skillStart').length,1);assert.equal(target.hp,900);
+ assert.equal(events.filter(e=>e.kind==='skillStart').length,1);assert.equal(target.hp,720);
  assert.ok(link.skill.cooldownElapsed<30);
 });
 for(const count of [1,2,3,4])test(`${count}个有效敌人全部选中，逐次命中不同时扣血`,()=>{
@@ -58,7 +58,7 @@ for(const count of [1,2,3,4])test(`${count}个有效敌人全部选中，逐次�
  assert.equal(targets.filter(e=>e.hp<1000).length,1);
  const rest=run(sim,cfg.hitInterval*(count-1));
  assert.equal(rest.filter(e=>e.kind==='skillHit').length,count-1);
- targets.forEach((e,i)=>assert.equal(e.hp,900+i));
+ targets.forEach((e,i)=>assert.ok(Math.abs(e.hp-((1000+i)*.82-100))<1e-8));
  assert.notEqual(link.skill.phase,'casting');
 });
 test('选绝对当前HP最低5个，排除Boss、死亡目标，稳定处理HP相同者',()=>{
@@ -87,7 +87,7 @@ test('拆开销毁CD及未完成打击，重组重新等完整CD',()=>{
  applyDrop(board,wallet,pos('tile',1),pos('slot',0));assert.equal(link.skill,null);
  assert.equal(run(sim,1000).some(e=>e.kind==='skillHit'),false);assert.equal(b.hp,1000);
  applyDrop(board,wallet,pos('slot',0),pos('tile',1));sim.update(0);const fresh=sim.heroLinks[0];assert.equal(fresh.skill.cooldownElapsed,0);
- assert.equal(run(sim,cfg.cooldown-20).some(e=>e.kind==='skillStart'),false);assert.equal(a.hp,900);
+ assert.equal(run(sim,cfg.cooldown-20).some(e=>e.kind==='skillStart'),false);assert.equal(a.hp,720);
 });
 test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
  const map={...testMap,cells:[{x:195,y:650,unlocked:true},{x:247,y:650,unlocked:true},{x:195,y:650,unlocked:true}]};
@@ -97,7 +97,7 @@ test('技能命中登记参战，普通兵补刀仍给小美EXP',()=>{
  const originalDamage=damageTable[0];damageTable[0]=0;
  try {
   const target=enemy(sim,500);run(sim,20);
-  assert.equal(target.hp,400);target.hp=1;board.tiles[2].unit={type:'刀',level:5};run(sim,300);
+  assert.equal(target.hp,220);target.hp=1;board.tiles[2].unit={type:'刀',level:5};run(sim,300);
   assert.equal(sim.enemies.length,0);assert.equal(link.currentExp,heroGrowth.rewards.assist);
  } finally {damageTable[0]=originalDamage;}
 });

@@ -2,13 +2,15 @@ import type { Enemy } from './enemies';
 import type { HeroLink } from '../systems/heroActivation';
 import type { Unit } from '../systems/items';
 import { statusConfig } from '../config/heroes';
+import type { PercentDamage } from './specialDamage';
 
 export type DamageSource = 'basic' | 'skill' | 'dot';
 export interface EnemyEffect {
-  kind: 'stun' | 'slow' | 'poison'; source: HeroLink; remaining: number;
+  kind: 'stun' | 'slow' | 'poison' | 'vulnerable'; source: HeroLink; remaining: number;
   amount: number; interval: number; elapsed: number;
+  maxHpPercentPerTick?: number;
 }
-interface AttackBuff { source: HeroLink; remaining: number; damage: number; speed: number }
+interface AttackBuff { source: HeroLink; remaining: number; damage: number; speed: number; specialMultiplier: number }
 export type BattleAlly = Unit | HeroLink;
 
 // 每个CombatSimulation独立持有；计时只由固定逻辑步推进，绝不改写基础属性。
@@ -21,9 +23,17 @@ export class StatusEffects {
     if (old >= 0) effects.splice(old, 1);
     effects.push({ ...effect, elapsed: 0 }); this.enemies.set(enemy, effects);
   }
-  buff(ally: BattleAlly, source: HeroLink, duration: number, damage: number, speed: number): void {
+  buff(ally: BattleAlly, source: HeroLink, duration: number, damage: number, speed: number, specialMultiplier = 1): void {
     const buffs = this.allies.get(ally) ?? new Map<HeroLink, AttackBuff>();
-    buffs.set(source, { source, remaining: duration, damage, speed }); this.allies.set(ally, buffs);
+    buffs.set(source, { source, remaining: duration, damage, speed, specialMultiplier }); this.allies.set(ally, buffs);
+  }
+  specialDamageMultiplier(ally: HeroLink): number {
+    // 同类来源取最高有效增幅，一次特殊命中只应用一次。
+    return Math.max(1, ...[...(this.allies.get(ally)?.values() ?? [])].map(buff => buff.specialMultiplier));
+  }
+  damageMultiplier(enemy: Enemy): number {
+    return 1 + Math.max(0, ...(this.enemies.get(enemy) ?? [])
+      .filter(effect => effect.kind === 'vulnerable' && effect.remaining > 0).map(effect => effect.amount));
   }
   basicStats<T extends {damage:number;attackInterval:number}>(ally: BattleAlly, stats:T):T {
     const buffs = [...(this.allies.get(ally)?.values() ?? [])];
@@ -48,7 +58,7 @@ export class StatusEffects {
     }
   }
   // 返回此步有效移动秒数；跨状态到期点分段积分，眩晕不冻结DOT/slow的时间。
-  tickEnemy(enemy:Enemy,dt:number,hit:(damage:number,source:HeroLink)=>void):number {
+  tickEnemy(enemy:Enemy,dt:number,hit:(damage:number,source:HeroLink,special?:PercentDamage)=>void):number {
     const effects=this.enemies.get(enemy)??[];
     const boundaries=[0,...effects.map(e=>e.remaining).filter(t=>t>0&&t<dt),dt].sort((a,b)=>a-b);
     let moveMs=0;
@@ -62,7 +72,11 @@ export class StatusEffects {
     for(const effect of effects) {
       if(effect.kind==='poison') {
         effect.elapsed+=Math.min(dt,effect.remaining);
-        while(effect.elapsed+1e-8>=effect.interval&&enemy.hp>0){effect.elapsed-=effect.interval;hit(effect.amount,effect.source);}
+        while(effect.elapsed+1e-8>=effect.interval&&enemy.hp>0){
+          effect.elapsed-=effect.interval;
+          hit(effect.amount,effect.source,effect.maxHpPercentPerTick
+            ? { basis: 'maxHp', ratio: effect.maxHpPercentPerTick } : undefined);
+        }
       }
       effect.remaining-=dt;
     }

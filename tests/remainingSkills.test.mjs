@@ -80,7 +80,10 @@ test('小六完整CD获得7层；无目标不消耗、不推进下轮CD；七次
    assert.equal(link.skill.remainingAttacks,7-attacks);
  }
  assert.equal(attacks,7);assert.equal(link.skill.phase,'charging');assert.equal(link.skill.cooldownElapsed,0);
- assert.ok(Math.abs(a.hp-(1e8-(7-triggerAttacks)*getHeroStats(1,'xiaoliu').damage*1.2))<1e-5);assert.equal(b.hp,a.hp);
+ const remaining=7-triggerAttacks;
+ const specialRatio=Math.max(0,remaining-1)*.04+(remaining>0?.10:0);
+ assert.ok(Math.abs(a.hp-(1e8-remaining*getHeroStats(1,'xiaoliu').damage*1.2-1e8*specialRatio))<.01);
+ assert.equal(b.hp,a.hp);
  assert.equal(heroAttackInterval(link,getHeroStats(1,'xiaoliu').attackInterval),1000/1.1);
  assert.equal(run(sim,850).filter(e=>e.kind==='heroAttack').length,0);
  assert.equal(run(sim,60).filter(e=>e.kind==='heroAttack').length,1);

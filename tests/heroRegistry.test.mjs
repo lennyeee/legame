@@ -24,7 +24,7 @@ test('Registry has eight unique stable IDs, ordered letter pairs and names; all 
  for(const key of ['id','name'])assert.equal(new Set(heroRegistry.map(h=>h[key])).size,8);
  assert.equal(new Set(heroRegistry.map(h=>h.letters.join('|'))).size,8);
  assert.deepEqual(heroRecipes.map(h=>h.id),['xiaomei','abing','xiaoliu','houjiang','xiaozhan','yongqi','xiaoqian','abiao']);
- assert.equal(GAME_VERSION,'0.70-B1');
+ assert.equal(GAME_VERSION,'0.71');
  assert.throws(()=>getHeroDefinition('unknown'),/未注册/);
 });
 for(const hero of heroRegistry)test(`Registry resolves ${hero.id} with complete identity and presentation data`,()=>{

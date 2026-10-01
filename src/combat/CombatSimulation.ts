@@ -21,6 +21,9 @@ import type { SkillEvent } from './skills';
 import { StatusEffects } from './statusEffects';
 import type { DamageSource } from './statusEffects';
 import { applyTileBonuses } from './tileBonuses';
+import { heroSpecial, specialAtLevel } from '../config/heroSpecial';
+import { resolvePercentDamage } from './specialDamage';
+import type { PercentDamage } from './specialDamage';
 
 interface Attacker {
   unit: Unit;
@@ -54,7 +57,8 @@ export interface Projectile extends MapPoint {
 export type CombatEvent = AttackEffect | SkillEvent
   | { kind: 'heroAttack'; link: HeroLink; end: MapPoint }
   | { kind: 'heroLevelUp'; heroId: HeroLink['heroId']; level: number }
-  | { kind: 'hit'; enemyId: number; source: DamageSource; damage: number; heroId?: HeroLink['heroId'] }
+  | { kind: 'hit'; enemyId: number; source: DamageSource; damage: number; heroId?: HeroLink['heroId'];
+      percentBasis?: PercentDamage['basis']; trueDamage?: boolean; specialDamage?: number }
   | { kind: 'kill'; enemyId: number; position: MapPoint; reward: number }
   | { kind: 'escape'; enemyId: number };
 
@@ -183,10 +187,17 @@ export class CombatSimulation {
     return events;
   }
 
-  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink, source: DamageSource = 'basic'): void {
-    const result = damageEnemy(enemy, damage);
+  private hit(enemy: Enemy, damage: number, events: CombatEvent[], hero?: HeroLink,
+    source: DamageSource = 'basic', special?: PercentDamage): void {
+    // 固定和特殊部分使用同一命中前HP快照、同一次死亡/EXP结算。
+    const vulnerability = this.statuses.damageMultiplier(enemy);
+    const specialDamage = special && hero
+      ? resolvePercentDamage(enemy, special, this.statuses.specialDamageMultiplier(hero)) * vulnerability : 0;
+    const result = damageEnemy(enemy, { regular: damage * vulnerability + (special?.trueDamage ? 0 : specialDamage),
+      trueDamage: special?.trueDamage ? specialDamage : 0 });
     if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
-    if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id, source, damage: result.applied, heroId: hero?.heroId });
+    if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id, source, damage: result.applied,
+      heroId: hero?.heroId, ...(special ? { percentBasis: special.basis, trueDamage: !!special.trueDamage, specialDamage } : {}) });
     if (result.killed) {
       for (const link of getHeroProgression(this.board).awardKill(enemy.id, hero ?? null)) {
         events.push({ kind: 'heroLevelUp', heroId: link.heroId, level: link.level });
@@ -270,7 +281,8 @@ export class CombatSimulation {
     this.progress?.tick(deltaMs, multiplier => this.spawnEnemy(multiplier));
     for (const enemy of [...this.enemies]) {
       if (enemy.hp <= 0) continue;
-      const movementSeconds=this.statuses.tickEnemy(enemy,deltaMs,(damage,source)=>this.hit(enemy,damage,events,source,'dot'));
+      const movementSeconds=this.statuses.tickEnemy(enemy,deltaMs,(damage,source,special)=>
+        this.hit(enemy,damage,events,source,'dot',special));
       if (enemy.hp<=0 || !advanceEnemy(enemy, this.path, movementSeconds)) continue;
       events.push({ kind: 'escape', enemyId: enemy.id });
       getHeroProgression(this.board).forgetEnemy(enemy.id);
@@ -347,8 +359,23 @@ export class CombatSimulation {
         ? this.enemies.filter(enemy=>enemy.hp>0&&inRange(attacker.link.origin,enemy,stats.range))
         : definition.attackMode === 'splash'
         ? this.enemies.filter(enemy => enemy.hp > 0 && inRange(target, enemy, getHeroDefinition(attacker.link.heroId).combat!.splashRadius)) : [target];
-      for (const victim of victims) this.hit(victim, effective.damage
-        *(victim!==target && 'splashMultiplier' in definition ? definition.splashMultiplier : 1), events, attacker.link);
+      for (const victim of victims) {
+        let special: PercentDamage | undefined;
+        if (attacker.link.heroId === 'xiaoliu' && attacker.link.skill?.phase === 'empowered') {
+          const final = attacker.link.skill!.remainingAttacks === 1;
+          special = { basis: 'maxHp', ratio: specialAtLevel(final
+            ? heroSpecial.xiaoliuFinalMaxHpTrue : heroSpecial.xiaoliuEmpoweredMaxHp, attacker.link.level),
+            trueDamage: final };
+        } else if (attacker.link.heroId === 'abing' && this.statuses.allies.get(attacker.link)?.has(attacker.link)) {
+          special = { basis: 'maxHp', ratio: specialAtLevel(heroSpecial.abingBuffMaxHp, attacker.link.level) };
+        } else if (attacker.link.heroId === 'xiaoqian') {
+          special = { basis: 'maxHp', ratio: heroSpecial.xiaoqianMaxHpByHit[
+            Math.min(attacker.link.focus?.stacks ?? 0, heroSpecial.xiaoqianMaxHpByHit.length - 1)]! };
+        }
+        this.hit(victim, effective.damage
+          *(victim!==target && 'splashMultiplier' in definition ? definition.splashMultiplier : 1),
+          events, attacker.link, 'basic', special);
+      }
       if(definition.skill.kind==='passive'&&attacker.link.focus) {
         attacker.link.focus.stacks=target.hp>0?Math.min(definition.skill.effectByLevel[attacker.link.level-1]!.maxStacks!,attacker.link.focus.stacks+1):0;
       }
@@ -358,7 +385,7 @@ export class CombatSimulation {
     for (const link of this.heroLinks) {
       if (link.skill?.skillId === 'xiaoliu_haste') continue;
       updateHeroSkill(link, this.enemies, deltaMs,
-        (enemy, damage, source) => this.hit(enemy, damage, events, source, 'skill'), event => events.push(event),
+        (enemy, damage, source, special) => this.hit(enemy, damage, events, source, 'skill', special), event => events.push(event),
         applyTileBonuses(getHeroStats(link.level, link.heroId), this.board, [link.leftIndex, link.rightIndex]).range,
         (source,effect,behavior)=>this.applyHeroEffect(source,effect,behavior));
     }
@@ -369,16 +396,24 @@ export class CombatSimulation {
   private applyHeroEffect(link:HeroLink, effect:Readonly<Record<string,number>>, behavior:string):void {
     if(behavior==='selfBuff') {this.statuses.buff(link,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);return;}
     if(behavior==='allyBuff') {
+      const specialMultiplier = specialAtLevel(heroSpecial.xiaozhanSpecialMultiplier, link.level);
       for(const [index,attacker] of this.attackers)if(inRange(link.origin,this.map.cells[index]!,effect.radius!))
         this.statuses.buff(attacker.unit,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);
       for(const ally of this.heroLinks)if(inRange(link.origin,ally.origin,effect.radius!))
-        this.statuses.buff(ally,link,effect.duration!,effect.damageBonus!,effect.speedBonus!);
+        this.statuses.buff(ally,link,effect.duration!,effect.damageBonus!,effect.speedBonus!,specialMultiplier);
       return;
     }
     for(const enemy of this.enemies.filter(e=>e.hp>0&&inRange(link.origin,e,effect.radius!))) {
-      if(behavior==='stun')this.statuses.addEnemy(enemy,{kind:'stun',source:link,remaining:effect.duration!,amount:0,interval:0});
+      if(behavior==='stun') {
+        this.statuses.addEnemy(enemy,{kind:'stun',source:link,remaining:effect.duration!,amount:0,interval:0});
+        this.statuses.addEnemy(enemy,{kind:'vulnerable',source:link,
+          remaining:heroSpecial.houjiangVulnerability.durationMs,
+          amount:heroSpecial.houjiangVulnerability.bonus,interval:0});
+      }
       if(behavior==='poison') {
-        this.statuses.addEnemy(enemy,{kind:'poison',source:link,remaining:effect.duration!,amount:effect.dotDamage!,interval:effect.tickInterval!});
+        this.statuses.addEnemy(enemy,{kind:'poison',source:link,remaining:effect.duration!,amount:effect.dotDamage!,interval:effect.tickInterval!,
+          maxHpPercentPerTick:specialAtLevel(heroSpecial.yongqiDotMaxHpTotal,link.level)
+            /(effect.duration!/effect.tickInterval!)});
         this.statuses.addEnemy(enemy,{kind:'slow',source:link,remaining:effect.duration!,amount:effect.slow!,interval:0});
       }
     }

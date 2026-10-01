@@ -190,7 +190,10 @@ test('强化格不改变小美技能伤害与CD；只提升同格普通攻击', 
   const hp = enemy.hp;
   const events = run(sim, 20);
   assert.equal(events.filter(event => event.kind === 'skillHit').length, 1);
-  assert.equal(hp - enemy.hp, before.damage);
+  const hit = events.find(event => event.kind === 'hit' && event.source === 'skill');
+  assert.equal(hit.specialDamage, enemy.maxHp * .18);
+  assert.equal(hit.damage - hit.specialDamage, before.damage);
+  assert.equal(hp - enemy.hp, before.damage + enemy.maxHp * .18);
   assert.equal(sim.heroLinks[0].skill.cooldownDuration, before.cooldown);
   assert.deepEqual(getSkillStats('xiaomei_barrage', 1), before);
 });

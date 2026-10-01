@@ -5,6 +5,8 @@ import type { Enemy } from './enemies';
 import type { HeroLink } from '../systems/heroActivation';
 import { selectTarget } from './targeting';
 import { MAX_LEVEL } from '../config/levels';
+import { heroSpecial, specialAtLevel } from '../config/heroSpecial';
+import type { PercentDamage } from './specialDamage';
 
 export interface SkillState {
   skillId: SkillId;
@@ -55,7 +57,7 @@ export function consumeEmpoweredAttack(link: HeroLink, emit: (event: SkillEvent)
 
 // 仅推进逻辑时间并产生事件；不使用动画回调、音效或 Phaser Timer 结算伤害。
 export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], deltaMs: number,
-  hit: (enemy: Enemy, damage: number, link: HeroLink) => void, emit: (event: SkillEvent) => void,
+  hit: (enemy: Enemy, damage: number, link: HeroLink, special?: PercentDamage) => void, emit: (event: SkillEvent) => void,
   ordinaryAttackRange = getHeroStats(link.level, link.heroId).range,
   applyEffect?: (link:HeroLink, effect:Readonly<Record<string,number>>, behavior:string)=>void): void {
   const state = link.skill;
@@ -98,7 +100,9 @@ export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], delta
     if(state.castRemaining>1e-8)return;
     // 落剑时读取本Side当前存活实体，包含预警后入场者，不锁开始时的名单。
     for(const enemy of enemies.filter(e=>e.hp>0)) {
-      hit(enemy,state.castDamage,link);emit({kind:'skillHit',skillId:state.skillId,link,targetId:enemy.id});
+      hit(enemy,state.castDamage,link,{basis:'missingHp',
+        ratio:specialAtLevel(heroSpecial.abiaoMissingHpTrue,link.level),trueDamage:true});
+      emit({kind:'skillHit',skillId:state.skillId,link,targetId:enemy.id});
     }
     state.phase='charging';emit({kind:'skillEnd',skillId:state.skillId,link});return;
   }
@@ -120,7 +124,7 @@ export function updateHeroSkill(link: HeroLink, enemies: readonly Enemy[], delta
   const id = state.targetIds[state.nextTarget++]!;
   const target = enemies.find(enemy => enemy.id === id && enemy.hp > 0 && !enemy.isBoss);
   if (target) {
-    hit(target, state.castDamage, link);
+    hit(target, state.castDamage, link,{basis:'maxHp',ratio:specialAtLevel(heroSpecial.xiaomeiMaxHp,link.level)});
     emit({ kind: 'skillHit', skillId: state.skillId, link, targetId: target.id });
   }
   if (state.nextTarget === state.targetIds.length) {
