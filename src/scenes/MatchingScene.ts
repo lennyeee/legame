@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { label } from '../ui/text';
 import type { Loadout } from '../systems/equipment';
-import { createBattleSetup, flowConfig, matchingDuration, presentationRandom } from '../flow/battleSetup';
+import { BOARD_REVEALED_EVENT, createBattleSetup, flowConfig, matchingDuration, presentationRandom } from '../flow/battleSetup';
 import type { BattleSetup, DisplayProfile } from '../flow/battleSetup';
 import { avatarSymbol, type PlayerProfile } from '../progression/profile';
 import { rankDisplay, type RankState } from '../progression/rank';
@@ -80,6 +80,7 @@ export class MatchingScene extends Phaser.Scene {
               onComplete: () => {
                 if (!valid) return;
                 this.phase = 'FINISHED';
+                this.game.events.emit(BOARD_REVEALED_EVENT, setup);
                 this.scene.stop();
               },
             });

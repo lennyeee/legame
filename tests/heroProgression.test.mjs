@@ -23,6 +23,17 @@ function run(sim,ms){const events=[];for(let i=0;i<ms;i+=10)events.push(...sim.u
 function enemy(sim,hp=1000){const e=sim.spawnEnemy();e.moveSpeed=0;e.hp=e.maxHp=hp;return e;}
 function grant(growth,link,exp,id=999){growth.recordDamage(id,link,1);growth.awardKill(id,link,{kill:exp,assist:.2});}
 
+test('only an actual EXP level change reports hero level-up for audio feedback',()=>{
+ const {growth,link}=setup();
+ growth.recordDamage(100,link,1);
+ assert.deepEqual(growth.awardKill(100,link,{kill:1,assist:.2}),[]);
+ assert.equal(link.level,1);
+ growth.recordDamage(101,link,1);
+ assert.deepEqual(growth.awardKill(101,link,{kill:heroExpRequired(1)-1,assist:.2}),[link]);
+ assert.equal(link.level,2);
+ assert.deepEqual(growth.awardKill(101,link,{kill:100,assist:.2}),[]);
+});
+
 test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
  const {board,reserve}=setup([3,3]);recruit(reserve,()=>.86);assert.deepEqual(reserve.slots[0],letter('小'));
  const original=board.tiles[0].unit;reserve.slots[0]=null;

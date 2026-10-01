@@ -53,6 +53,7 @@ export interface Projectile extends MapPoint {
 
 export type CombatEvent = AttackEffect | SkillEvent
   | { kind: 'heroAttack'; link: HeroLink; end: MapPoint }
+  | { kind: 'heroLevelUp'; heroId: HeroLink['heroId']; level: number }
   | { kind: 'hit'; enemyId: number; source: DamageSource; damage: number; heroId?: HeroLink['heroId'] }
   | { kind: 'kill'; enemyId: number; position: MapPoint; reward: number }
   | { kind: 'escape'; enemyId: number };
@@ -187,7 +188,9 @@ export class CombatSimulation {
     if (hero) getHeroProgression(this.board).recordDamage(enemy.id, hero, result.applied);
     if (result.applied > 0) events.push({ kind: 'hit', enemyId: enemy.id, source, damage: result.applied, heroId: hero?.heroId });
     if (result.killed) {
-      getHeroProgression(this.board).awardKill(enemy.id, hero ?? null);
+      for (const link of getHeroProgression(this.board).awardKill(enemy.id, hero ?? null)) {
+        events.push({ kind: 'heroLevelUp', heroId: link.heroId, level: link.level });
+      }
       this.wallet.money += this.config.enemy.killReward;
       events.push({ kind: 'kill', enemyId: enemy.id, position: { x: enemy.x, y: enemy.y }, reward: this.config.enemy.killReward });
     }

@@ -18,6 +18,8 @@ export interface BattleSetup {
   readonly opponentLoadout: Loadout;
 }
 
+export const BOARD_REVEALED_EVENT = 'legame-board-revealed';
+
 export const localPlayerProfile: DisplayProfile = Object.freeze({
   id: 'local-player', ...defaultProfile(), rank: Object.freeze(defaultRank()),
 });

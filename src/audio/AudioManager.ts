@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { audioAssets, audioAssetUrl, audioTransitionMs, type AudioKey, type BgmKey, type SfxKey } from '../config/audio';
+import { audioAssets, audioAssetUrl, audioTransitionMs, heroBasicAttackSfx, type AudioKey, type BgmKey, type SfxKey } from '../config/audio';
 import type { CombatEvent } from '../combat/CombatSimulation';
 import { installAudioDebug } from './AudioDebug';
 
@@ -68,7 +68,7 @@ export class AudioManager {
   }
 
   menu(scene?: AudioScene): void { this.paused = false; try { this.requestBgm('home_bgm', scene); } catch { /* Silent fallback. */ } }
-  battle(scene?: AudioScene): void { this.paused = false; try { this.requestBgm('battle_bgm', scene); } catch { /* Silent fallback. */ } }
+  battle(scene?: AudioScene): void { try { this.requestBgm('battle_bgm', scene); } catch { /* Silent fallback. */ } }
   retryDesired(scene?: AudioScene): void { this.startDesired(this.scene ?? scene); }
   private resumeFromGesture(scene?: AudioScene): void {
     try {
@@ -188,7 +188,7 @@ export class AudioManager {
     this.paused = true;
     try {
       this.stopTransition();
-      if (this.bgmKey === 'battle_bgm') this.bgm?.pause();
+      this.bgm?.pause();
       this.stopSfx();
     } catch { /* Match pause still succeeds. */ }
   }
@@ -196,10 +196,11 @@ export class AudioManager {
     if (!this.paused) return;
     this.paused = false;
     try {
-      if (this.options.musicEnabled && this.desired === 'battle_bgm') {
+      if (this.options.musicEnabled && this.desired) {
         if (this.bgm?.isPaused && !this.backend?.locked && (!this.backend?.context || this.backend.context.state === 'running')) {
-          if (!this.bgm.resume() || !this.bgm.isPlaying) { this.invalidateBgm(); this.startDesired(this.scene); }
-        } else this.startDesired(this.scene);
+          if (!this.bgm.resume() || !this.bgm.isPlaying) this.invalidateBgm();
+        }
+        this.startDesired(this.scene);
       }
     } catch { /* Match resume still succeeds. */ }
   }
@@ -251,6 +252,8 @@ export class AudioManager {
   combatEvents(events: readonly CombatEvent[]): void {
     for (const event of events) {
       if (event.kind === 'kill') this.sfx('enemy_death');
+      if (event.kind === 'heroLevelUp') this.sfx('hero_level_up');
+      if (event.kind === 'heroAttack') this.sfx(heroBasicAttackSfx[event.link.heroId]);
       if (event.kind !== 'attack') continue;
       const key = event.type === '刀' ? 'blade_attack' : event.type === '枪' ? 'pierce_attack'
         : event.type === '弓' ? 'snipe_attack' : 'blast_attack';

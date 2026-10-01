@@ -18,7 +18,7 @@ registerHooks({
 });
 const { AudioManager, audioForScene, ensureAudioLoader, loadAudioInBackground } = await import('../src/audio/AudioManager.ts');
 const { installAudioDebug, audioDebugSnapshot } = await import('../src/audio/AudioDebug.ts');
-const { audioAssets, audioAssetUrl } = await import('../src/config/audio.ts');
+const { audioAssets, audioAssetUrl, heroBasicAttackSfx } = await import('../src/config/audio.ts');
 const { PlayerProgress } = await import('../src/progression/PlayerProgress.ts');
 const { defaultPlayerSave, sanitizeSave } = await import('../src/progression/PlayerSave.ts');
 
@@ -41,7 +41,7 @@ function attack(type) { return { kind: 'attack', type }; }
 
 test('all supplied audio keys resolve beneath the Vite base, without enemy_hit', () => {
   assert.deepEqual(Object.keys(audioAssets).sort(), [
-    'home_bgm','battle_bgm','battle_start','ui_click','recruit','unit_merge','hero_created','shovel',
+    'home_bgm','battle_bgm','battle_start','ui_click','recruit','unit_merge','hero_created','hero_level_up','unit_place','shovel',
     'blade_attack','pierce_attack','snipe_attack','blast_attack','enemy_death','victory','defeat',
   ].sort());
   assert.equal(Object.hasOwn(audioAssets, 'enemy_hit'), false);
@@ -51,6 +51,17 @@ test('all supplied audio keys resolve beneath the Vite base, without enemy_hit',
     assert.ok(existsSync(fileURLToPath(new URL(`../public${url.slice('/legame'.length)}`, import.meta.url))), key);
     assert.ok(audioAssets[key].volume > 0 && audioAssets[key].volume < 1);
   }
+});
+
+test('A5 loader includes the two supplied feedback sounds and B mix stays restrained', () => {
+  assert.equal(audioAssets.unit_place.volume, .42);
+  assert.equal(audioAssets.hero_level_up.volume, .44);
+  assert.equal(audioAssets.hero_created.volume, .46);
+  assert.equal(audioAssets.unit_merge.volume, .40);
+  assert.equal(audioAssets.snipe_attack.volume, .15);
+  assert.equal(audioAssets.pierce_attack.volume, .14);
+  assert.equal(audioAssets.battle_bgm.volume, .23);
+  assert.equal(audioAssets.home_bgm.volume, .28);
 });
 
 test('both BGM playback URLs use the supplied MP3 files under the Pages base', () => {
@@ -94,6 +105,18 @@ test('pausing during crossfade silences old menu clip and resumes the same battl
   assert.equal(battle.isPaused, true);
   assert.equal(tweens.every(tween => tween.stopped), true);
   audio.resumeBattle(); assert.equal(battle.plays, 1); assert.equal(battle.isPlaying, true);
+});
+
+test('battle pause also pauses actual HOME BGM and later resumes the current desired track', () => {
+  const { backend, audio } = setup();
+  audio.menu(); const home = backend.clips[0];
+  audio.pauseBattle(); assert.equal(home.isPaused, true);
+  audio.battle(); assert.equal(audio.state.desired, 'battle_bgm');
+  assert.equal(backend.clips.length, 1, 'paused board reveal must not start battle music');
+  audio.resumeBattle();
+  assert.equal(backend.clips.at(-1).key, 'battle_bgm');
+  assert.equal(backend.clips.at(-1).isPlaying, true);
+  assert.equal(home.destroyed, true);
 });
 
 test('locked audio waits for browser unlock without blocking scene flow', () => {
@@ -156,6 +179,24 @@ test('combat events map four real attacks and deaths to restrained sounds withou
   advance(120); for (const clip of backend.clips) clip.emit('complete');
   audio.combatEvents(events); assert.equal(backend.clips.length, 10);
   assert.equal(backend.keys().includes('enemy_hit'), false);
+});
+
+test('all eight hero basic attacks use stable melee or ranged sound mapping; skills do not', () => {
+  assert.deepEqual(heroBasicAttackSfx, {
+    xiaomei: 'snipe_attack', abing: 'snipe_attack', xiaoliu: 'snipe_attack',
+    houjiang: 'blade_attack', xiaozhan: 'snipe_attack', yongqi: 'snipe_attack',
+    xiaoqian: 'blade_attack', abiao: 'snipe_attack',
+  });
+  for (const [heroId, key] of Object.entries(heroBasicAttackSfx)) {
+    const { backend, audio } = setup();
+    audio.combatEvents([{ kind: 'heroAttack', link: { heroId } }]);
+    assert.deepEqual(backend.keys(), [key], heroId);
+  }
+  const { backend, audio } = setup();
+  audio.combatEvents([{ kind: 'hit', source: 'skill', damage: 10, enemyId: 1, heroId: 'xiaomei' }]);
+  assert.deepEqual(backend.keys(), []);
+  audio.combatEvents([{ kind: 'heroLevelUp', heroId: 'xiaomei', level: 2 }]);
+  assert.deepEqual(backend.keys(), ['hero_level_up']);
 });
 
 test('paused gameplay suppresses combat sounds while pause menu UI can click', () => {

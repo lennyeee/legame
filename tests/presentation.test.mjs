@@ -1788,10 +1788,25 @@ test('HOME玩法入口进入说明页，五步内容可见且返回HOME',()=>{
  assert.equal(p.text(375,765,p.ready),'开始对战');
 });
 
-test('Audio v1 requests battle music at actual RUNNING and success SFX only for real recruit, merge, hero and shovel',()=>{
+test('battle BGM starts when VS panels uncover the board, before the first enemy',()=>{
+ const p=pve(false,20,false),audio=audioForScene(p.ready);
+ let battleCalls=0;const battle=audio.battle.bind(audio);
+ audio.battle=scene=>{battleCalls++;battle(scene);};
+ assert.equal(audio.state.desired,'home_bgm');
+ p.click(375,765);
+ untilPhase(p,'VS_HOLD');assert.equal(audio.state.desired,'home_bgm');
+ untilPhase(p,'VS_EXIT');assert.equal(audio.state.desired,'home_bgm');
+ assert.equal(p.game.presentationPhase,'INTRO');
+ p.run(490);assert.equal(audio.state.desired,'home_bgm');
+ p.run(10);assert.equal(audio.state.desired,'battle_bgm');assert.equal(battleCalls,1);
+ assert.equal(p.game.sides.bottom.combat.enemies.length,0);
+ p.run(9500);assert.equal(battleCalls,1);
+});
+
+test('Audio v1 plays recruit, merge, hero and shovel feedback without stacking placement on hero creation',()=>{
  const p=pve(true,100),audio=audioForScene(p.game),played=[];
  audio.sfx=key=>{played.push(key);return true;};
- assert.equal(audio.state.desired,'home_bgm');
+ assert.equal(audio.state.desired,'battle_bgm');
  const random=Math.random;
  try{
   Math.random=()=>recruitRoll(p,'刀');p.click(375,1158);
@@ -1804,10 +1819,29 @@ test('Audio v1 requests battle music at actual RUNNING and success SFX only for 
   p.drag([183,1018],[501.5625,661.4375]);
   assert.equal(played.filter(key=>key==='shovel').length,1);
   Math.random=()=>recruitRoll(p,'小');p.click(375,1158);p.drag([183,1018],[164.0625,574.0625]);
+  assert.equal(played.filter(key=>key==='unit_place').length,1);
   Math.random=()=>recruitRoll(p,'美');p.click(375,1158);p.drag([183,1018],[248.4375,574.0625]);
   p.run(10);assert.equal(played.filter(key=>key==='hero_created').length,1);
-  assert.equal(audio.state.desired,'home_bgm');
-  p.run(9490);assert.equal(audio.state.desired,'battle_bgm');
+  assert.equal(played.filter(key=>key==='unit_place').length,1);
+  assert.equal(audio.state.desired,'battle_bgm');
+ }finally{Math.random=random;}
+});
+
+test('unit_place requires a successful position change; invalid, same-place and merge do not play it',()=>{
+ const p=pve(true,100),audio=audioForScene(p.game),played=[];
+ audio.sfx=key=>{played.push(key);return true;};
+ const random=Math.random;
+ try{
+  Math.random=()=>recruitRoll(p,'刀');p.click(375,1158);
+  p.drag([183,1018],[375,900]);assert.equal(played.filter(key=>key==='unit_place').length,0);
+  p.drag([183,1018],[164.0625,574.0625]);assert.equal(played.filter(key=>key==='unit_place').length,1);
+  p.drag([164.0625,574.0625],[164.0625,574.0625]);assert.equal(played.filter(key=>key==='unit_place').length,1);
+  p.drag([279,1018],[164.0625,574.0625]);
+  assert.equal(played.filter(key=>key==='unit_merge').length,1);
+  assert.equal(played.filter(key=>key==='unit_place').length,1);
+  p.game.sides.bottom.board.tiles[1].unit={kind:'unit',type:'弓',level:1};
+  p.drag([164.0625,574.0625],[248.4375,574.0625]);
+  assert.equal(played.filter(key=>key==='unit_place').length,2);
  }finally{Math.random=random;}
 });
 

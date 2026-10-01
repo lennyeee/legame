@@ -72,20 +72,24 @@ export class HeroProgression {
   }
 
   awardKill(enemyId: number, killer: HeroLink | null,
-    rewards: Readonly<{ kill: number; assist: number }> = heroGrowth.rewards): void {
+    rewards: Readonly<{ kill: number; assist: number }> = heroGrowth.rewards): HeroLink[] {
+    const leveled: HeroLink[] = [];
     for (const link of this.participants.get(enemyId) ?? []) {
       if (!this.isActive(link)) continue;
       if (link.level >= MAX_LEVEL) { link.currentExp = 0; continue; }
       // 始终落在0.2 EXP刻度；不让二进制浮点尾差累积到升级阈值/UI。
       link.currentExp = Math.round((link.currentExp + (link === killer ? rewards.kill : rewards.assist)) * 5) / 5;
+      const previousLevel = link.level;
       while (link.level < MAX_LEVEL && link.currentExp >= heroExpRequired(link.level)) {
         link.currentExp -= heroExpRequired(link.level);
         link.level++;
         link.left.level = link.right.level = link.level;
       }
+      if (link.level > previousLevel) leveled.push(link);
       if (link.level === MAX_LEVEL) link.currentExp = 0;
     }
     this.participants.delete(enemyId);
+    return leveled;
   }
 
   forgetEnemy(enemyId: number): void { this.participants.delete(enemyId); }

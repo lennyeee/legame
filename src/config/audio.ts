@@ -1,15 +1,17 @@
 export const audioAssets = {
   home_bgm: { file: 'bgm/home_bgm.mp3', volume: 0.28, cooldownMs: 0, maxConcurrent: 1 },
-  battle_bgm: { file: 'bgm/battle_bgm.mp3', volume: 0.25, cooldownMs: 0, maxConcurrent: 1 },
+  battle_bgm: { file: 'bgm/battle_bgm.mp3', volume: 0.23, cooldownMs: 0, maxConcurrent: 1 },
   battle_start: { file: 'sfx/battle_start.wav', volume: 0.38, cooldownMs: 120, maxConcurrent: 1 },
   ui_click: { file: 'sfx/ui_click.wav', volume: 0.28, cooldownMs: 55, maxConcurrent: 2 },
   recruit: { file: 'sfx/recruit.wav', volume: 0.32, cooldownMs: 100, maxConcurrent: 1 },
-  unit_merge: { file: 'sfx/unit_merge.wav', volume: 0.33, cooldownMs: 100, maxConcurrent: 1 },
+  unit_merge: { file: 'sfx/unit_merge.wav', volume: 0.40, cooldownMs: 100, maxConcurrent: 1 },
   hero_created: { file: 'sfx/hero_created.wav', volume: 0.46, cooldownMs: 180, maxConcurrent: 1 },
+  hero_level_up: { file: 'sfx/hero_level_up.wav', volume: 0.44, cooldownMs: 180, maxConcurrent: 1 },
+  unit_place: { file: 'sfx/unit_place.wav', volume: 0.42, cooldownMs: 100, maxConcurrent: 1 },
   shovel: { file: 'sfx/shovel.wav', volume: 0.34, cooldownMs: 100, maxConcurrent: 1 },
   blade_attack: { file: 'sfx/blade_attack.mp3', volume: 0.17, cooldownMs: 80, maxConcurrent: 2 },
-  pierce_attack: { file: 'sfx/pierce_attack.wav', volume: 0.16, cooldownMs: 80, maxConcurrent: 2 },
-  snipe_attack: { file: 'sfx/snipe_attack.wav', volume: 0.18, cooldownMs: 100, maxConcurrent: 2 },
+  pierce_attack: { file: 'sfx/pierce_attack.wav', volume: 0.14, cooldownMs: 80, maxConcurrent: 2 },
+  snipe_attack: { file: 'sfx/snipe_attack.wav', volume: 0.15, cooldownMs: 100, maxConcurrent: 2 },
   blast_attack: { file: 'sfx/blast_attack.wav', volume: 0.16, cooldownMs: 120, maxConcurrent: 2 },
   enemy_death: { file: 'sfx/enemy_death.mp3', volume: 0.13, cooldownMs: 80, maxConcurrent: 1 },
   victory: { file: 'sfx/victory.mp3', volume: 0.48, cooldownMs: 0, maxConcurrent: 1 },
@@ -20,6 +22,13 @@ export type AudioKey = keyof typeof audioAssets;
 export type BgmKey = 'home_bgm' | 'battle_bgm';
 export type SfxKey = Exclude<AudioKey, BgmKey>;
 export const audioTransitionMs = 400;
+
+// Stable attack presentation categories; changing a hero's range does not silently change its sound.
+export const heroBasicAttackSfx = {
+  xiaomei: 'snipe_attack', abing: 'snipe_attack', xiaoliu: 'snipe_attack',
+  houjiang: 'blade_attack', xiaozhan: 'snipe_attack', yongqi: 'snipe_attack',
+  xiaoqian: 'blade_attack', abiao: 'snipe_attack',
+} as const satisfies Record<import('./heroes').HeroId, SfxKey>;
 
 // Vite's base is /legame/ in both local preview and GitHub Pages.
 export function audioAssetUrl(key: AudioKey, base = import.meta.env?.BASE_URL ?? '/legame/'): string {

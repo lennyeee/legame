@@ -14,7 +14,7 @@ import { boardDisplayScene } from '../ui/boardDisplay';
 import { ActiveItemController } from '../input/ActiveItemController';
 import { FarmerView } from '../ui/FarmerView';
 import { AIController } from '../controllers/AIController';
-import type { BattleSetup } from '../flow/battleSetup';
+import { BOARD_REVEALED_EVENT, type BattleSetup } from '../flow/battleSetup';
 import { LeIntroView } from '../ui/LeIntroView';
 import { pressureConfig } from '../config/pressure';
 import { progressForScene, type PlayerProgress } from '../progression/PlayerProgress';
@@ -58,6 +58,14 @@ export class GameScene extends Phaser.Scene {
     const progress = progressForScene(this);
     const audio = audioForScene(this);
     audio.setOptions(progress.save.audio);
+    let boardRevealed = false;
+    const onBoardRevealed = (setup: BattleSetup): void => {
+      if (boardRevealed || ended || setup !== this.battleSetup) return;
+      boardRevealed = true;
+      audio.battle(this);
+    };
+    this.game.events.on(BOARD_REVEALED_EVENT, onBoardRevealed);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off(BOARD_REVEALED_EVENT, onBoardRevealed));
     const tutorialAtStart = progress.save.tutorial;
     let deploymentHintShown = tutorialAtStart.deploymentHintCompleted;
     let mergeHintShown = tutorialAtStart.mergeHintCompleted;
@@ -128,6 +136,12 @@ export class GameScene extends Phaser.Scene {
     const deployment = new DeploymentController(this, bottomSide, deploymentView, (result, observation) => {
       if (result === 'unlock') audio.sfx('shovel');
       if (result === 'merge' && observation && isUnit(observation.sourceItem) && isUnit(observation.targetItem)) audio.sfx('unit_merge');
+      if ((result === 'move' || result === 'swap') && observation && observation.sourceItem !== '铲'
+        && (observation.source.kind === 'tile' || observation.target?.kind === 'tile')) {
+        const createdHero = [...bottomSide.heroes.links.values()].some(link => !knownBottomLinks.has(link));
+        if (createdHero) playNewHeroes();
+        else audio.sfx('unit_place');
+      }
       farmerView.refresh();
       refresh();
       const messages = {
@@ -220,7 +234,6 @@ export class GameScene extends Phaser.Scene {
       leIntro.update(match.timeline.elapsedMs);
       if (match.timeline.elapsedMs >= firstEnemyDelay && this.presentationPhase !== 'RUNNING') {
         this.presentationPhase = 'RUNNING';
-        audio.battle(this);
       }
       audio.combatEvents(events.bottom);
       audio.combatEvents(events.top);
