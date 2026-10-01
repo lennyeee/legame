@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {registerHooks} from 'node:module';
 registerHooks({resolve(s,c,next){if(s.startsWith('.')&&!/\.[a-z]+$/i.test(s))s+='.ts';return next(s,c);}});
 const {createBoardState,applyDrop}=await import('../src/systems/board.ts');
-const {createRecruitmentState,recruit}=await import('../src/systems/recruitment.ts');
+const {createRecruitmentState,recruit,recruitmentPool}=await import('../src/systems/recruitment.ts');
 const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
 const {heroRecipes,heroCombat,heroGrowth,heroExpRequired,getHeroStats}=await import('../src/config/heroes.ts');
 const {CombatSimulation}=await import('../src/combat/CombatSimulation.ts');
@@ -35,7 +35,9 @@ test('only an actual EXP level change reports hero level-up for audio feedback',
 });
 
 test('新征武将字Lv.1，不含EXP；移动交换保留高级字对象',()=>{
- const {board,reserve}=setup([3,3]);recruit(reserve,()=>.86);assert.deepEqual(reserve.slots[0],letter('小'));
+ const {board,reserve}=setup([3,3]);const pool=recruitmentPool(reserve.loadout),total=pool.reduce((n,e)=>n+e.weight,0);
+ let weight=0;for(const entry of pool){if(entry.value==='小')break;weight+=entry.weight;}
+ recruit(reserve,()=> (weight+pool.find(entry=>entry.value==='小').weight/2)/total);assert.deepEqual(reserve.slots[0],letter('小'));
  const original=board.tiles[0].unit;reserve.slots[0]=null;
  applyDrop(board,reserve,p('tile',0),p('slot',0));assert.equal(reserve.slots[0],original);assert.equal(original.level,3);
  reserve.slots[1]=letter('饼',5);applyDrop(board,reserve,p('slot',0),p('slot',1));assert.equal(reserve.slots[1],original);assert.equal(original.level,3);
@@ -128,5 +130,9 @@ test('结算停止EXP和攻击，独立新局从空状态及Lv.1开始',()=>{
  enemy(sim);run(sim,1200);const link=sim.heroLinks[0];progress.status='defeat';const before=link.currentExp;
  assert.deepEqual(run(sim,10000),[]);assert.equal(link.currentExp,before);
  growth.clear();assert.equal(growth.links.size,0);const freshBoard=createBoardState(testMap),freshReserve=createRecruitmentState();
- assert.equal(getHeroProgression(freshBoard).links.size,0);recruit(freshReserve,()=>.86);assert.equal(freshReserve.slots[0].level,1);
+ assert.equal(getHeroProgression(freshBoard).links.size,0);assert.deepEqual(freshReserve.heroLetterNaturalAppearances,{});
+ const pool=recruitmentPool(freshReserve.loadout),total=pool.reduce((n,e)=>n+e.weight,0);let weight=0;
+ for(const entry of pool){if(entry.value==='刀')break;weight+=entry.weight;}
+ recruit(freshReserve,()=> (weight+pool.find(entry=>entry.value==='刀').weight/2)/total);
+ assert.equal(freshReserve.slots[0].level,1);
 });

@@ -12,8 +12,8 @@ export type HeroName = (typeof heroRegistry)[number]['name'];
 export const heroCombat = { range: rangePixels(attackRangeCells.hero), splashRadius: 70 };
 export const heroVisuals = { color: 0xb49a50, fill: 0xf5edce, sleepColor: '#8b8272' };
 export const hasteConfig = { attacks: 7, speedMultiplier: 3, speedPerLevel: 0.2, minAttackInterval: 80 };
-// 每级追加需求10/20/30/40，总计100；有效击杀+1，助攻+0.2。
-export const heroGrowth = { expByLevel: [10, 20, 30, 40] as const,
+// 每级追加需求15/30/45/60，总计150；有效击杀+1，助攻+0.2。
+export const heroGrowth = { expByLevel: [15, 30, 45, 60] as const,
   rewards: { kill: 1, assist: 0.2 } };
 
 export interface ActiveSkillDefinition {
@@ -125,6 +125,18 @@ export const heroRegistry = [
 // 既有调用名称兼容；名单只从注册表派生，未开放配方不能激活。
 export const heroRecipes = heroRegistry.filter(hero => hero.available);
 export const recruitableHeroLetters = [...new Set(heroRecipes.flatMap(hero => hero.letters))];
+// 明确区分配方共享字与每名英雄的专属字；专属字上限和英雄成型过滤都读取这份注册配置。
+export const heroLetterRecruitment = {
+  sharedLetters: ['小', '阿'],
+  exclusiveLetterOwner: {
+    美: 'xiaomei', 饼: 'abing', 六: 'xiaoliu', 倩: 'xiaoqian',
+    侯: 'houjiang', 将: 'houjiang', 肖: 'xiaozhan', 战: 'xiaozhan',
+    永: 'yongqi', 琪: 'yongqi', 彪: 'abiao',
+  },
+} as const satisfies {
+  sharedLetters: readonly HeroLetterType[];
+  exclusiveLetterOwner: Partial<Record<HeroLetterType, HeroId>>;
+};
 export function getHeroDefinition(id: HeroId) {
   const definition = heroRegistry.find(hero => hero.id === id);
   if (!definition) throw new Error(`未注册武将：${id}`);

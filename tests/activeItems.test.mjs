@@ -61,7 +61,7 @@ test('主动状态停止/销毁拒绝升级及CD推进；新实例完整CD',()=>
  assert.equal(active.use(0,board,wallet,{kind:'slot',index:0}),false);active.destroy();active.update(99999);
  assert.equal(active.slots.length,0);assert.equal(new ActiveItems(gear).slots[0].remainingMs,50000);
 });
-test('招贤榜将HeroLetter类别从15%提高至25%，五字相对权重不变' ,()=>{
+test('招贤榜将HeroLetter类别从12%提高至17%，候选字相对权重不变' ,()=>{
  const plain=recruitmentPool(loadout()),boosted=recruitmentPool(loadout('hero_recruitment'));
  assert.equal(boosted.some(e=>e.value==='农'),false);
  assert.equal(boosted.reduce((n,e)=>n+e.weight,0),100*recruitmentCategoryScale);
@@ -73,12 +73,15 @@ test('招贤榜将HeroLetter类别从15%提高至25%，五字相对权重不变'
 });
 test('农民+招贤榜同时生效；loadout快照隔离装备变更，随机结果覆盖五格',()=>{
  const inventory=createInventory();setEquipped(inventory,'farmer',true);setEquipped(inventory,'hero_recruitment',true);
- const state=createRecruitmentState(createLoadout(inventory));inventory.forEach(i=>i.equipped=false);
- const pool=recruitmentPool(state.loadout);assert.equal(pool.find(e=>e.value==='农').weight,6*recruitmentCategoryScale);
- assert.equal(pool.find(e=>e.value==='小').weight,25*recruitmentCategoryScale/13);
+ const loadout=createLoadout(inventory);
+ inventory.forEach(i=>i.equipped=false);
+ const pool=recruitmentPool(loadout);assert.equal(pool.find(e=>e.value==='农').weight,6*recruitmentCategoryScale);
+ assert.equal(pool.find(e=>e.value==='小').weight,17*recruitmentCategoryScale/13);
  const total=pool.reduce((s,e)=>s+e.weight,0);const hits={};
- for(let i=0;i<total;i++){state.money=1000000;recruit(state,()=> (i+.5)/total);const item=state.slots[0];const type=typeof item==='string'?item:item.type;
-  hits[type]=(hits[type]??0)+1;assert.equal(state.slots.length,5);assert.ok(state.slots.every(x=>JSON.stringify(x)===JSON.stringify(item)));
+ for(let i=0;i<total;i++){const state=createRecruitmentState(loadout);state.money=1000000;
+  recruit(state,()=> (i+.5)/total);const item=state.slots[0];const type=typeof item==='string'?item:item.type;
+  hits[type]=(hits[type]??0)+1;assert.equal(state.slots.length,5);
+  for(const [letter,count] of Object.entries(state.heroLetterNaturalAppearances))assert.ok(count<=2,`${letter} appeared ${count} times`);
  }
  for(const e of pool)assert.equal(hits[e.value],e.weight);
 });

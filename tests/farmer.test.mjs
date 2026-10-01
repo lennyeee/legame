@@ -14,7 +14,7 @@ const {getHeroProgression}=await import('../src/systems/heroProgression.ts');
 const {recruitmentCategoryScale}=await import('../src/config/game.ts');
 const farmer=(level=1)=>({kind:'farmer',type:'农',level});
 const pos=(kind,index)=>({kind,index});
-test('Farmer has exact6% per slot in both loadouts; hero recruitment changes category balance',()=>{
+test('Farmer has exact6% per slot in both loadouts; hero recruitment uses 12%/17%',()=>{
  function pool(...ids){const inventory=createInventory();ids.forEach(id=>setEquipped(inventory,id,true));return recruitmentPool(createLoadout(inventory));}
  assert.equal(pool().some(e=>e.value==='农'),false);assert.equal(pool('hero_recruitment').some(e=>e.value==='农'),false);
  const plain=pool('farmer'),boosted=pool('farmer','hero_recruitment');
@@ -23,7 +23,7 @@ test('Farmer has exact6% per slot in both loadouts; hero recruitment changes cat
   const probability=6/100;
   assert.ok(Math.abs(1-(1-probability)**5-0.2660959776)<1e-10);
   assert.equal(entries.filter(e=>['小','美','阿','饼','六','侯','将','肖','战','永','琪','倩','彪'].includes(e.value)).reduce((n,e)=>n+e.weight,0),
-    (entries===plain?15:25)*recruitmentCategoryScale);
+    (entries===plain?12:17)*recruitmentCategoryScale);
  }
  const state=createRecruitmentState();const inventory=createInventory();setEquipped(inventory,'farmer',true);
  const equipped=createRecruitmentState(createLoadout(inventory));equipped.money=100;

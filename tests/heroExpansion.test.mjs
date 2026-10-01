@@ -132,8 +132,8 @@ test('Split cancels old source effects, no ghost DOT/temporary buff or old EXP',
  const p=setup('yongqi'),target=p.enemy();p.ready();p.side.drop({kind:'tile',index:1},{kind:'slot',index:0});
  p.run(4000);assert.equal(target.hp,10000);assert.equal(p.sim.statuses.enemies.size,0);
 });
-test('8 heroes share EXP10/20/30/40 and use explicit per-hero base damage tables',()=>{
- assert.deepEqual(heroGrowth.expByLevel,[10,20,30,40]);assert.equal(heroGrowth.rewards.kill,1);
+test('8 heroes share EXP15/30/45/60 and use explicit per-hero base damage tables',()=>{
+ assert.deepEqual(heroGrowth.expByLevel,[15,30,45,60]);assert.equal(heroGrowth.rewards.kill,1);
  for(const h of heroRegistry)assert.deepEqual([1,2,3,4,5].map(l=>getHeroStats(l,h.id).damage),[...h.attackDamageByLevel]);
 });
 

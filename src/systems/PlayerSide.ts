@@ -58,6 +58,7 @@ export class PlayerSide {
   drop(source: UnitPosition, target: UnitPosition | null, random?: () => number): DropAction {
     if (!this.running) return 'invalid';
     const result = applyDrop(this.board, this.recruitment, source, target, random);
+    this.recordCompletedHeroes();
     this.farmers.sync();
     return result;
   }
@@ -79,7 +80,14 @@ export class PlayerSide {
   }
 
   updateCombat(delta: number, draggedTile: number | null) {
-    return this.running ? this.combat.update(delta, draggedTile) : [];
+    if (!this.running) return [];
+    const events = this.combat.update(delta, draggedTile);
+    this.recordCompletedHeroes();
+    return events;
+  }
+
+  private recordCompletedHeroes(): void {
+    for (const link of this.heroes.links.values()) this.recruitment.completedHeroIds.add(link.heroId);
   }
 
   updateItems(delta: number): void {

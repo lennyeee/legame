@@ -66,15 +66,15 @@ test('v0.69-B keeps explicit per-hero Lv1-Lv5 damage and attack-rate tables',()=
 test('visual colors cannot change weights, progression or combat; all available letters enter live pool',()=>{
  const pool=recruitmentPool({active:[],passive:[]});
  assert.deepEqual(pool.map(p=>p.value),[...gameConfig.recruitmentPool]);
- assert.deepEqual(pool.map(p=>p.weight),[...Array(4).fill(910),780,...Array(13).fill(60)]);
+ assert.deepEqual(pool.map(p=>p.weight),[...Array(4).fill(949),780,...Array(13).fill(48)]);
  assert.equal(pool.reduce((sum,p)=>sum+p.weight,0),100*recruitmentCategoryScale);
- assert.equal(recruitmentCategories.default.heroLetter,15);
+ assert.equal(recruitmentCategories.default.heroLetter,12);
  const before=heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id));
  const colors=heroRegistry.map(h=>h.cardColor);
  try{heroRegistry.forEach(h=>h.cardColor=h.cardColor==='gold'?'purple':'gold');
  assert.deepEqual(recruitmentPool({active:[],passive:[]}),pool);
  assert.deepEqual(heroRegistry.filter(h=>h.available).map(h=>getHeroStats(3,h.id)),before);
- assert.equal(heroGrowth.rewards.kill,1);assert.equal(heroExpRequired(1),10);
+ assert.equal(heroGrowth.rewards.kill,1);assert.equal(heroExpRequired(1),15);
  }finally{heroRegistry.forEach((h,i)=>h.cardColor=colors[i]);}
  for(const def of heroRegistry){
   const board=createBoardState(testMap);board.tiles[0].unit=letter(def.letters[0]);board.tiles[1].unit=letter(def.letters[1]);
@@ -101,15 +101,15 @@ test('independent skill table can express non-formula growth without changing ot
  assert.equal(getSkillStats(skill.id,3).cooldown,8500);assert.equal(getSkillStats('abing_burst',3).cooldown,11000);
  }finally{Object.defineProperty(skill,'cooldownByLevel',descriptor);}
 });
-for(const [level,required] of [[1,10],[2,20],[3,30],[4,40]])test(`Lv${level} EXP boundary ${required}, upgrade writes both letters with overflow`,()=>{
+for(const [level,required] of [[1,15],[2,30],[3,45],[4,60]])test(`Lv${level} EXP boundary ${required}, upgrade writes both letters with overflow`,()=>{
  const {board,progression,link}=setup();link.left.level=link.right.level=level;progression.sync();
  assert.equal(heroExpRequired(level),required);award(progression,link,required-1);assert.equal(link.level,level);
  award(progression,link,2);assert.equal(link.level,level+1);assert.equal(link.left.level,level+1);assert.equal(link.right.level,level+1);
  assert.equal(link.currentExp,level===4?0:1);assert.equal(board.tiles[0].unit.level,link.level);
 });
-test('cumulative EXP100; multi-upgrade caps at5 without accumulating max-level EXP',()=>{
- assert.deepEqual(heroGrowth.expByLevel,[10,20,30,40]);assert.equal(heroGrowth.expByLevel.reduce((a,b)=>a+b),100);
- const {progression,link}=setup();award(progression,link,99);assert.equal(link.level,4);assert.equal(link.currentExp,39);
+test('cumulative EXP150; multi-upgrade caps at5 without accumulating max-level EXP',()=>{
+ assert.deepEqual(heroGrowth.expByLevel,[15,30,45,60]);assert.equal(heroGrowth.expByLevel.reduce((a,b)=>a+b),150);
+ const {progression,link}=setup();award(progression,link,149);assert.equal(link.level,4);assert.equal(link.currentExp,59);
  award(progression,link,1000);assert.equal(link.level,5);assert.equal(link.currentExp,0);assert.equal(heroExpRequired(5),Infinity);
  award(progression,link,1000);assert.equal(link.level,5);assert.equal(link.currentExp,0);
 });

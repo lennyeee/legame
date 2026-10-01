@@ -135,7 +135,7 @@ test('武将等级段EXP、Lv5 MAX和技能CD均读取当前HeroLink状态', () 
   link.currentExp = 3.4;
   link.skill.cooldownElapsed = 3600;
   let snapshot = sim.getUnitCombatSnapshot(0);
-  assert.deepEqual(snapshot.exp, { current: 3.4, required: 20 });
+  assert.deepEqual(snapshot.exp, { current: 3.4, required: 30 });
   assert.match(snapshot.skill.status, /^冷却：/);
   link.skill.phase = 'ready';
   assert.equal(sim.getUnitCombatSnapshot(0).skill.status, '冷却：就绪');

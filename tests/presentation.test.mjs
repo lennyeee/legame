@@ -1733,11 +1733,11 @@ test('v0.66 full RESULT vertical groups and buttons stay separated within 750x13
 const {heroRegistry:getExpandedHeroes}=await import('../src/config/heroes.ts');
 for(const def of getExpandedHeroes)test(`v0.67-B ${def.name} actual renderer exposes its radius, card color and readable level`,()=>{
  const p=pve(true,100),side=p.game.sides.bottom;
- const random=Math.random;
- try{for(let i=0;i<2;i++){
-  Math.random=()=>recruitRoll(p,def.letters[i]);p.click(375,1158);
+ for(let i=0;i<2;i++){
+  side.recruitment.slots[0]={kind:'heroLetter',type:def.letters[i],level:1};
   p.drag([183,1018],[164.0625+i*84.375,574.0625]);
- }}finally{Math.random=random;}p.run(20);
+ }
+ p.run(20);
  const link=side.combat.heroLinks[0];assert.equal(link.heroId,def.id);
  const pointer={id:1,x:164.0625,y:574.0625,primaryDown:true};p.game.input.emit('pointerdown',pointer);p.run(20);
  const graphics=p.objects.get(p.game).filter(o=>o.kind==='graphics'&&o.scale>0);

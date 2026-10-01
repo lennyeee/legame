@@ -6,6 +6,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { heroRecipes, heroCombat, getHeroStats } = await import('../src/config/heroes.ts');
+const { heroLetterRecruitment } = await import('../src/config/heroes.ts');
 const { gameConfig } = await import('../src/config/game.ts');
 const { createBoardState, applyDrop, getDragItem } = await import('../src/systems/board.ts');
 const { getHeroLinks } = await import('../src/systems/heroActivation.ts');
@@ -22,7 +23,7 @@ function run(sim, ms, suspended = null) {
   return events;
 }
 
-test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', () => {
+test('来财保持权重并刷新5槽；专属字上限内只生成合法结果', () => {
   const pool = recruitmentPool(createRecruitmentState().loadout);
   const total = pool.reduce((sum,item)=>sum+item.weight,0);
   let offset = 0;
@@ -30,8 +31,17 @@ test('征兵权重及5槽覆盖不变，只生成单字或原有兵种工具', (
     const state = createRecruitmentState();
     state.slots.fill(letter('小'));
     recruit(state, () => (offset + 0.5) / total);
-    const expected = type === '铲' ? type : heroRecipes.some(r=>r.letters.includes(type)) ? letter(type) : {type,level:1};
-    assert.deepEqual(state.slots, Array(5).fill(expected));
+    const first = state.slots[0];
+    const actualFirst = typeof first === 'string' ? first : first.type;
+    assert.equal(actualFirst,type);
+    assert.equal(state.slots.length,5);
+    for(const slot of state.slots){
+      const value=typeof slot==='string'?slot:slot.type;
+      assert.ok(gameConfig.recruitmentPool.includes(value));
+    }
+    for(const [letterType,count] of Object.entries(state.heroLetterNaturalAppearances))assert.ok(count<=2,`${letterType} exceeded cap`);
+    if(Object.hasOwn(heroLetterRecruitment.exclusiveLetterOwner,type))
+      assert.equal(state.heroLetterNaturalAppearances[type],state.slots.filter(slot=>slot?.kind==='heroLetter'&&slot.type===type).length);
     assert.equal(state.money, 10);
     offset += pool.find(item=>item.value===type).weight;
   }
