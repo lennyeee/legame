@@ -15,7 +15,12 @@ export class CombatView {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly range: Phaser.GameObjects.Graphics;
   private readonly uprightBars: Phaser.GameObjects.Graphics | null;
-  private readonly enemyImages = new Map<number, { sprite: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Ellipse }>();
+  private readonly enemyImages = new Map<number, {
+    sprite: Phaser.GameObjects.Image;
+    shadow: Phaser.GameObjects.Ellipse;
+    baseScale: number;
+    phase: number;
+  }>();
   private readonly flashes = new Map<number, number>();
   private effects: { event: AttackEffect; expires: number }[] = [];
   private heroEffects: { event: Extract<CombatEvent, { kind: 'heroAttack' }>; expires: number }[] = [];
@@ -131,12 +136,20 @@ export class CombatView {
         const shadow = this.screenScene.add.ellipse(0, 0, 37 * boardDisplay.scale, 9 * boardDisplay.scale,
           0x292720, 0.2).setDepth(10);
         const sprite = this.screenScene.add.image(0, 0, visualAssets.enemy.key).setDepth(11);
-        sprite.setScale(visualAssets.enemy.width * boardDisplay.scale / sprite.width);
-        view = { sprite, shadow };
+        const baseScale = visualAssets.enemy.width * boardDisplay.scale / sprite.width;
+        sprite.setScale(baseScale);
+        // Deterministic per-enemy phase offsets add visual variety without consuming gameplay RNG.
+        const phase = enemy.id * 2.399963229728653;
+        view = { sprite, shadow, baseScale, phase };
         this.enemyImages.set(enemy.id, view);
       }
       const point = this.projection.point(enemy);
-      view.sprite.setPosition(point.x, point.y - 5 * boardDisplay.scale)
+      const walkPhase = now * (Math.PI * 2 / 520) + view.phase;
+      const bob = Math.cos(walkPhase * 2) * 2.5 * boardDisplay.scale;
+      const sway = Math.sin(walkPhase) * (3 * Math.PI / 180);
+      const verticalScale = 0.995 + Math.cos(walkPhase * 2) * 0.025;
+      view.sprite.setPosition(point.x, point.y - 5 * boardDisplay.scale + bob)
+        .setRotation(sway).setScale(view.baseScale, view.baseScale * verticalScale)
         .setAlpha(this.flashes.has(enemy.id) ? 0.55 : 1);
       view.shadow.setPosition(point.x, point.y + 31 * boardDisplay.scale);
       const statuses=this.battle.statuses.enemies.get(enemy)??[];
